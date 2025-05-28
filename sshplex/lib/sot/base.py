@@ -11,7 +11,7 @@ class Host:
         self.name = name
         self.ip = ip
         self.metadata = kwargs
-        
+
         # Set additional attributes from kwargs for easy access
         for key, value in kwargs.items():
             setattr(self, key, value)

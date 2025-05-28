@@ -4,7 +4,7 @@ from typing import List, Optional, Set
 from datetime import datetime
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical, Horizontal
-from textual.widgets import DataTable, Log, Static, Footer
+from textual.widgets import DataTable, Log, Static, Footer, Input
 from textual.binding import Binding
 from textual.reactive import reactive
 from textual import events
@@ -45,12 +45,35 @@ class HostSelector(App):
         dock: bottom;
     }
 
+    #search-container {
+        height: 3;
+        margin: 0 1;
+        margin-bottom: 1;
+        display: none;
+    }
+
+    #search-input {
+        height: 3;
+    }
+
     DataTable {
         height: 1fr;
     }
 
     Log {
         height: 1fr;
+    }
+
+    #log Input {
+        display: none;
+    }
+
+    Log > Input {
+        display: none;
+    }
+
+    Log TextArea {
+        display: none;
     }
 
     Footer {
@@ -63,10 +86,15 @@ class HostSelector(App):
         Binding("a", "select_all", "Select All", show=True),
         Binding("d", "deselect_all", "Deselect All", show=True),
         Binding("enter", "connect_selected", "Connect", show=True),
+        Binding("/", "start_search", "Search", show=True),
+        Binding("p", "toggle_panes", "Toggle Panes/Tabs", show=True),
+        Binding("escape", "focus_table", "Focus Table", show=False),
         Binding("q", "quit", "Quit", show=True),
     ]
 
     selected_hosts: reactive[Set[str]] = reactive(set())
+    search_filter: reactive[str] = reactive("")
+    use_panes: reactive[bool] = reactive(True)  # True for panes, False for tabs
 
     def __init__(self, config):
         """Initialize the host selector.
@@ -78,10 +106,12 @@ class HostSelector(App):
         self.config = config
         self.logger = get_logger()
         self.hosts: List[Host] = []
+        self.filtered_hosts: List[Host] = []
         self.netbox: Optional[NetBoxProvider] = None
         self.table: Optional[DataTable] = None
         self.log_widget: Optional[Log] = None
         self.status_widget: Optional[Static] = None
+        self.search_input: Optional[Input] = None
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -90,6 +120,10 @@ class HostSelector(App):
         if self.config.ui.show_log_panel:
             with Container(id="log-panel"):
                 yield Log(id="log", auto_scroll=True)
+
+        # Search input (hidden by default)
+        with Container(id="search-container"):
+            yield Input(placeholder="Search hosts by name...", id="search-input")
 
         # Main content panel
         with Container(id="main-panel"):
@@ -109,6 +143,7 @@ class HostSelector(App):
         if self.config.ui.show_log_panel:
             self.log_widget = self.query_one("#log", Log)
         self.status_widget = self.query_one("#status", Static)
+        self.search_input = self.query_one("#search-input", Input)
 
         # Setup table columns
         self.setup_table()
@@ -170,6 +205,7 @@ class HostSelector(App):
 
             # Get hosts with filters
             self.hosts = self.netbox.get_hosts(filters=self.config.netbox.default_filters)
+            self.filtered_hosts = self.hosts.copy()  # Initialize filtered hosts
 
             if not self.hosts:
                 self.log_message("WARNING: No hosts found matching filters", level="warning")
@@ -188,12 +224,25 @@ class HostSelector(App):
 
     def populate_table(self) -> None:
         """Populate the table with host data."""
-        if not self.table or not self.hosts:
+        if not self.table:
             return
 
-        for host in self.hosts:
+        # Clear existing table data
+        self.table.clear()
+
+        # Use filtered hosts if search is active, otherwise use all hosts
+        hosts_to_display = self.filtered_hosts if self.search_filter else self.hosts
+
+        if not hosts_to_display:
+            return
+
+        for host in hosts_to_display:
             # Build row data based on configured columns
             row_data = ["[ ]"]  # Checkbox column
+
+            # Check if this host is selected and update checkbox
+            if host.name in self.selected_hosts:
+                row_data[0] = "[x]"
 
             for column in self.config.ui.table_columns:
                 if column == "name":
@@ -217,8 +266,10 @@ class HostSelector(App):
             return
 
         cursor_row = self.table.cursor_row
-        if cursor_row >= 0 and cursor_row < len(self.hosts):
-            host_name = self.hosts[cursor_row].name
+        hosts_to_use = self.filtered_hosts if self.search_filter else self.hosts
+
+        if cursor_row >= 0 and cursor_row < len(hosts_to_use):
+            host_name = hosts_to_use[cursor_row].name
 
             if host_name in self.selected_hosts:
                 self.selected_hosts.discard(host_name)
@@ -232,45 +283,53 @@ class HostSelector(App):
             self.update_status_selection()
 
     def action_select_all(self) -> None:
-        """Select all hosts."""
+        """Select all hosts (filtered if search is active)."""
         if not self.hosts:
             return
 
-        self.selected_hosts.clear()
-        for host in self.hosts:
+        hosts_to_select = self.filtered_hosts if self.search_filter else self.hosts
+
+        for host in hosts_to_select:
             self.selected_hosts.add(host.name)
             self.update_row_checkbox(host.name, True)
 
-        self.log_message(f"Selected all {len(self.hosts)} hosts")
+        self.log_message(f"Selected all {len(hosts_to_select)} hosts")
         self.update_status_selection()
 
     def action_deselect_all(self) -> None:
-        """Deselect all hosts."""
+        """Deselect all hosts (filtered if search is active)."""
         if not self.hosts:
             return
 
-        self.selected_hosts.clear()
-        for host in self.hosts:
+        hosts_to_deselect = self.filtered_hosts if self.search_filter else self.hosts
+
+        for host in hosts_to_deselect:
+            self.selected_hosts.discard(host.name)
             self.update_row_checkbox(host.name, False)
 
-        self.log_message("Deselected all hosts")
+        self.log_message(f"Deselected all {len(hosts_to_deselect)} hosts")
         self.update_status_selection()
 
     def action_connect_selected(self) -> None:
-        """Connect to selected hosts."""
+        """Connect to selected hosts and exit the application."""
+        self.log_message("INFO: Enter key pressed - processing connection request", level="info")
+
         if not self.selected_hosts:
             self.log_message("WARNING: No hosts selected for connection", level="warning")
             return
 
         selected_host_objects = [h for h in self.hosts if h.name in self.selected_hosts]
-        self.log_message(f"Connecting to {len(selected_host_objects)} selected hosts...")
+        self.log_message(f"INFO: Connecting to {len(selected_host_objects)} selected hosts...", level="info")
 
         # For Phase 1, just log the selection - connection logic will be added later
         for host in selected_host_objects:
-            self.log_message(f"Would connect to: {host.name} ({host.ip})")
+            self.log_message(f"INFO: Would connect to: {host.name} ({host.ip}) - Cluster: {getattr(host, 'cluster', 'N/A')}", level="info")
+
+        self.log_message(f"INFO: Connection request complete. Returning {len(selected_host_objects)} hosts.", level="info")
+        self.log_message("INFO: Exiting SSHplex TUI application...", level="info")
 
         # Exit the app and return selected hosts
-        self.exit(selected_host_objects)
+        self.app.exit(selected_host_objects)
 
     def update_row_checkbox(self, row_key: str, selected: bool) -> None:
         """Update the checkbox for a specific row."""
@@ -314,3 +373,110 @@ class HostSelector(App):
             timestamp = datetime.now().strftime("%H:%M:%S")
             level_prefix = level.upper() if level != "info" else "INFO"
             self.log_widget.write_line(f"[{timestamp}] {level_prefix}: {message}")
+
+    def action_start_search(self) -> None:
+        """Start search mode by showing and focusing the search input."""
+        if self.search_input:
+            # Show the search container
+            search_container = self.query_one("#search-container")
+            search_container.styles.display = "block"
+
+            # Focus on the search input
+            self.search_input.focus()
+            self.log_message("Search mode activated - type to filter hosts, ESC to focus table")
+
+    def action_focus_table(self) -> None:
+        """Focus back on the table."""
+        if self.table:
+            self.table.focus()
+            # If search is active, we keep the filter but just change focus
+            if self.search_filter:
+                self.log_message(f"Table focused - search filter '{self.search_filter}' still active")
+            else:
+                self.log_message("Table focused")
+
+            self.log_message("Search cleared - showing all hosts")
+            self.update_status_selection()
+
+    def action_toggle_panes(self) -> None:
+        """Toggle between panes and tabs mode for SSH connections."""
+        self.use_panes = not self.use_panes
+        mode = "Panes" if self.use_panes else "Tabs"
+        self.log_message(f"SSH connection mode switched to: {mode}")
+        self.update_status_with_mode()
+
+    def update_status_with_mode(self) -> None:
+        """Update status bar to include current connection mode."""
+        mode = "Panes" if self.use_panes else "Tabs"
+        selected_count = len(self.selected_hosts)
+        total_hosts = len(self.filtered_hosts) if self.search_filter else len(self.hosts)
+        
+        if self.search_filter:
+            self.update_status(f"Filter: '{self.search_filter}' - {total_hosts}/{len(self.hosts)} hosts, {selected_count} selected | Mode: {mode}")
+        else:
+            self.update_status(f"{total_hosts} hosts loaded, {selected_count} selected | Mode: {mode}")
+
+    def key_enter(self) -> None:
+        """Handle Enter key press directly."""
+        self.action_connect_selected()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Handle search input changes."""
+        if event.input == self.search_input:
+            self.search_filter = event.value.lower().strip()
+
+            # If search is cleared, hide the search container
+            if not self.search_filter:
+                search_container = self.query_one("#search-container")
+                search_container.styles.display = "none"
+                self.log_message("Search cleared")
+
+            self.filter_hosts()
+
+    def filter_hosts(self) -> None:
+        """Filter hosts based on search term."""
+        if not self.search_filter:
+            self.filtered_hosts = self.hosts.copy()
+        else:
+            self.filtered_hosts = [
+                host for host in self.hosts
+                if self.search_filter in host.name.lower()
+            ]
+
+        # Re-populate table with filtered results
+        self.populate_table()
+
+        # Update status
+        if self.search_filter:
+            filtered_count = len(self.filtered_hosts)
+            total_count = len(self.hosts)
+            selected_count = len(self.selected_hosts)
+            self.update_status(f"Filter: '{self.search_filter}' - {filtered_count}/{total_count} hosts shown, {selected_count} selected")
+        else:
+            self.update_status_selection()
+
+    def on_key(self, event) -> None:
+        """Handle key presses - specifically check for Enter on DataTable."""
+        self.log_message(f"DEBUG: Key pressed: {event.key}", level="info")
+
+        # Check if Enter was pressed while DataTable has focus
+        if event.key == "enter" and hasattr(self, 'table') and self.table and self.table.has_focus:
+            self.log_message("DEBUG: Enter key pressed on focused DataTable - calling connect action", level="info")
+            self.action_connect_selected()
+            event.prevent_default()
+            event.stop()
+            return
+
+        # Let the event bubble up for normal processing
+        event.prevent_default = False
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter key pressed in search input."""
+        if event.input == self.search_input:
+            # Focus back on the table when Enter is pressed in search
+            if self.table:
+                self.table.focus()
+                if self.search_filter:
+                    self.log_message(f"Search complete - table focused with filter '{self.search_filter}'")
+                else:
+                    self.log_message("Search complete - table focused")
