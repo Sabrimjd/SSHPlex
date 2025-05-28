@@ -42,11 +42,19 @@ class LoggingConfig(BaseModel):
         return v.upper()
 
 
+class UIConfig(BaseModel):
+    """User interface configuration."""
+    show_log_panel: bool = True
+    log_panel_height: int = 20  # Percentage of screen height
+    table_columns: list = Field(default_factory=lambda: ["name", "ip", "cluster", "role", "tags"])
+
+
 class Config(BaseModel):
     """Main SSHplex configuration model."""
     sshplex: SSHplexConfig = Field(default_factory=SSHplexConfig)
     netbox: NetBoxConfig
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    ui: UIConfig = Field(default_factory=UIConfig)
 
 
 def load_config(config_path: str = "config.yaml") -> Config:
