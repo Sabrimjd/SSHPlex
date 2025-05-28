@@ -134,7 +134,8 @@ class NetBoxProvider(SoTProvider):
                     role=str(vm.role) if vm.role else "unknown",
                     platform=str(vm.platform) if vm.platform else "unknown",
                     cluster=str(vm.cluster) if vm.cluster else "unknown",
-                    tags=tags
+                    tags=tags,
+                    description=str(vm.description) if vm.description else ""
                 )
 
                 hosts.append(host)

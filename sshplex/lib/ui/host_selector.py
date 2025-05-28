@@ -121,7 +121,7 @@ class HostSelector(App):
         # Add configured columns
         for column in self.config.ui.table_columns:
             if column == "name":
-                self.table.add_column("Name", width=25, key="name")
+                self.table.add_column("Name", width=15, key="name")
             elif column == "ip":
                 self.table.add_column("IP Address", width=15, key="ip")
             elif column == "cluster":
@@ -130,6 +130,8 @@ class HostSelector(App):
                 self.table.add_column("Role", width=15, key="role")
             elif column == "tags":
                 self.table.add_column("Tags", width=30, key="tags")
+            elif column == "description":
+                self.table.add_column("Description", width=40, key="description")
 
     async def load_hosts(self) -> None:
         """Load hosts from NetBox."""
@@ -192,6 +194,8 @@ class HostSelector(App):
                     row_data.append(getattr(host, 'role', 'N/A'))
                 elif column == "tags":
                     row_data.append(getattr(host, 'tags', ''))
+                elif column == "description":
+                    row_data.append(getattr(host, 'description', ''))
 
             self.table.add_row(*row_data, key=host.name)
 
