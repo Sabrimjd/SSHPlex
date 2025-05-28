@@ -1,286 +1,300 @@
-"""Host selection TUI for SSHplex."""
+"""SSHplex TUI Host Selector with Textual."""
 
+from typing import List, Optional, Set
+from datetime import datetime
 from textual.app import App, ComposeResult
-from textual.containers import Container, Vertical
-from textual.widgets import Header, Footer, Static
+from textual.containers import Container, Vertical, Horizontal
+from textual.widgets import DataTable, Log, Static, Footer
 from textual.binding import Binding
-from rich.panel import Panel
+from textual.reactive import reactive
+from textual import events
 
 from ..logger import get_logger
 from ..sot.netbox import NetBoxProvider
-from .widgets import HostTable, FilterBar, StatusBar, ActionBar
+from ..sot.base import Host
 
 
 class HostSelector(App):
-    """Main TUI application for host selection."""
+    """SSHplex TUI for selecting hosts to connect to."""
 
-    # App bindings
+    CSS = """
+    #log-panel {
+        height: 20%;
+        border: solid $primary;
+        margin: 1;
+    }
+
+    #main-panel {
+        height: 80%;
+        border: solid $primary;
+        margin: 1;
+    }
+
+    #status-bar {
+        height: 3;
+        background: $surface;
+        color: $text;
+        padding: 1;
+    }
+
+    DataTable {
+        height: 1fr;
+    }
+
+    Log {
+        height: 1fr;
+    }
+    """
+
     BINDINGS = [
-        Binding(key="q", action="quit", description="Quit"),
-        Binding(key="r", action="refresh", description="Refresh hosts"),
-        #Binding(key="c", action="connect", description="Connect to selected hosts"),
-        #Binding(key="f", action="focus_filter", description="Focus filter"),
-        Binding(key="a", action="select_all", description="Select all hosts"),
-        Binding(key="d", action="deselect_all", description="Deselect all hosts"),
-        #Binding(key="x", action="toggle_regex", description="Toggle regex mode"),
-        Binding(key="/", action="focus_filter", description="Focus filter"),
-        Binding(key="enter", action="connect", description="Connect to selected hosts"),
-        Binding(key="tab", action="toggle_focus", description="Toggle focus"),
-        Binding(key="escape", action="focus_table", description="Focus table"),
+        Binding("space", "toggle_select", "Toggle Select", show=True),
+        Binding("a", "select_all", "Select All", show=True),
+        Binding("d", "deselect_all", "Deselect All", show=True),
+        Binding("enter", "connect_selected", "Connect", show=True),
+        Binding("q", "quit", "Quit", show=True),
     ]
 
+    selected_hosts: reactive[Set[str]] = reactive(set())
+
     def __init__(self, config):
-        """Initialize the host selector with configuration.
+        """Initialize the host selector.
 
         Args:
             config: SSHplex configuration object
         """
         super().__init__()
-
         self.config = config
         self.logger = get_logger()
-        self.hosts = []
-
-        # Initialize NetBox provider
-        self.netbox = NetBoxProvider(
-            url=config.netbox.url,
-            token=config.netbox.token,
-            verify_ssl=config.netbox.verify_ssl,
-            timeout=config.netbox.timeout
-        )
+        self.hosts: List[Host] = []
+        self.netbox: Optional[NetBoxProvider] = None
+        self.table: Optional[DataTable] = None
+        self.log_widget: Optional[Log] = None
+        self.status_widget: Optional[Static] = None
 
     def compose(self) -> ComposeResult:
-        """Compose the TUI layout."""
-        yield Header(show_clock=True)
+        """Create the UI layout."""
 
-        with Container():
-            yield Static(Panel("SSHplex - SSH Connection Multiplexer", border_style="blue"))
+        # Log panel at top (conditionally shown)
+        if self.config.ui.show_log_panel:
+            with Container(id="log-panel"):
+                yield Log(id="log", auto_scroll=True)
 
-            with Vertical():
-                self.filter_bar = FilterBar()
-                yield self.filter_bar
+        # Main content panel
+        with Container(id="main-panel"):
+            yield DataTable(id="host-table", cursor_type="row")
 
-                self.host_table = HostTable()
-                yield self.host_table
+        # Status bar
+        with Container(id="status-bar"):
+            yield Static("SSHplex - Loading hosts...", id="status")
 
-                self.action_bar = ActionBar()
-                yield self.action_bar
-
-                self.status_bar = StatusBar()
-                yield self.status_bar
-
+        # Footer with keybindings
         yield Footer()
 
     def on_mount(self) -> None:
-        """Initialize the app when mounted."""
-        self.status_bar.update_status("Connecting to NetBox...")
+        """Initialize the UI and load hosts."""
+        # Get widget references
+        self.table = self.query_one("#host-table", DataTable)
+        if self.config.ui.show_log_panel:
+            self.log_widget = self.query_one("#log", Log)
+        self.status_widget = self.query_one("#status", Static)
 
-        # Connect to the API
-        if not self.netbox.connect():
-            self.status_bar.update_status("Failed to connect to NetBox", "error")
+        # Setup table columns
+        self.setup_table()
+
+        # Focus on the table by default
+        if self.table:
+            self.table.focus()
+
+        # Load hosts from NetBox
+        self.call_later(self.load_hosts)
+
+        self.log_message("SSHplex TUI started")
+
+    def setup_table(self) -> None:
+        """Setup the data table columns."""
+        if not self.table:
             return
 
-        # Fetch hosts
-        self.refresh_hosts()
+        # Add checkbox column with key
+        self.table.add_column("✓", width=3, key="checkbox")
 
-        # Connect button handler
-        self.action_bar.connect_button.on_click = self.action_connect
+        # Add configured columns
+        for column in self.config.ui.table_columns:
+            if column == "name":
+                self.table.add_column("Name", width=25, key="name")
+            elif column == "ip":
+                self.table.add_column("IP Address", width=15, key="ip")
+            elif column == "cluster":
+                self.table.add_column("Cluster", width=20, key="cluster")
+            elif column == "role":
+                self.table.add_column("Role", width=15, key="role")
+            elif column == "tags":
+                self.table.add_column("Tags", width=30, key="tags")
 
-        # Refresh button handler
-        self.action_bar.refresh_button.on_click = self.action_refresh
+    async def load_hosts(self) -> None:
+        """Load hosts from NetBox."""
+        self.log_message("Connecting to NetBox...")
+        self.update_status("Connecting to NetBox...")
 
-        # Quit button handler
-        self.action_bar.quit_button.on_click = self.action_quit
-
-        # Filter button handler
-        self.filter_bar.filter_button.on_click = self.action_filter
-
-        # Clear button handler
-        self.filter_bar.clear_button.on_click = self.action_clear_filter
-
-        # Regex button handler
-        self.filter_bar.regex_button.on_click = self.action_toggle_regex
-
-        # Set initial focus to host table
-        self.host_table.focus()
-        self.status_bar.update_status("Ready. Press Space to select hosts, Enter to connect, Tab to toggle focus.")
-
-    def action_refresh(self) -> None:
-        """Refresh the host list."""
-        self.refresh_hosts()
-
-    def action_connect(self) -> None:
-        """Connect to selected hosts."""
         try:
-            selected_hosts = self.host_table.selected_hosts
+            # Initialize NetBox provider
+            self.netbox = NetBoxProvider(
+                url=self.config.netbox.url,
+                token=self.config.netbox.token,
+                verify_ssl=self.config.netbox.verify_ssl,
+                timeout=self.config.netbox.timeout
+            )
 
-            if not selected_hosts:
-                self.status_bar.update_status("No hosts selected", "warning")
+            # Connect to NetBox
+            if not self.netbox.connect():
+                self.log_message("ERROR: Failed to connect to NetBox", level="error")
+                self.update_status("Error: NetBox connection failed")
                 return
 
-            self.status_bar.update_status(f"Selected {len(selected_hosts)} hosts for connection", "success")
+            self.log_message("Successfully connected to NetBox")
+            self.update_status("Loading hosts...")
 
-            # Phase 1: Just log the selected hosts
-            self.logger.info(f"Selected {len(selected_hosts)} hosts:")
-            for host in selected_hosts:
-                self.logger.info(f"  - {host.name} ({host.ip})")
+            # Get hosts with filters
+            self.hosts = self.netbox.get_hosts(filters=self.config.netbox.default_filters)
 
-            # In Phase 1, we don't actually connect
-            self.exit(result=selected_hosts)
+            if not self.hosts:
+                self.log_message("WARNING: No hosts found matching filters", level="warning")
+                self.update_status("No hosts found")
+                return
+
+            # Populate table
+            self.populate_table()
+
+            self.log_message(f"Loaded {len(self.hosts)} hosts successfully")
+            self.update_status(f"Loaded {len(self.hosts)} hosts - Use SPACE to select, A to select all, D to deselect all")
+
         except Exception as e:
-            self.logger.error(f"Connection error: {e}")
-            self.status_bar.update_status(f"Connection error: {e}", "error")
+            self.log_message(f"ERROR: Failed to load hosts: {e}", level="error")
+            self.update_status(f"Error: {e}")
 
-    def action_quit(self) -> None:
-        """Quit the application."""
-        self.exit()
-
-    def action_filter(self) -> None:
-        """Filter hosts based on input."""
-        filter_text = self.filter_bar.filter_input.value
-
-        if not filter_text:
-            self.refresh_hosts()
+    def populate_table(self) -> None:
+        """Populate the table with host data."""
+        if not self.table or not self.hosts:
             return
 
-        # Check if we're using regex mode
-        use_regex = self.filter_bar.use_regex
+        for host in self.hosts:
+            # Build row data based on configured columns
+            row_data = ["[ ]"]  # Checkbox column
 
-        try:
-            # Apply filter to existing hosts
-            if use_regex:
-                import re
-                pattern = re.compile(filter_text, re.IGNORECASE)
+            for column in self.config.ui.table_columns:
+                if column == "name":
+                    row_data.append(host.name)
+                elif column == "ip":
+                    row_data.append(host.ip)
+                elif column == "cluster":
+                    row_data.append(getattr(host, 'cluster', 'N/A'))
+                elif column == "role":
+                    row_data.append(getattr(host, 'role', 'N/A'))
+                elif column == "tags":
+                    row_data.append(getattr(host, 'tags', ''))
 
-                filtered_hosts = []
-                for host in self.hosts:
-                    # Regex search in hostname, IP, or other fields
-                    if (re.search(pattern, host.name) or
-                        re.search(pattern, host.ip) or
-                        re.search(pattern, host.metadata.get('status', '')) or
-                        re.search(pattern, host.metadata.get('role', '')) or
-                        re.search(pattern, host.metadata.get('platform', '')) or
-                        re.search(pattern, host.metadata.get('cluster', '')) or
-                        re.search(pattern, host.metadata.get('tags', ''))):
-                        filtered_hosts.append(host)
+            self.table.add_row(*row_data, key=host.name)
 
-                # Update table with filtered hosts
-                self.host_table.populate(filtered_hosts)
-                self.status_bar.update_status(
-                    f"Regex filtered: showing {len(filtered_hosts)} of {len(self.hosts)} hosts"
-                )
+    def action_toggle_select(self) -> None:
+        """Toggle selection of current row."""
+        if not self.table or not self.hosts:
+            return
+
+        cursor_row = self.table.cursor_row
+        if cursor_row >= 0 and cursor_row < len(self.hosts):
+            host_name = self.hosts[cursor_row].name
+
+            if host_name in self.selected_hosts:
+                self.selected_hosts.discard(host_name)
+                self.update_row_checkbox(host_name, False)
+                self.log_message(f"Deselected: {host_name}")
             else:
-                # Standard substring search
-                filtered_hosts = []
-                for host in self.hosts:
-                    # Simple substring search in hostname, IP or other fields
-                    if (filter_text.lower() in host.name.lower() or
-                        filter_text.lower() in host.ip.lower() or
-                        filter_text.lower() in host.metadata.get('status', '').lower() or
-                        filter_text.lower() in host.metadata.get('role', '').lower() or
-                        filter_text.lower() in host.metadata.get('platform', '').lower() or
-                        filter_text.lower() in host.metadata.get('cluster', '').lower() or
-                        filter_text.lower() in host.metadata.get('tags', '').lower()):
-                        filtered_hosts.append(host)
+                self.selected_hosts.add(host_name)
+                self.update_row_checkbox(host_name, True)
+                self.log_message(f"Selected: {host_name}")
 
-                # Update table with filtered hosts
-                self.host_table.populate(filtered_hosts)
-                self.status_bar.update_status(
-                    f"Filtered: showing {len(filtered_hosts)} of {len(self.hosts)} hosts"
-                )
-        except re.error:
-            # Handle invalid regex pattern
-            self.status_bar.update_status(f"Invalid regex pattern: {filter_text}", "error")
-
-    def action_clear_filter(self) -> None:
-        """Clear the filter and show all hosts."""
-        self.filter_bar.filter_input.value = ""
-        self.refresh_hosts()
-
-    def action_focus_filter(self) -> None:
-        """Focus the filter input."""
-        self.filter_bar.filter_input.focus()
-
-    def refresh_hosts(self) -> None:
-        """Refresh the host list from NetBox."""
-        self.status_bar.update_status("Loading hosts from NetBox...")
-
-        # Fetch hosts with filters from config
-        hosts = self.netbox.get_hosts(filters=self.config.netbox.default_filters)
-        self.hosts = hosts
-
-        if not hosts:
-            self.status_bar.update_status("No hosts found", "warning")
-            return
-
-        # Update the table
-        self.host_table.populate(hosts)
-        self.status_bar.update_status(f"Loaded {len(hosts)} hosts from NetBox", "success")
+            self.update_status_selection()
 
     def action_select_all(self) -> None:
         """Select all hosts."""
-        self.host_table.select_all()
-        self.status_bar.update_status(f"Selected all {len(self.hosts)} hosts", "success")
+        if not self.hosts:
+            return
+
+        self.selected_hosts.clear()
+        for host in self.hosts:
+            self.selected_hosts.add(host.name)
+            self.update_row_checkbox(host.name, True)
+
+        self.log_message(f"Selected all {len(self.hosts)} hosts")
+        self.update_status_selection()
 
     def action_deselect_all(self) -> None:
         """Deselect all hosts."""
-        self.host_table.deselect_all()
-        self.status_bar.update_status("Cleared all selections", "info")
+        if not self.hosts:
+            return
 
-    def action_invert_selection(self) -> None:
-        """Invert host selection."""
-        self.host_table.invert_selection()
-        self.status_bar.update_status("Selection inverted")
+        self.selected_hosts.clear()
+        for host in self.hosts:
+            self.update_row_checkbox(host.name, False)
 
-    def action_toggle_regex(self) -> None:
-        """Toggle regex search mode."""
-        self.filter_bar.toggle_regex_mode()
+        self.log_message("Deselected all hosts")
+        self.update_status_selection()
 
-        if self.filter_bar.use_regex:
-            self.status_bar.update_status("Regex search enabled", "success")
+    def action_connect_selected(self) -> None:
+        """Connect to selected hosts."""
+        if not self.selected_hosts:
+            self.log_message("WARNING: No hosts selected for connection", level="warning")
+            return
+
+        selected_host_objects = [h for h in self.hosts if h.name in self.selected_hosts]
+        self.log_message(f"Connecting to {len(selected_host_objects)} selected hosts...")
+
+        # For Phase 1, just log the selection - connection logic will be added later
+        for host in selected_host_objects:
+            self.log_message(f"Would connect to: {host.name} ({host.ip})")
+
+        # Exit the app and return selected hosts
+        self.exit(selected_host_objects)
+
+    def update_row_checkbox(self, row_key: str, selected: bool) -> None:
+        """Update the checkbox for a specific row."""
+        if not self.table:
+            return
+
+        checkbox = "[X]" if selected else "[ ]"
+        self.table.update_cell(row_key, "checkbox", checkbox)
+
+    def update_status_selection(self) -> None:
+        """Update status bar with selection count."""
+        count = len(self.selected_hosts)
+        total = len(self.hosts)
+
+        if count == 0:
+            status = f"Loaded {total} hosts - Use SPACE to select, A to select all, D to deselect all"
+        elif count == 1:
+            status = f"{count} host selected - Press ENTER to connect"
         else:
-            self.status_bar.update_status("Regex search disabled")
+            status = f"{count} hosts selected - Press ENTER to connect"
 
-    def action_apply_filter(self) -> None:
-        """Apply the current filter."""
-        self.action_filter()
+        self.update_status(status)
 
-    def action_toggle_focus(self) -> None:
-        """Toggle focus between filter input and host table."""
-        if self.focused is self.filter_bar.filter_input:
-            # If filter is focused, switch to table
-            self.host_table.focus()
-            self.status_bar.update_status("Table focused. Use arrow keys to navigate, Space to select, Enter to connect.")
+    def update_status(self, message: str) -> None:
+        """Update the status bar."""
+        if self.status_widget:
+            self.status_widget.update(message)
+
+    def log_message(self, message: str, level: str = "info") -> None:
+        """Log a message to both logger and UI log panel."""
+        # Log to file
+        if level == "error":
+            self.logger.error(f"SSHplex TUI: {message}")
+        elif level == "warning":
+            self.logger.warning(f"SSHplex TUI: {message}")
         else:
-            # Otherwise switch to filter
-            self.filter_bar.filter_input.focus()
-            self.status_bar.update_status("Filter focused. Type to filter hosts in real-time.")
+            self.logger.info(f"SSHplex TUI: {message}")
 
-    def action_focus_table(self) -> None:
-        """Focus the host table."""
-        self.host_table.focus()
-        self.status_bar.update_status("Table focused. Use arrow keys to navigate, Space to select, Enter to connect.")
-
-    def on_key(self, event) -> None:
-        """Handle keyboard events for selection."""
-        # Check for keyboard shortcuts that aren't in bindings
-        key = event.key
-        self.logger.debug(f"Host selector received key: {key}")
-
-        if key == "ctrl+a":
-            # Select all hosts
-            self.action_select_all()
-        elif key == "ctrl+d":
-            # Deselect all hosts
-            self.action_deselect_all()
-        elif key == "space" and self.focused is self.host_table:
-            # Let the host table handle space selection
-            self.logger.debug("Space pressed with table focused - delegating to table")
-            pass
-        elif key == "enter" and self.focused is self.host_table:
-            # Connect to hosts when Enter is pressed while the host table has focus
-            self.logger.debug("Enter pressed with table focused - connecting to hosts")
-            self.action_connect()
-            # Prevent further handling of this key
-            event.stop()
-            event.prevent_default()
+        # Log to UI panel if enabled
+        if self.log_widget and self.config.ui.show_log_panel:
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            level_prefix = level.upper() if level != "info" else "INFO"
+            self.log_widget.write_line(f"[{timestamp}] {level_prefix}: {message}")
