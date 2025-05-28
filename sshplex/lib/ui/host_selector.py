@@ -18,23 +18,31 @@ class HostSelector(App):
     """SSHplex TUI for selecting hosts to connect to."""
 
     CSS = """
+    Screen {
+        layout: vertical;
+    }
+
     #log-panel {
         height: 20%;
         border: solid $primary;
-        margin: 1;
+        margin: 0 1;
+        margin-bottom: 1;
     }
 
     #main-panel {
-        height: 80%;
+        height: 1fr;
         border: solid $primary;
-        margin: 1;
+        margin: 0 1;
+        margin-bottom: 1;
     }
 
     #status-bar {
         height: 3;
         background: $surface;
         color: $text;
-        padding: 1;
+        padding: 0 1;
+        margin: 0 1;
+        dock: bottom;
     }
 
     DataTable {
@@ -43,6 +51,10 @@ class HostSelector(App):
 
     Log {
         height: 1fr;
+    }
+
+    Footer {
+        dock: bottom;
     }
     """
 
@@ -274,7 +286,7 @@ class HostSelector(App):
         total = len(self.hosts)
 
         if count == 0:
-            status = f"Loaded {total} hosts - Use SPACE to select, A to select all, D to deselect all"
+            status = f"Loaded {total} hosts - No hosts selected"
         elif count == 1:
             status = f"{count} host selected - Press ENTER to connect"
         else:
