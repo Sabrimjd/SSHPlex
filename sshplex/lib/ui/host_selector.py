@@ -88,6 +88,7 @@ class HostSelector(App):
         Binding("enter", "connect_selected", "Connect", show=True),
         Binding("/", "start_search", "Search", show=True),
         Binding("p", "toggle_panes", "Toggle Panes/Tabs", show=True),
+        Binding("b", "toggle_broadcast", "Toggle Broadcast", show=True),
         Binding("escape", "focus_table", "Focus Table", show=False),
         Binding("q", "quit", "Quit", show=True),
     ]
@@ -95,6 +96,7 @@ class HostSelector(App):
     selected_hosts: reactive[Set[str]] = reactive(set())
     search_filter: reactive[str] = reactive("")
     use_panes: reactive[bool] = reactive(True)  # True for panes, False for tabs
+    use_broadcast: reactive[bool] = reactive(False)  # True for broadcast enabled, False for disabled
 
     def __init__(self, config):
         """Initialize the host selector.
@@ -216,7 +218,7 @@ class HostSelector(App):
             self.populate_table()
 
             self.log_message(f"Loaded {len(self.hosts)} hosts successfully")
-            self.update_status(f"Loaded {len(self.hosts)} hosts - Use SPACE to select, A to select all, D to deselect all")
+            self.update_status_with_mode()
 
         except Exception as e:
             self.log_message(f"ERROR: Failed to load hosts: {e}", level="error")
@@ -319,13 +321,15 @@ class HostSelector(App):
             return
 
         selected_host_objects = [h for h in self.hosts if h.name in self.selected_hosts]
-        self.log_message(f"INFO: Connecting to {len(selected_host_objects)} selected hosts...", level="info")
+        mode = "Panes" if self.use_panes else "Tabs"
+        broadcast = "ON" if self.use_broadcast else "OFF"
+        self.log_message(f"INFO: Connecting to {len(selected_host_objects)} selected hosts in {mode} mode with Broadcast {broadcast}...", level="info")
 
         # For Phase 1, just log the selection - connection logic will be added later
         for host in selected_host_objects:
             self.log_message(f"INFO: Would connect to: {host.name} ({host.ip}) - Cluster: {getattr(host, 'cluster', 'N/A')}", level="info")
 
-        self.log_message(f"INFO: Connection request complete. Returning {len(selected_host_objects)} hosts.", level="info")
+        self.log_message(f"INFO: Connection request complete. Mode: {mode}, Broadcast: {broadcast}, Hosts: {len(selected_host_objects)}", level="info")
         self.log_message("INFO: Exiting SSHplex TUI application...", level="info")
 
         # Exit the app and return selected hosts
@@ -340,18 +344,8 @@ class HostSelector(App):
         self.table.update_cell(row_key, "checkbox", checkbox)
 
     def update_status_selection(self) -> None:
-        """Update status bar with selection count."""
-        count = len(self.selected_hosts)
-        total = len(self.hosts)
-
-        if count == 0:
-            status = f"Loaded {total} hosts - No hosts selected"
-        elif count == 1:
-            status = f"{count} host selected - Press ENTER to connect"
-        else:
-            status = f"{count} hosts selected - Press ENTER to connect"
-
-        self.update_status(status)
+        """Update status bar with selection count and mode."""
+        self.update_status_with_mode()
 
     def update_status(self, message: str) -> None:
         """Update the status bar."""
@@ -405,16 +399,24 @@ class HostSelector(App):
         self.log_message(f"SSH connection mode switched to: {mode}")
         self.update_status_with_mode()
 
+    def action_toggle_broadcast(self) -> None:
+        """Toggle broadcast mode for synchronized input across connections."""
+        self.use_broadcast = not self.use_broadcast
+        broadcast_status = "ON" if self.use_broadcast else "OFF"
+        self.log_message(f"Broadcast mode switched to: {broadcast_status}")
+        self.update_status_with_mode()
+
     def update_status_with_mode(self) -> None:
-        """Update status bar to include current connection mode."""
+        """Update status bar to include current connection mode and broadcast status."""
         mode = "Panes" if self.use_panes else "Tabs"
+        broadcast = "ON" if self.use_broadcast else "OFF"
         selected_count = len(self.selected_hosts)
         total_hosts = len(self.filtered_hosts) if self.search_filter else len(self.hosts)
-        
+
         if self.search_filter:
-            self.update_status(f"Filter: '{self.search_filter}' - {total_hosts}/{len(self.hosts)} hosts, {selected_count} selected | Mode: {mode}")
+            self.update_status(f"Filter: '{self.search_filter}' - {total_hosts}/{len(self.hosts)} hosts, {selected_count} selected | Mode: {mode} | Broadcast: {broadcast}")
         else:
-            self.update_status(f"{total_hosts} hosts loaded, {selected_count} selected | Mode: {mode}")
+            self.update_status(f"{total_hosts} hosts loaded, {selected_count} selected | Mode: {mode} | Broadcast: {broadcast}")
 
     def key_enter(self) -> None:
         """Handle Enter key press directly."""
