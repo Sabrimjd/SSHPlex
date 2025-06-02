@@ -115,15 +115,15 @@ def tui_mode(config, logger):
             logger.info(f"User selected {len(result)} hosts for connection")
             for host in result:
                 logger.info(f"  - {host.name} ({host.ip})")
-            
+
             # Phase 2: Create tmux panes for selected hosts
             logger.info("SSHplex Phase 2: Creating tmux panes for selected hosts")
-            
+
             # Create connector with timestamped session name
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             session_name = f"sshplex-{timestamp}"
             connector = SSHplexConnector(session_name)
-            
+
             # Connect to hosts (creates panes with SSH connections)
             if connector.connect_to_hosts(
                 hosts=result,
@@ -134,22 +134,24 @@ def tui_mode(config, logger):
                 session_name = connector.get_session_name()
                 logger.info(f"SSHplex: Successfully created tmux session '{session_name}'")
                 logger.info(f"SSHplex: {len(result)} SSH connections established")
-                
-                # Provide instructions for manual attachment
+
+                # Display success message and auto-attach
                 print(f"\n✅ SSHplex Session Created Successfully!")
                 print(f"📡 tmux session: {session_name}")
                 print(f"🔗 {len(result)} SSH connections established")
-                print(f"\n🚀 To attach to the session:")
-                print(f"   tmux attach-session -t {session_name}")
-                print(f"\n⚡ tmux commands:")
+                print(f"\n🚀 Auto-attaching to session...")
+                print(f"\n⚡ tmux commands (once attached):")
                 print(f"   - Switch panes: Ctrl+b then arrow keys")
                 print(f"   - Detach session: Ctrl+b then d")
                 print(f"   - List sessions: tmux list-sessions")
-                
+
+                # Auto-attach to the session (this will replace the current process)
+                connector.attach_to_session(auto_attach=True)
+
             else:
                 logger.error("SSHplex: Failed to create SSH connections")
                 return 1
-                
+
         else:
             logger.info("No hosts were selected")
 

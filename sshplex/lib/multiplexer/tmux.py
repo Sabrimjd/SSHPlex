@@ -16,7 +16,7 @@ class TmuxManager(MultiplexerBase):
         if session_name is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             session_name = f"sshplex-{timestamp}"
-        
+
         super().__init__(session_name)
         self.logger = get_logger()
         self.server = libtmux.Server()
@@ -28,7 +28,7 @@ class TmuxManager(MultiplexerBase):
         """Create a new tmux session with SSHplex branding."""
         try:
             self.logger.info(f"SSHplex: Creating tmux session '{self.session_name}'")
-            
+
             # Check if session already exists
             if self.server.has_session(self.session_name):
                 self.logger.warning(f"SSHplex: Session '{self.session_name}' already exists")
@@ -40,7 +40,7 @@ class TmuxManager(MultiplexerBase):
                     window_name="sshplex",
                     start_directory="~"
                 )
-            
+
             # Get the main window
             if self.session:
                 self.window = self.session.attached_window
@@ -48,7 +48,7 @@ class TmuxManager(MultiplexerBase):
                 return True
             else:
                 return False
-            
+
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to create tmux session: {e}")
             return False
@@ -61,32 +61,32 @@ class TmuxManager(MultiplexerBase):
                     return False
 
             self.logger.info(f"SSHplex: Creating pane for host '{hostname}'")
-            
+
             # Split window to create new pane (except for the first pane)
             if self.window is None:
                 self.logger.error("SSHplex: No window available for pane creation")
                 return False
-                
+
             if len(self.panes) == 0:
                 # First pane - use the existing window pane
                 pane = self.window.attached_pane
             else:
                 # Additional panes - split the window
                 pane = self.window.split_window()
-            
+
             # Store pane reference
             self.panes[hostname] = pane
-            
+
             # Set pane title
             self.set_pane_title(hostname, hostname)
-            
+
             # Execute the provided command (should be SSH command)
             if command:
                 self.send_command(hostname, command)
-            
+
             self.logger.info(f"SSHplex: Pane created for '{hostname}' successfully")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to create pane for '{hostname}': {e}")
             return False
@@ -97,12 +97,12 @@ class TmuxManager(MultiplexerBase):
             if hostname not in self.panes:
                 self.logger.error(f"SSHplex: Pane for '{hostname}' not found")
                 return False
-                
+
             pane = self.panes[hostname]
             # Set pane title using printf escape sequence
             pane.send_keys(f'printf "\\033]2;{title}\\033\\\\"', enter=True)
             return True
-            
+
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to set pane title for '{hostname}': {e}")
             return False
@@ -113,12 +113,12 @@ class TmuxManager(MultiplexerBase):
             if hostname not in self.panes:
                 self.logger.error(f"SSHplex: Pane for '{hostname}' not found")
                 return False
-                
+
             pane = self.panes[hostname]
             pane.send_keys(command, enter=True)
             self.logger.debug(f"SSHplex: Command sent to '{hostname}': {command}")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to send command to '{hostname}': {e}")
             return False
@@ -130,10 +130,10 @@ class TmuxManager(MultiplexerBase):
             for hostname in self.panes:
                 if self.send_command(hostname, command):
                     success_count += 1
-            
+
             self.logger.info(f"SSHplex: Broadcast command sent to {success_count}/{len(self.panes)} panes")
             return success_count == len(self.panes)
-            
+
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to broadcast command: {e}")
             return False
@@ -147,20 +147,27 @@ class TmuxManager(MultiplexerBase):
                 self.session = None
                 self.window = None
                 self.panes.clear()
-                
+
         except Exception as e:
             self.logger.error(f"SSHplex: Error closing session: {e}")
 
-    def attach_to_session(self) -> None:
+    def attach_to_session(self, auto_attach: bool = True) -> None:
         """Attach to the tmux session."""
         try:
             if self.session:
-                self.logger.info(f"SSHplex: Attaching to tmux session '{self.session_name}'")
-                # This will be handled by the external tmux command
-                # The session is ready for attachment
+                if auto_attach:
+                    self.logger.info(f"SSHplex: Auto-attaching to tmux session '{self.session_name}'")
+                    # Auto-attach to the session by replacing current shell
+                    import os
+                    import sys
+                    # Use exec to replace the current Python process with tmux attach
+                    os.execlp("tmux", "tmux", "attach-session", "-t", self.session_name)
+                else:
+                    self.logger.info(f"SSHplex: Tmux session '{self.session_name}' is ready for attachment")
+                    print(f"\nTo attach to the session, run: tmux attach-session -t {self.session_name}")
             else:
                 self.logger.error("SSHplex: No session to attach to")
-                
+
         except Exception as e:
             self.logger.error(f"SSHplex: Error attaching to session: {e}")
 
@@ -176,7 +183,7 @@ class TmuxManager(MultiplexerBase):
                 self.logger.info("SSHplex: Applied tiled layout to tmux window")
                 return True
             return False
-            
+
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to set tiled layout: {e}")
             return False

@@ -1,6 +1,6 @@
 """SSHplex Connector - SSH connections and tmux session management."""
 
-from typing import List, Optional
+from typing import List
 from datetime import datetime
 
 from lib.logger import get_logger
@@ -11,7 +11,7 @@ from lib.sot.base import Host
 class SSHplexConnector:
     """Manages SSH connections and tmux session management."""
 
-    def __init__(self, session_name: Optional[str] = None):
+    def __init__(self, session_name: str = None):
         """Initialize the connector with optional session name."""
         if session_name is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -21,7 +21,7 @@ class SSHplexConnector:
         self.tmux_manager = TmuxManager(session_name)
         self.logger = get_logger()
 
-    def connect_to_hosts(self, hosts: List[Host], username: str, key_path: Optional[str] = None, port: int = 22) -> bool:
+    def connect_to_hosts(self, hosts: List[Host], username: str, key_path: str = None, port: int = 22) -> bool:
         """Establish SSH connections to the specified hosts using shell SSH."""
         if not hosts:
             self.logger.warning("SSHplex: No hosts provided for connection")
@@ -60,7 +60,7 @@ class SSHplexConnector:
             self.logger.error(f"SSHplex: Error during connection process: {e}")
             return False
 
-    def _build_ssh_command(self, hostname: str, username: str, key_path: Optional[str] = None, port: int = 22) -> str:
+    def _build_ssh_command(self, hostname: str, username: str, key_path: str = None, port: int = 22) -> str:
         """Build SSH command string."""
         cmd_parts = ["ssh"]
 
@@ -86,9 +86,9 @@ class SSHplexConnector:
         """Get the tmux session name."""
         return self.session_name
 
-    def attach_to_session(self, auto_attach: bool = True) -> None:
-        """Prepare session for attachment or auto-attach."""
-        self.tmux_manager.attach_to_session(auto_attach=auto_attach)
+    def attach_to_session(self) -> None:
+        """Prepare session for attachment."""
+        self.tmux_manager.attach_to_session()
 
     def close_connections(self) -> None:
         """Close all SSH connections and tmux session."""
