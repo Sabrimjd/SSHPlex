@@ -1,7 +1,8 @@
-# Core functionality - Phase 1
+# Core functionality - Phase 1 & 2
 pynetbox==7.3.3          # NetBox API client
 textual==0.47.1          # Modern TUI framework
 pyyaml==6.0.1            # YAML configuration
 pydantic==2.5.0          # Data validation
 loguru==0.7.2            # Simple, powerful logging
 rich==13.7.0             # Enhanced terminal output (works with textual)
+libtmux==0.25.0          # tmux session management

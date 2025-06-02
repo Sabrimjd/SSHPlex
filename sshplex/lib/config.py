@@ -49,10 +49,27 @@ class UIConfig(BaseModel):
     table_columns: list = Field(default_factory=lambda: ["name", "ip", "cluster", "role", "tags"])
 
 
+class SSHConfig(BaseModel):
+    """SSH connection configuration."""
+    username: str = Field(default="admin", description="Default SSH username")
+    key_path: str = Field(default="~/.ssh/id_rsa", description="Path to SSH private key")
+    timeout: int = 10
+    port: int = 22
+
+
+class TmuxConfig(BaseModel):
+    """tmux configuration."""
+    layout: str = "tiled"  # tiled, even-horizontal, even-vertical
+    broadcast: bool = False  # Start with broadcast off
+    window_name: str = "sshplex"
+
+
 class Config(BaseModel):
     """Main SSHplex configuration model."""
     sshplex: SSHplexConfig = Field(default_factory=SSHplexConfig)
     netbox: NetBoxConfig
+    ssh: SSHConfig = Field(default_factory=SSHConfig)
+    tmux: TmuxConfig = Field(default_factory=TmuxConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
 
