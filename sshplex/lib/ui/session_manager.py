@@ -54,6 +54,14 @@ class TmuxSessionManager(ModalScreen):
         color: $text;
     }
 
+    #broadcast-status {
+        height: 2;
+        margin: 1;
+        text-align: center;
+        background: $secondary;
+        color: $text;
+    }
+
     #session-footer {
         height: 3;
         margin: 1;
@@ -66,6 +74,7 @@ class TmuxSessionManager(ModalScreen):
     BINDINGS = [
         Binding("enter", "connect_session", "Connect", show=True),
         Binding("k", "kill_session", "Kill", show=True),
+        Binding("b", "toggle_broadcast", "Broadcast", show=True),
         Binding("r", "refresh_sessions", "Refresh", show=True),
         Binding("escape", "close_manager", "Close", show=True),
         Binding("q", "close_manager", "Close", show=False),
@@ -78,13 +87,15 @@ class TmuxSessionManager(ModalScreen):
         self.sessions: List[TmuxSession] = []
         self.table: Optional[DataTable] = None
         self.tmux_server = None
+        self.broadcast_enabled = False  # Track broadcast state
 
     def compose(self) -> ComposeResult:
         """Create the session manager layout."""
         with Container(id="session-dialog"):
             yield Static("🖥️  SSHplex - tmux Session Manager", id="session-header")
+            yield Static("📡 Broadcast: OFF", id="broadcast-status")
             yield DataTable(id="session-table", cursor_type="row")
-            yield Static("Enter: Connect | K: Kill | R: Refresh | ESC: Close", id="session-footer")
+            yield Static("Enter: Connect | K: Kill | B: Broadcast | R: Refresh | ESC: Close", id="session-footer")
 
     def on_mount(self) -> None:
         """Initialize the session manager."""
@@ -261,6 +272,51 @@ class TmuxSessionManager(ModalScreen):
     def action_close_manager(self) -> None:
         """Close the session manager."""
         self.dismiss()
+
+    def action_toggle_broadcast(self) -> None:
+        """Toggle broadcast mode for sending commands to all panes."""
+        if not self.table or not self.sessions:
+            self.logger.warning("SSHplex: No sessions available for broadcast")
+            return
+
+        cursor_row = self.table.cursor_row
+        if cursor_row >= 0 and cursor_row < len(self.sessions):
+            session = self.sessions[cursor_row]
+            
+            try:
+                # Find the tmux session
+                tmux_session = self.tmux_server.find_where({"session_name": session.name})
+                if not tmux_session:
+                    self.logger.error(f"SSHplex: Session '{session.name}' not found")
+                    return
+                
+                # Toggle broadcast mode
+                self.broadcast_enabled = not self.broadcast_enabled
+                
+                if self.broadcast_enabled:
+                    # Enable synchronize-panes for all windows in the session
+                    for window in tmux_session.windows:
+                        window.cmd('set-window-option', 'synchronize-panes', 'on')
+                    
+                    self.logger.info(f"SSHplex: Broadcast ENABLED for session '{session.name}'")
+                    # Update broadcast status display
+                    status_widget = self.query_one("#broadcast-status", Static)
+                    status_widget.update("📡 Broadcast: ON")
+                    
+                else:
+                    # Disable synchronize-panes for all windows in the session
+                    for window in tmux_session.windows:
+                        window.cmd('set-window-option', 'synchronize-panes', 'off')
+                    
+                    self.logger.info(f"SSHplex: Broadcast DISABLED for session '{session.name}'")
+                    # Update broadcast status display
+                    status_widget = self.query_one("#broadcast-status", Static)
+                    status_widget.update("📡 Broadcast: OFF")
+                
+            except Exception as e:
+                self.logger.error(f"SSHplex: Failed to toggle broadcast for session '{session.name}': {e}")
+        else:
+            self.logger.warning("SSHplex: No session selected for broadcast toggle")
 
     def key_up(self) -> None:
         """Handle up arrow key for table navigation."""
