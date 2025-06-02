@@ -65,7 +65,7 @@ class TmuxSessionManager(ModalScreen):
 
     BINDINGS = [
         Binding("enter", "connect_session", "Connect", show=True),
-        Binding("k", "kill_session", "Kill", show=True),
+        Binding("shift+k", "kill_session", "Kill", show=True),
         Binding("r", "refresh_sessions", "Refresh", show=True),
         Binding("escape", "close_manager", "Close", show=True),
         Binding("q", "close_manager", "Close", show=False),
@@ -84,7 +84,7 @@ class TmuxSessionManager(ModalScreen):
         with Container(id="session-dialog"):
             yield Static("🖥️  SSHplex - tmux Session Manager", id="session-header")
             yield DataTable(id="session-table", cursor_type="row")
-            yield Static("Enter: Connect | K: Kill | R: Refresh | ESC: Close", id="session-footer")
+            yield Static("Enter: Connect | Shift+K: Kill | R: Refresh | ESC: Close", id="session-footer")
 
     def on_mount(self) -> None:
         """Initialize the session manager."""
@@ -129,10 +129,24 @@ class TmuxSessionManager(ModalScreen):
                 except:
                     window_count = 0
                 
+                # Get creation time - libtmux doesn't provide session.created directly
+                try:
+                    # Try to get session creation time from tmux itself
+                    result = session.cmd('display-message', '-p', '#{session_created}')
+                    if result and hasattr(result, 'stdout') and result.stdout:
+                        import datetime
+                        timestamp = int(result.stdout[0])
+                        created_dt = datetime.datetime.fromtimestamp(timestamp)
+                        created = created_dt.strftime("%Y-%m-%d %H:%M:%S")
+                    else:
+                        created = "Unknown"
+                except Exception:
+                    created = "Unknown"
+                
                 tmux_session = TmuxSession(
                     name=session.session_name,
                     session_id=session.session_id,
-                    created=session.created.strftime("%Y-%m-%d %H:%M:%S") if hasattr(session, 'created') else "Unknown",
+                    created=created,
                     windows=window_count,
                     attached=attached
                 )
@@ -177,45 +191,67 @@ class TmuxSessionManager(ModalScreen):
     def action_connect_session(self) -> None:
         """Connect to the selected tmux session."""
         if not self.table or not self.sessions:
+            self.logger.warning("SSHplex: No table or sessions available")
             return
 
-        cursor_row = self.table.cursor_row
-        if cursor_row >= 0 and cursor_row < len(self.sessions):
-            session = self.sessions[cursor_row]
+        # Get the selected row from the table
+        try:
+            cursor_row = self.table.cursor_row
+            self.logger.info(f"SSHplex: Cursor at row {cursor_row}, total sessions: {len(self.sessions)}")
             
-            self.logger.info(f"SSHplex: Connecting to tmux session '{session.name}'")
-            
-            # Close the modal and attach to session
-            self.dismiss()
-            
-            # Auto-attach to the session by replacing current process
-            import os
-            os.execlp("tmux", "tmux", "attach-session", "-t", session.name)
+            if cursor_row >= 0 and cursor_row < len(self.sessions):
+                session = self.sessions[cursor_row]
+                
+                self.logger.info(f"SSHplex: Connecting to tmux session '{session.name}'")
+                
+                # Close the modal first
+                self.dismiss()
+                
+                # Small delay to ensure modal is closed
+                import time
+                time.sleep(0.1)
+                
+                # Auto-attach to the session by replacing current process
+                import os
+                os.execlp("tmux", "tmux", "attach-session", "-t", session.name)
+            else:
+                self.logger.warning(f"SSHplex: Invalid cursor row {cursor_row}")
+        except Exception as e:
+            self.logger.error(f"SSHplex: Failed to connect to session: {e}")
 
     def action_kill_session(self) -> None:
         """Kill the selected tmux session."""
         if not self.table or not self.sessions:
+            self.logger.warning("SSHplex: No table or sessions available for killing")
             return
 
-        cursor_row = self.table.cursor_row
-        if cursor_row >= 0 and cursor_row < len(self.sessions):
-            session = self.sessions[cursor_row]
+        try:
+            cursor_row = self.table.cursor_row
+            self.logger.info(f"SSHplex: Kill cursor at row {cursor_row}, total sessions: {len(self.sessions)}")
             
-            try:
+            if cursor_row >= 0 and cursor_row < len(self.sessions):
+                session = self.sessions[cursor_row]
+                
+                self.logger.info(f"SSHplex: Attempting to kill tmux session '{session.name}'")
+                
                 # Find and kill the session
                 if self.tmux_server:
                     tmux_session = self.tmux_server.find_where({"session_name": session.name})
                     if tmux_session:
                         tmux_session.kill_session()
-                        self.logger.info(f"SSHplex: Killed tmux session '{session.name}'")
+                        self.logger.info(f"SSHplex: Successfully killed tmux session '{session.name}'")
                         
                         # Refresh the session list
                         self.load_sessions()
                     else:
                         self.logger.error(f"SSHplex: Session '{session.name}' not found for killing")
+                else:
+                    self.logger.error("SSHplex: No tmux server connection available")
+            else:
+                self.logger.warning(f"SSHplex: Invalid cursor row {cursor_row} for killing session")
                         
-            except Exception as e:
-                self.logger.error(f"SSHplex: Failed to kill session '{session.name}': {e}")
+        except Exception as e:
+            self.logger.error(f"SSHplex: Failed to kill session: {e}")
 
     def action_refresh_sessions(self) -> None:
         """Refresh the session list."""
@@ -225,3 +261,17 @@ class TmuxSessionManager(ModalScreen):
     def action_close_manager(self) -> None:
         """Close the session manager."""
         self.dismiss()
+
+    def key_up(self) -> None:
+        """Handle up arrow key for table navigation."""
+        if self.table:
+            self.table.action_cursor_up()
+
+    def key_down(self) -> None:
+        """Handle down arrow key for table navigation."""
+        if self.table:
+            self.table.action_cursor_down()
+
+    def key_enter(self) -> None:
+        """Handle enter key for connecting to session."""
+        self.action_connect_session()
