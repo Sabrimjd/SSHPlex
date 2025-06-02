@@ -12,6 +12,7 @@ from textual import events
 from ..logger import get_logger
 from ..sot.netbox import NetBoxProvider
 from ..sot.base import Host
+from .session_manager import TmuxSessionManager
 
 
 class HostSelector(App):
@@ -87,6 +88,7 @@ class HostSelector(App):
         Binding("d", "deselect_all", "Deselect All", show=True),
         Binding("enter", "connect_selected", "Connect", show=True),
         Binding("/", "start_search", "Search", show=True),
+        Binding("s", "show_sessions", "Sessions", show=True),
         Binding("p", "toggle_panes", "Toggle Panes/Tabs", show=True),
         Binding("b", "toggle_broadcast", "Toggle Broadcast", show=True),
         Binding("escape", "focus_table", "Focus Table", show=False),
@@ -334,6 +336,12 @@ class HostSelector(App):
 
         # Exit the app and return selected hosts
         self.app.exit(selected_host_objects)
+
+    def action_show_sessions(self) -> None:
+        """Show the tmux session manager modal."""
+        self.log_message("Opening tmux session manager...")
+        session_manager = TmuxSessionManager()
+        self.push_screen(session_manager)
 
     def update_row_checkbox(self, row_key: str, selected: bool) -> None:
         """Update the checkbox for a specific row."""
