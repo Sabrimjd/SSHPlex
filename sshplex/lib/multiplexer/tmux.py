@@ -99,8 +99,8 @@ class TmuxManager(MultiplexerBase):
                 return False
                 
             pane = self.panes[hostname]
-            # Set pane title using tmux rename-window command
-            pane.send_keys(f'printf "\\033]2;{title}\\033\\\\"', enter=False)
+            # Set pane title using printf escape sequence
+            pane.send_keys(f'printf "\\033]2;{title}\\033\\\\"', enter=True)
             return True
             
         except Exception as e:
