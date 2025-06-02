@@ -1,9 +1,9 @@
-#!/usr/bin/env python3
-"""SSHplex - SSH Connection Multiplexer - Phase 1 with TUI Host Selection"""
+"""SSHplex - SSH Connection Multiplexer - Phase 2 with tmux pane support"""
 
 import sys
 import argparse
 from pathlib import Path
+from datetime import datetime
 
 # Add lib directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
@@ -12,6 +12,7 @@ from lib.config import load_config
 from lib.logger import setup_logging, get_logger
 from lib.sot.netbox import NetBoxProvider
 from lib.ui.host_selector import HostSelector
+from sshplex_connector import SSHplexConnector
 
 
 def main():
@@ -96,8 +97,8 @@ def cli_mode(config, logger):
 
 
 def tui_mode(config, logger):
-    """Run in TUI mode - interactive host selection."""
-    logger.info("Starting TUI mode - interactive host selection")
+    """Run in TUI mode - interactive host selection with tmux panes."""
+    logger.info("Starting TUI mode - interactive host selection with tmux integration")
 
     try:
         # Start the host selector TUI
@@ -114,7 +115,41 @@ def tui_mode(config, logger):
             logger.info(f"User selected {len(result)} hosts for connection")
             for host in result:
                 logger.info(f"  - {host.name} ({host.ip})")
-            logger.info(f"Connection configuration: Mode={mode}, Broadcast={broadcast}")
+            
+            # Phase 2: Create tmux panes for selected hosts
+            logger.info("SSHplex Phase 2: Creating tmux panes for selected hosts")
+            
+            # Create connector with timestamped session name
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            session_name = f"sshplex-{timestamp}"
+            connector = SSHplexConnector(session_name)
+            
+            # Connect to hosts (creates panes with SSH connections)
+            if connector.connect_to_hosts(
+                hosts=result,
+                username=config.ssh.username,
+                key_path=config.ssh.key_path,
+                port=config.ssh.port
+            ):
+                session_name = connector.get_session_name()
+                logger.info(f"SSHplex: Successfully created tmux session '{session_name}'")
+                logger.info(f"SSHplex: {len(result)} SSH connections established")
+                
+                # Provide instructions for manual attachment
+                print(f"\n✅ SSHplex Session Created Successfully!")
+                print(f"📡 tmux session: {session_name}")
+                print(f"🔗 {len(result)} SSH connections established")
+                print(f"\n🚀 To attach to the session:")
+                print(f"   tmux attach-session -t {session_name}")
+                print(f"\n⚡ tmux commands:")
+                print(f"   - Switch panes: Ctrl+b then arrow keys")
+                print(f"   - Detach session: Ctrl+b then d")
+                print(f"   - List sessions: tmux list-sessions")
+                
+            else:
+                logger.error("SSHplex: Failed to create SSH connections")
+                return 1
+                
         else:
             logger.info("No hosts were selected")
 
