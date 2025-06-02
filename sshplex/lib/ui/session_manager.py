@@ -65,7 +65,7 @@ class TmuxSessionManager(ModalScreen):
 
     BINDINGS = [
         Binding("enter", "connect_session", "Connect", show=True),
-        Binding("shift+k", "kill_session", "Kill", show=True),
+        Binding("k", "kill_session", "Kill", show=True),
         Binding("r", "refresh_sessions", "Refresh", show=True),
         Binding("escape", "close_manager", "Close", show=True),
         Binding("q", "close_manager", "Close", show=False),
@@ -84,7 +84,7 @@ class TmuxSessionManager(ModalScreen):
         with Container(id="session-dialog"):
             yield Static("🖥️  SSHplex - tmux Session Manager", id="session-header")
             yield DataTable(id="session-table", cursor_type="row")
-            yield Static("Enter: Connect | Shift+K: Kill | R: Refresh | ESC: Close", id="session-footer")
+            yield Static("Enter: Connect | K: Kill | R: Refresh | ESC: Close", id="session-footer")
 
     def on_mount(self) -> None:
         """Initialize the session manager."""
