@@ -58,3 +58,5 @@ config.local.yaml
 # OS specific files
 .DS_Store
 Thumbs.db
+sshplex/config-custom.yaml
+sshplex/config.yaml

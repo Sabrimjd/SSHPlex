@@ -1,8 +1,10 @@
-"""SSHplex configuration management with pydantic validation."""
+"""SSHplex configuration management with pydantic validation - Phase 3."""
 
 from pathlib import Path
 from typing import Dict, Any
 import yaml
+import shutil
+import os
 from pydantic import BaseModel, Field, validator
 
 
@@ -74,32 +76,120 @@ class Config(BaseModel):
     ui: UIConfig = Field(default_factory=UIConfig)
 
 
-def load_config(config_path: str = "config.yaml") -> Config:
+def get_default_config_path() -> Path:
+    """Get the default configuration file path in ~/.config/sshplex/sshplex.yaml"""
+    return Path.home() / ".config" / "sshplex" / "sshplex.yaml"
+
+
+def get_template_config_path() -> Path:
+    """Get the path to the config template file."""
+    # Get the directory where this config.py file is located
+    lib_dir = Path(__file__).parent
+    # Go up to sshplex directory and find config-template.yaml
+    sshplex_dir = lib_dir.parent
+    return sshplex_dir / "config-template.yaml"
+
+
+def ensure_config_directory() -> Path:
+    """Ensure the ~/.config/sshplex directory exists."""
+    config_dir = Path.home() / ".config" / "sshplex"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return config_dir
+
+
+def initialize_default_config() -> Path:
+    """Initialize default configuration by copying template to ~/.config/sshplex/sshplex.yaml"""
+    from lib.logger import get_logger
+
+    logger = get_logger()
+    config_path = get_default_config_path()
+    template_path = get_template_config_path()
+
+    # Ensure config directory exists
+    ensure_config_directory()
+
+    if not template_path.exists():
+        raise FileNotFoundError(f"SSHplex: Template config file not found: {template_path}")
+
+    # Copy template to default config location
+    shutil.copy2(template_path, config_path)
+    logger.info(f"SSHplex: Created default configuration at {config_path}")
+    logger.info(f"SSHplex: Please edit {config_path} with your NetBox details")
+
+    return config_path
+
+
+def load_config(config_path: str = None) -> Config:
     """Load and validate configuration from YAML file.
 
+    Phase 3: Uses ~/.config/sshplex/sshplex.yaml as default location.
+    Creates config directory and copies template on first run.
+
     Args:
-        config_path: Path to configuration file
+        config_path: Path to configuration file (optional, defaults to ~/.config/sshplex/sshplex.yaml)
 
     Returns:
         Validated configuration object
 
     Raises:
-        FileNotFoundError: If config file doesn't exist
+        FileNotFoundError: If config file doesn't exist and template can't be found
         ValueError: If config validation fails
     """
-    config_file = Path(config_path)
+    from lib.logger import get_logger
+
+    # Use default config path if none provided
+    if config_path is None:
+        config_file = get_default_config_path()
+
+        # If default config doesn't exist, initialize it from template
+        if not config_file.exists():
+            try:
+                config_file = initialize_default_config()
+                print(f"✅ SSHplex: First run detected - created configuration at {config_file}")
+                print(f"📝 Please edit {config_file} with your NetBox details before running SSHplex again")
+                print(f"🔧 Key settings to configure:")
+                print(f"   - netbox.url: Your NetBox instance URL")
+                print(f"   - netbox.token: Your NetBox API token")
+                print(f"   - ssh.username: Your SSH username")
+                print(f"   - ssh.key_path: Path to your SSH private key")
+                print(f"\n🚀 Run 'sshplex' again after configuration is complete!")
+                # Exit gracefully to let user configure
+                import sys
+                sys.exit(0)
+            except Exception as e:
+                raise FileNotFoundError(f"SSHplex: Could not initialize default config: {e}")
+    else:
+        config_file = Path(config_path)
 
     if not config_file.exists():
-        raise FileNotFoundError(f"SSHplex: Configuration file not found: {config_path}")
+        raise FileNotFoundError(f"SSHplex: Configuration file not found: {config_file}")
 
     try:
+        logger = get_logger()
+        logger.info(f"SSHplex: Loading configuration from {config_file}")
+
         with open(config_file, 'r') as f:
             config_data = yaml.safe_load(f)
 
         config = Config(**config_data)
+        logger.info("SSHplex: Configuration loaded and validated successfully")
         return config
 
     except yaml.YAMLError as e:
         raise ValueError(f"SSHplex: Invalid YAML in config file: {e}")
     except Exception as e:
         raise ValueError(f"SSHplex: Configuration validation failed: {e}")
+
+
+def get_config_info():
+    """Get information about SSHplex configuration paths and status."""
+    default_path = get_default_config_path()
+    template_path = get_template_config_path()
+
+    return {
+        "default_config_path": str(default_path),
+        "default_config_exists": default_path.exists(),
+        "template_path": str(template_path),
+        "template_exists": template_path.exists(),
+        "config_dir_exists": default_path.parent.exists()
+    }

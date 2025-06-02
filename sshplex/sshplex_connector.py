@@ -23,7 +23,7 @@ class SSHplexConnector:
 
     def connect_to_hosts(self, hosts: List[Host], username: str, key_path: Optional[str] = None, port: int = 22, use_panes: bool = True) -> bool:
         """Establish SSH connections to the specified hosts using shell SSH.
-        
+
         Args:
             hosts: List of hosts to connect to
             username: SSH username

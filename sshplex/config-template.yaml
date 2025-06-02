@@ -1,0 +1,35 @@
+# SSHplex Configuration - Phase 2 with tmux support
+sshplex:
+  version: "1.0.0"
+  session_prefix: "sshplex"
+
+netbox:
+  url: "https://netbox.lan/"
+  token: "CHANGE_TOKEN_HERE"
+  verify_ssl: false
+  timeout: 30
+  default_filters:
+    status: "active"
+    role: "virtual-machine"
+    has_primary_ip: "true"
+
+ssh:
+  username: "admin"
+  key_path: "~/.ssh/id_ed25519"
+  timeout: 10
+  port: 22
+
+tmux:
+  layout: "tiled" # tiled, even-horizontal, even-vertical
+  broadcast: false # Start with broadcast off
+  window_name: "sshplex"
+
+ui:
+  show_log_panel: false
+  log_panel_height: 20
+  table_columns: ["name", "ip", "cluster", "tags", "description"]
+
+logging:
+  enabled: false
+  level: "DEBUG" # DEBUG, INFO, WARNING, ERROR
+  file: "logs/sshplex.log"
