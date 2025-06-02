@@ -5,19 +5,29 @@ from pathlib import Path
 from loguru import logger
 
 
-def setup_logging(log_level: str = "INFO", log_file: str = "logs/sshplex.log") -> None:
+def setup_logging(log_level: str = "INFO", log_file: str = "logs/sshplex.log", enabled: bool = True) -> None:
     """Set up logging for SSHplex with file rotation.
 
     Args:
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
         log_file: Path to log file
+        enabled: Whether logging is enabled (if False, only console errors will be shown)
     """
+    # Remove default logger
+    logger.remove()
+
+    if not enabled:
+        # When logging is disabled, only show ERROR and CRITICAL messages to console
+        logger.add(
+            sink=lambda msg: print(msg, end=""),
+            level="ERROR",
+            format="<red>ERROR</red> | <cyan>SSHplex</cyan> | {message}"
+        )
+        return
+
     # Create logs directory if it doesn't exist
     log_path = Path(log_file)
     log_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Remove default logger
-    logger.remove()
 
     # Add console logging
     logger.add(
