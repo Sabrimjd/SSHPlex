@@ -116,32 +116,38 @@ def tui_mode(config, logger):
             for host in result:
                 logger.info(f"  - {host.name} ({host.ip})")
 
-            # Phase 2: Create tmux panes for selected hosts
-            logger.info("SSHplex Phase 2: Creating tmux panes for selected hosts")
+            # Phase 2: Create tmux panes or windows for selected hosts
+            mode = "panes" if app.use_panes else "windows"
+            logger.info(f"SSHplex Phase 2: Creating tmux {mode} for selected hosts")
 
             # Create connector with timestamped session name
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             session_name = f"sshplex-{timestamp}"
             connector = SSHplexConnector(session_name)
 
-            # Connect to hosts (creates panes with SSH connections)
+            # Connect to hosts (creates panes or windows with SSH connections)
             if connector.connect_to_hosts(
                 hosts=result,
                 username=config.ssh.username,
                 key_path=config.ssh.key_path,
-                port=config.ssh.port
+                port=config.ssh.port,
+                use_panes=app.use_panes
             ):
                 session_name = connector.get_session_name()
-                logger.info(f"SSHplex: Successfully created tmux session '{session_name}'")
+                mode_display = "panes" if app.use_panes else "windows"
+                logger.info(f"SSHplex: Successfully created tmux session '{session_name}' with {mode_display}")
                 logger.info(f"SSHplex: {len(result)} SSH connections established")
 
                 # Display success message and auto-attach
                 print(f"\n✅ SSHplex Session Created Successfully!")
                 print(f"📡 tmux session: {session_name}")
-                print(f"🔗 {len(result)} SSH connections established")
+                print(f"🔗 {len(result)} SSH connections established in {mode_display}")
                 print(f"\n🚀 Auto-attaching to session...")
                 print(f"\n⚡ tmux commands (once attached):")
-                print(f"   - Switch panes: Ctrl+b then arrow keys")
+                if app.use_panes:
+                    print(f"   - Switch panes: Ctrl+b then arrow keys")
+                else:
+                    print(f"   - Switch windows: Ctrl+b then n/p or number keys")
                 print(f"   - Detach session: Ctrl+b then d")
                 print(f"   - List sessions: tmux list-sessions")
 

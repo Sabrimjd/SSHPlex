@@ -75,6 +75,8 @@ class TmuxSessionManager(ModalScreen):
         Binding("enter", "connect_session", "Connect", show=True),
         Binding("k", "kill_session", "Kill", show=True),
         Binding("b", "toggle_broadcast", "Broadcast", show=True),
+        Binding("p", "create_pane", "New Pane", show=True),
+        Binding("shift+p", "create_window", "New Window", show=True),
         Binding("r", "refresh_sessions", "Refresh", show=True),
         Binding("escape", "close_manager", "Close", show=True),
         Binding("q", "close_manager", "Close", show=False),
@@ -95,7 +97,7 @@ class TmuxSessionManager(ModalScreen):
             yield Static("🖥️  SSHplex - tmux Session Manager", id="session-header")
             yield Static("📡 Broadcast: OFF", id="broadcast-status")
             yield DataTable(id="session-table", cursor_type="row")
-            yield Static("Enter: Connect | K: Kill | B: Broadcast | R: Refresh | ESC: Close", id="session-footer")
+            yield Static("Enter: Connect | K: Kill | B: Broadcast | P: Pane | Shift+P: Window | R: Refresh | ESC: Close", id="session-footer")
 
     def on_mount(self) -> None:
         """Initialize the session manager."""
@@ -317,6 +319,144 @@ class TmuxSessionManager(ModalScreen):
                 self.logger.error(f"SSHplex: Failed to toggle broadcast for session '{session.name}': {e}")
         else:
             self.logger.warning("SSHplex: No session selected for broadcast toggle")
+
+    def action_create_pane(self) -> None:
+        """Create a new pane in the selected tmux session."""
+        if not self.table or not self.sessions:
+            self.logger.warning("SSHplex: No sessions available for pane creation")
+            return
+
+        cursor_row = self.table.cursor_row
+        if cursor_row >= 0 and cursor_row < len(self.sessions):
+            session = self.sessions[cursor_row]
+            
+            try:
+                # Find the tmux session
+                tmux_session = self.tmux_server.find_where({"session_name": session.name})
+                if not tmux_session:
+                    self.logger.error(f"SSHplex: Session '{session.name}' not found")
+                    return
+                
+                # Get the first window (or current window)
+                if tmux_session.windows:
+                    window = tmux_session.windows[0]  # Use first window
+                    
+                    # Create a new pane by splitting the window vertically
+                    new_pane = window.split_window(vertical=True)
+                    
+                    if new_pane:
+                        # Set a title for the new pane
+                        new_pane.send_keys(f'printf "\\033]2;New Pane\\033\\\\"', enter=True)
+                        
+                        # Apply tiled layout to organize all panes nicely
+                        window.select_layout('tiled')
+                        
+                        self.logger.info(f"SSHplex: Created new pane in session '{session.name}'")
+                        
+                        # Refresh session list to update window/pane count
+                        self.load_sessions()
+                    else:
+                        self.logger.error(f"SSHplex: Failed to create pane in session '{session.name}'")
+                else:
+                    self.logger.error(f"SSHplex: No windows found in session '{session.name}'")
+                
+            except Exception as e:
+                self.logger.error(f"SSHplex: Failed to create pane in session '{session.name}': {e}")
+        else:
+            self.logger.warning("SSHplex: No session selected for pane creation")
+
+    def action_create_window(self) -> None:
+        """Create a new window (tab) in the selected tmux session."""
+        if not self.table or not self.sessions:
+            self.logger.warning("SSHplex: No sessions available for window creation")
+            return
+
+        cursor_row = self.table.cursor_row
+        if cursor_row >= 0 and cursor_row < len(self.sessions):
+            session = self.sessions[cursor_row]
+            
+            try:
+                # Find the tmux session
+                tmux_session = self.tmux_server.find_where({"session_name": session.name})
+                if not tmux_session:
+                    self.logger.error(f"SSHplex: Session '{session.name}' not found")
+                    return
+                
+                # Create a new window in the session
+                new_window = tmux_session.new_window(window_name="New Window")
+                
+                if new_window:
+                    # Set the window name and send a welcome message
+                    new_window.rename_window("SSHplex-Window")
+                    
+                    # Get the first pane in the new window and set title
+                    if new_window.panes:
+                        first_pane = new_window.panes[0]
+                        first_pane.send_keys(f'printf "\\033]2;New Window\\033\\\\"', enter=True)
+                        first_pane.send_keys('echo "🪟 New SSHplex window created!"', enter=True)
+                    
+                    self.logger.info(f"SSHplex: Created new window in session '{session.name}'")
+                    
+                    # Refresh session list to update window count
+                    self.load_sessions()
+                else:
+                    self.logger.error(f"SSHplex: Failed to create window in session '{session.name}'")
+                
+            except Exception as e:
+                self.logger.error(f"SSHplex: Failed to create window in session '{session.name}': {e}")
+        else:
+            self.logger.warning("SSHplex: No session selected for window creation")
+
+    def action_create_ssh_pane(self) -> None:
+        """Create a new pane with SSH connection."""
+        if not self.table or not self.sessions:
+            self.logger.warning("SSHplex: No sessions available for SSH pane creation")
+            return
+
+        cursor_row = self.table.cursor_row
+        if cursor_row >= 0 and cursor_row < len(self.sessions):
+            session = self.sessions[cursor_row]
+            
+            try:
+                # Find the tmux session
+                tmux_session = self.tmux_server.find_where({"session_name": session.name})
+                if not tmux_session:
+                    self.logger.error(f"SSHplex: Session '{session.name}' not found")
+                    return
+                
+                # Get the first window (or current window)
+                if tmux_session.windows:
+                    window = tmux_session.windows[0]  # Use first window
+                    
+                    # Create a new pane by splitting the window vertically
+                    new_pane = window.split_window(vertical=True)
+                    
+                    if new_pane:
+                        # Set a title for the new pane
+                        hostname = "new-host"  # Default hostname
+                        new_pane.send_keys(f'printf "\\033]2;{hostname}\\033\\\\"', enter=True)
+                        
+                        # You could prompt for hostname here or use a default SSH command
+                        # For now, just create an empty pane ready for SSH
+                        new_pane.send_keys('echo "🔗 Ready for SSH connection..."', enter=True)
+                        new_pane.send_keys('echo "Usage: ssh user@hostname"', enter=True)
+                        
+                        # Apply tiled layout to organize all panes nicely
+                        window.select_layout('tiled')
+                        
+                        self.logger.info(f"SSHplex: Created new SSH-ready pane in session '{session.name}'")
+                        
+                        # Refresh session list to update window/pane count
+                        self.load_sessions()
+                    else:
+                        self.logger.error(f"SSHplex: Failed to create SSH pane in session '{session.name}'")
+                else:
+                    self.logger.error(f"SSHplex: No windows found in session '{session.name}'")
+                
+            except Exception as e:
+                self.logger.error(f"SSHplex: Failed to create SSH pane in session '{session.name}': {e}")
+        else:
+            self.logger.warning("SSHplex: No session selected for SSH pane creation")
 
     def key_up(self) -> None:
         """Handle up arrow key for table navigation."""

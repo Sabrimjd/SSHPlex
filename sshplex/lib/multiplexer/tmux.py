@@ -91,6 +91,40 @@ class TmuxManager(MultiplexerBase):
             self.logger.error(f"SSHplex: Failed to create pane for '{hostname}': {e}")
             return False
 
+    def create_window(self, hostname: str, command: Optional[str] = None) -> bool:
+        """Create a new window (tab) in the tmux session and execute a command."""
+        try:
+            if not self.session:
+                self.logger.error("SSHplex: No active tmux session for window creation")
+                return False
+
+            # Create new window with hostname as the window name
+            window = self.session.new_window(window_name=hostname)
+            
+            if not window:
+                self.logger.error(f"SSHplex: Failed to create window for '{hostname}'")
+                return False
+
+            # Get the main pane of the new window
+            pane = window.panes[0] if window.panes else None
+            if not pane:
+                self.logger.error(f"SSHplex: No pane found in new window for '{hostname}'")
+                return False
+
+            # Store the pane reference
+            self.panes[hostname] = pane
+
+            # Execute the provided command (should be SSH command)
+            if command:
+                pane.send_keys(command, enter=True)
+
+            self.logger.info(f"SSHplex: Window created for '{hostname}' successfully")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"SSHplex: Failed to create window for '{hostname}': {e}")
+            return False
+
     def set_pane_title(self, hostname: str, title: str) -> bool:
         """Set the title of a specific pane."""
         try:

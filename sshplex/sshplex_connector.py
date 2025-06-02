@@ -21,8 +21,16 @@ class SSHplexConnector:
         self.tmux_manager = TmuxManager(session_name)
         self.logger = get_logger()
 
-    def connect_to_hosts(self, hosts: List[Host], username: str, key_path: Optional[str] = None, port: int = 22) -> bool:
-        """Establish SSH connections to the specified hosts using shell SSH."""
+    def connect_to_hosts(self, hosts: List[Host], username: str, key_path: Optional[str] = None, port: int = 22, use_panes: bool = True) -> bool:
+        """Establish SSH connections to the specified hosts using shell SSH.
+        
+        Args:
+            hosts: List of hosts to connect to
+            username: SSH username
+            key_path: Path to SSH private key (optional)
+            port: SSH port (default: 22)
+            use_panes: If True, create panes; if False, create windows/tabs
+        """
         if not hosts:
             self.logger.warning("SSHplex: No hosts provided for connection")
             return False
@@ -34,7 +42,7 @@ class SSHplexConnector:
                 return False
 
             success_count = 0
-            for host in hosts:
+            for i, host in enumerate(hosts):
                 hostname = host.ip if host.ip else host.name
 
                 # Build SSH command
@@ -42,18 +50,27 @@ class SSHplexConnector:
 
                 self.logger.info(f"SSHplex: Connecting to {hostname} as {username}")
 
-                # Create pane with SSH command
-                if self.tmux_manager.create_pane(hostname, ssh_command):
-                    success_count += 1
-                    self.logger.info(f"SSHplex: Successfully created connection to {hostname}")
+                if use_panes:
+                    # Create pane with SSH command
+                    if self.tmux_manager.create_pane(hostname, ssh_command):
+                        success_count += 1
+                        self.logger.info(f"SSHplex: Successfully created pane for {hostname}")
+                    else:
+                        self.logger.error(f"SSHplex: Failed to create pane for {hostname}")
                 else:
-                    self.logger.error(f"SSHplex: Failed to create connection to {hostname}")
+                    # Create window (tab) with SSH command
+                    if self.tmux_manager.create_window(hostname, ssh_command):
+                        success_count += 1
+                        self.logger.info(f"SSHplex: Successfully created window for {hostname}")
+                    else:
+                        self.logger.error(f"SSHplex: Failed to create window for {hostname}")
 
-            # Apply tiled layout for multiple panes
-            if success_count > 1:
+            # Apply tiled layout for multiple panes (only when using panes, not windows)
+            if use_panes and success_count > 1:
                 self.tmux_manager.setup_tiled_layout()
 
-            self.logger.info(f"SSHplex: Connected to {success_count}/{len(hosts)} hosts")
+            mode_text = "panes" if use_panes else "windows"
+            self.logger.info(f"SSHplex: Connected to {success_count}/{len(hosts)} hosts using {mode_text}")
             return success_count > 0
 
         except Exception as e:
