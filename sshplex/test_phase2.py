@@ -54,7 +54,7 @@ def test_phase2():
             logger.info(f"tmux session name: {connector.get_session_name()}")
             logger.info("To attach to the session manually, run:")
             logger.info(f"  tmux attach-session -t {connector.get_session_name()}")
-            
+
             input("\nPress Enter to attach to the tmux session...")
             connector.attach_to_session()
         else:
