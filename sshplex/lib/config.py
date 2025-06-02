@@ -1,7 +1,7 @@
 """SSHplex configuration management with pydantic validation - Phase 3."""
 
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import yaml
 import shutil
 import os
@@ -32,6 +32,7 @@ class NetBoxConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     """Logging configuration."""
+    enabled: bool = True
     level: str = "INFO"
     file: str = "logs/sshplex.log"
 

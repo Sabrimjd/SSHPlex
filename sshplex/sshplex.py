@@ -33,7 +33,8 @@ def main():
         # Setup logging
         setup_logging(
             log_level=config.logging.level,
-            log_file=config.logging.file
+            log_file=config.logging.file,
+            enabled=config.logging.enabled
         )
 
         logger = get_logger()
