@@ -16,18 +16,18 @@ from sshplex_connector import SSHplexConnector
 
 
 def main():
-    """Main entry point for SSHplex Phase 1."""
+    """Main entry point for SSHplex Phase 3."""
 
     try:
         # Parse command line arguments
         parser = argparse.ArgumentParser(description="SSHplex: Multiplex your SSH connections with style.")
-        parser.add_argument('--config', type=str, default='config.yaml', help='Path to the configuration file.')
+        parser.add_argument('--config', type=str, default=None, help='Path to the configuration file (default: ~/.config/sshplex/sshplex.yaml)')
         parser.add_argument('--version', action='version', version='SSHplex 1.0.0')
         parser.add_argument('--no-tui', action='store_true', help='Run in CLI mode without TUI')
         args = parser.parse_args()
 
-        # Load configuration
-        print("SSHplex Phase 1 - Loading configuration...")
+        # Load configuration (will use default path if none specified)
+        print("SSHplex Phase 3 - Loading configuration...")
         config = load_config(args.config)
 
         # Setup logging
