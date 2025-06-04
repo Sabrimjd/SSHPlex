@@ -60,17 +60,18 @@ sudo dnf install tmux python3 python3-pip
 
 ## 📸 Screenshots
 
-*Screenshots will be added as the UI stabilizes during development*
-
 ### TUI Host Selection Interface
-```
-Coming soon - Interactive host selection with search and filtering
-```
 
-### tmux Session with Multiple SSH Connections
-```
-Coming soon - Organized tmux layout with multiple host connections
-```
+![host_lists.png](https://raw.githubusercontent.com/sabrimjd/sshplex/master/.github/images/host_lists.png)
+
+### TUI Session manager
+
+![session_manager.png](https://raw.githubusercontent.com/sabrimjd/sshplex/master/.github/images/session_manager.png)
+
+### TMUX Session with Multiple SSH Connections
+
+![tmux.png](https://raw.githubusercontent.com/sabrimjd/sshplex/master/.github/images/tmux.png)
+
 
 ## 🚀 Installation
 
