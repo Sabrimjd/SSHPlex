@@ -60,3 +60,5 @@ config.local.yaml
 Thumbs.db
 sshplex/config-custom.yaml
 sshplex/config.yaml
+config-custom.yaml
+config.yaml
