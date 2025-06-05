@@ -311,7 +311,7 @@ class TmuxSessionManager(ModalScreen):
                 if self.tmux_server is None:
                     self.logger.error("SSHplex: tmux server not initialized")
                     return
-                    
+
                 tmux_session = self.tmux_server.find_where({"session_name": session.name})
                 if not tmux_session:
                     self.logger.error(f"SSHplex: Session '{session.name}' not found")
@@ -360,7 +360,7 @@ class TmuxSessionManager(ModalScreen):
                 if self.tmux_server is None:
                     self.logger.error("SSHplex: tmux server not initialized")
                     return
-                    
+
                 tmux_session = self.tmux_server.find_where({"session_name": session.name})
                 if not tmux_session:
                     self.logger.error(f"SSHplex: Session '{session.name}' not found")
@@ -409,7 +409,7 @@ class TmuxSessionManager(ModalScreen):
                 if self.tmux_server is None:
                     self.logger.error("SSHplex: tmux server not initialized")
                     return
-                    
+
                 tmux_session = self.tmux_server.find_where({"session_name": session.name})
                 if not tmux_session:
                     self.logger.error(f"SSHplex: Session '{session.name}' not found")
@@ -455,7 +455,7 @@ class TmuxSessionManager(ModalScreen):
                 if self.tmux_server is None:
                     self.logger.error("SSHplex: tmux server not initialized")
                     return
-                    
+
                 tmux_session = self.tmux_server.find_where({"session_name": session.name})
                 if not tmux_session:
                     self.logger.error(f"SSHplex: Session '{session.name}' not found")

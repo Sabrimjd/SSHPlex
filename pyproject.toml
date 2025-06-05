@@ -46,6 +46,7 @@ dev = [
     "black>=22.0.0",
     "flake8>=5.0.0",
     "mypy>=1.0.0",
+    "types-PyYAML>=6.0.0",
 ]
 
 [project.urls]
