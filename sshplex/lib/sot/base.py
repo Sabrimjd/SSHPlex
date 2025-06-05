@@ -1,13 +1,13 @@
 """Base classes for Source of Truth providers."""
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 
 class Host:
     """Simple host data structure."""
 
-    def __init__(self, name: str, ip: str, **kwargs):
+    def __init__(self, name: str, ip: str, **kwargs: Any) -> None:
         self.name = name
         self.ip = ip
         self.metadata = kwargs
@@ -36,7 +36,7 @@ class SoTProvider(ABC):
         pass
 
     @abstractmethod
-    def get_hosts(self, filters: Dict[str, Any] = None) -> List[Host]:
+    def get_hosts(self, filters: Optional[Dict[str, Any]] = None) -> List[Host]:
         """Retrieve hosts from the SoT provider.
 
         Args:

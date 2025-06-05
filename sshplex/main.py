@@ -4,6 +4,7 @@ import sys
 import argparse
 from pathlib import Path
 from datetime import datetime
+from typing import Any
 
 from .lib.config import load_config
 from .lib.logger import setup_logging, get_logger
@@ -12,7 +13,7 @@ from .lib.ui.host_selector import HostSelector
 from .sshplex_connector import SSHplexConnector
 
 
-def main():
+def main() -> int:
     """Main entry point for SSHplex TUI Application."""
 
     try:
@@ -59,7 +60,7 @@ def main():
         return 1
 
 
-def debug_mode(config, logger):
+def debug_mode(config: Any, logger: Any) -> int:
     """Run in debug mode - simple NetBox connection test."""
     logger.info("Running in debug mode - NetBox connectivity test")
 
@@ -105,7 +106,7 @@ def debug_mode(config, logger):
     return 0
 
 
-def tui_mode(config, logger):
+def tui_mode(config: Any, logger: Any) -> int:
     """Run in TUI mode - interactive host selection with tmux panes."""
     logger.info("Starting TUI mode - interactive host selection with tmux integration")
 
