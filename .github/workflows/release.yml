@@ -85,61 +85,37 @@ jobs:
         name: dist
         path: dist/
 
-    - name: Generate Release Notes
-      id: changelog
-      run: |
-        # Get the previous tag
-        PREVIOUS_TAG=$(git tag -l --sort=-version:refname | grep -v "^${{ github.ref_name }}$" | head -n 1)
-        echo "Previous tag: $PREVIOUS_TAG"
-        echo "Current tag: ${{ github.ref_name }}"
-        
-        # Generate changelog from commits
-        if [ -n "$PREVIOUS_TAG" ]; then
-          echo "## What's Changed in ${{ github.ref_name }}" > changelog.md
-          echo "" >> changelog.md
-          
-          # Get commits between tags (excluding the current tag commit itself)
-          COMMITS=$(git log --pretty=format:"%s (%h)" $PREVIOUS_TAG..${{ github.ref_name }} | grep -v "^chore: Bump version")
-          
-          if [ -n "$COMMITS" ]; then
-            while IFS= read -r commit; do
-              # Categorize commits based on conventional commit prefixes
-              if [[ $commit == feat:* ]]; then
-                echo "### 🚀 New Features" >> changelog.md
-                echo "- ${commit#feat: }" >> changelog.md
-              elif [[ $commit == fix:* ]]; then
-                echo "### 🐛 Bug Fixes" >> changelog.md
-                echo "- ${commit#fix: }" >> changelog.md
-              elif [[ $commit == docs:* ]]; then
-                echo "### 📚 Documentation" >> changelog.md
-                echo "- ${commit#docs: }" >> changelog.md
-              elif [[ $commit == chore:* ]]; then
-                echo "### 🧹 Maintenance" >> changelog.md
-                echo "- ${commit#chore: }" >> changelog.md
-              else
-                echo "### 📝 Other Changes" >> changelog.md
-                echo "- $commit" >> changelog.md
-              fi
-              echo "" >> changelog.md
-            done <<< "$COMMITS"
-          else
-            echo "### 🔧 Internal" >> changelog.md
-            echo "- Version bump and internal improvements" >> changelog.md
-            echo "" >> changelog.md
-          fi
-          
-          echo "" >> changelog.md
-          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREVIOUS_TAG...${{ github.ref_name }}" >> changelog.md
-        else
-          echo "## Initial Release" > changelog.md
-          echo "" >> changelog.md
-          echo "This is the initial release of SSHplex." >> changelog.md
-        fi
-        
-        # Set output for next step
-        echo "changelog<<EOF" >> $GITHUB_OUTPUT
-        cat changelog.md >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+    - name: Build Changelog
+      uses: mikepenz/release-changelog-builder-action@v5
+      with:
+        mode: "COMMIT"
+        configurationJson: |
+          {
+            "template": "#{{CHANGELOG}}",
+            "categories": [
+              {
+                  "title": "## Feature",
+                  "labels": ["feat", "feature"]
+              },
+              {
+                  "title": "## Fix",
+                  "labels": ["fix", "bug"]
+              },
+              {
+                  "title": "## Other",
+                  "labels": []
+              }
+            ],
+            "label_extractor": [
+              {
+                "pattern": "^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test){1}(\\([\\w\\-\\.]+\\))?(!)?: ([\\w ])+([\\s\\S]*)",
+                "on_property": "title",
+                "target": "$1"
+              }
+            ]
+          }
+      env:
+        GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
@@ -171,31 +147,7 @@ jobs:
         name: dist
         path: dist/
 
-    - name: Check if version exists on PyPI
-      id: check_version
-      run: |
-        pip install requests
-        python -c "
-        import requests
-        import sys
-        try:
-            response = requests.get('https://pypi.org/pypi/sshplex/json')
-            if response.status_code == 200:
-                data = response.json()
-                version = '${{ github.ref_name }}'.replace('v', '')
-                if version in data['releases']:
-                    print(f'Version {version} already exists on PyPI')
-                    sys.exit(1)
-                else:
-                    print(f'Version {version} does not exist on PyPI, proceeding with upload')
-            else:
-                print('Could not check PyPI, proceeding with upload')
-        except Exception as e:
-            print(f'Error checking PyPI: {e}, proceeding with upload')
-        "
-
     - name: Publish to PyPI
-      if: success()
       env:
         TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
