@@ -37,13 +37,15 @@ SSHplex is a Python-based SSH connection multiplexer that provides a modern Term
   - Custom multiplexer plugins
 - 📈 **Performance Optimization**: Enhanced performance for large host lists
 
-## � Installation
+## 📦 Installation
 
 ### From PyPI (Recommended)
 
 ```bash
 pip install sshplex
 ```
+
+This installs SSHplex with all its dependencies and makes the `sshplex` and `sshplex-cli` commands available system-wide.
 
 ### From Source
 
