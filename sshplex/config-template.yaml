@@ -1,4 +1,4 @@
-# SSHplex Configuration - Phase 2 with tmux support
+# SSHplex Configuration - tmux support
 sshplex:
   version: "1.0.0"
   session_prefix: "sshplex"

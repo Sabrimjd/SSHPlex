@@ -106,7 +106,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
 
   publish:
-    #needs: [build]
     needs: [build]
     runs-on: ubuntu-latest
 
