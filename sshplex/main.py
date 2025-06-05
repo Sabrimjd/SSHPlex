@@ -2,6 +2,7 @@
 
 import sys
 import argparse
+import shutil
 from pathlib import Path
 from datetime import datetime
 from typing import Any
@@ -13,10 +14,30 @@ from .lib.ui.host_selector import HostSelector
 from .sshplex_connector import SSHplexConnector
 
 
+def check_system_dependencies() -> bool:
+    """Check if required system dependencies are available."""
+    # Check if tmux is installed and available in PATH
+    if not shutil.which("tmux"):
+        print("❌ Error: tmux is not installed or not found in PATH")
+        print("\nSSHplex requires tmux for terminal multiplexing.")
+        print("Please install tmux:")
+        print("\n  macOS:    brew install tmux")
+        print("  Ubuntu:   sudo apt install tmux")
+        print("  RHEL/CentOS/Fedora: sudo dnf install tmux")
+        print("\nThen try running SSHplex again.")
+        return False
+
+    return True
+
+
 def main() -> int:
     """Main entry point for SSHplex TUI Application."""
 
     try:
+        # Check system dependencies first
+        if not check_system_dependencies():
+            return 1
+
         # Parse command line arguments
         parser = argparse.ArgumentParser(description="SSHplex: Multiplex your SSH connections with style.")
         parser.add_argument('--config', type=str, default=None, help='Path to the configuration file (default: ~/.config/sshplex/sshplex.yaml)')
