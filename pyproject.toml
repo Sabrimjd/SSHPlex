@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sshplex"
-version = "1.0.4"
+dynamic = ["version"]
 description = "Multiplex your SSH connections with style"
 authors = [{name = "MJAHED Sabri", email = "contact@sabrimjahed.com"}]
 readme = "README.md"
@@ -61,6 +61,9 @@ sshplex-cli = "sshplex.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["sshplex*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "sshplex.__version__"}
 
 [tool.setuptools.package-data]
 sshplex = ["*.yaml", "*.yml"]

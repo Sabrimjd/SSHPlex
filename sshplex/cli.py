@@ -4,6 +4,7 @@ import sys
 import argparse
 from typing import Any
 
+from . import __version__
 from .lib.config import load_config
 from .lib.logger import setup_logging, get_logger
 from .lib.sot.netbox import NetBoxProvider
@@ -16,7 +17,7 @@ def main() -> int:
         # Parse command line arguments
         parser = argparse.ArgumentParser(description="SSHplex CLI: Debug interface for NetBox connectivity testing.")
         parser.add_argument('--config', type=str, default=None, help='Path to the configuration file (default: ~/.config/sshplex/sshplex.yaml)')
-        parser.add_argument('--version', action='version', version='SSHplex 1.0.4')
+        parser.add_argument('--version', action='version', version=f'SSHplex {__version__}')
         args = parser.parse_args()
 
         # Load configuration (will use default path if none specified)

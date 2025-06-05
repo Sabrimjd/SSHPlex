@@ -7,10 +7,12 @@ import shutil
 import os
 from pydantic import BaseModel, Field, validator
 
+from .. import __version__
+
 
 class SSHplexConfig(BaseModel):
     """SSHplex main configuration."""
-    version: str = "1.0.4"
+    version: str = __version__
     session_prefix: str = "sshplex"
 
 
