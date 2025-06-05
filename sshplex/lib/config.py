@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, validator
 
 class SSHplexConfig(BaseModel):
     """SSHplex main configuration."""
-    version: str = "1.0.0"
+    version: str = "1.0.4"
     session_prefix: str = "sshplex"
 
 
