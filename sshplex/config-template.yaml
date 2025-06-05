@@ -1,6 +1,5 @@
 # SSHplex Configuration - tmux support
 sshplex:
-  version: "1.0.4"
   session_prefix: "sshplex"
 
 netbox:
