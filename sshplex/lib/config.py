@@ -1,4 +1,4 @@
-"""SSHplex configuration management with pydantic validation - Phase 3."""
+"""SSHplex configuration management with pydantic validation"""
 
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -123,7 +123,7 @@ def initialize_default_config() -> Path:
 def load_config(config_path: Optional[str] = None) -> Config:
     """Load and validate configuration from YAML file.
 
-    Phase 3: Uses ~/.config/sshplex/sshplex.yaml as default location.
+    Uses ~/.config/sshplex/sshplex.yaml as default location.
     Creates config directory and copies template on first run.
 
     Args:
