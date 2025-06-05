@@ -41,7 +41,7 @@ def main() -> int:
         # Parse command line arguments
         parser = argparse.ArgumentParser(description="SSHplex: Multiplex your SSH connections with style.")
         parser.add_argument('--config', type=str, default=None, help='Path to the configuration file (default: ~/.config/sshplex/sshplex.yaml)')
-        parser.add_argument('--version', action='version', version='SSHplex 1.0.0')
+        parser.add_argument('--version', action='version', version='SSHplex 1.0.4')
         parser.add_argument('--debug', action='store_true', help='Run in debug mode (CLI only, no TUI)')
         args = parser.parse_args()
 
