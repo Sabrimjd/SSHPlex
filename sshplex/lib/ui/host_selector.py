@@ -327,7 +327,7 @@ class HostSelector(App):
         broadcast = "ON" if self.use_broadcast else "OFF"
         self.log_message(f"INFO: Connecting to {len(selected_host_objects)} selected hosts in {mode} mode with Broadcast {broadcast}...", level="info")
 
-        # For Phase 1, just log the selection - connection logic will be added later
+        # just log the selection
         for host in selected_host_objects:
             self.log_message(f"INFO: Would connect to: {host.name} ({host.ip}) - Cluster: {getattr(host, 'cluster', 'N/A')}", level="info")
 

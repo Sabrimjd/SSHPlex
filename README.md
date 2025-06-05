@@ -37,13 +37,15 @@ SSHplex is a Python-based SSH connection multiplexer that provides a modern Term
   - Custom multiplexer plugins
 - 📈 **Performance Optimization**: Enhanced performance for large host lists
 
-## � Installation
+## 📦 Installation
 
 ### From PyPI (Recommended)
 
 ```bash
 pip install sshplex
 ```
+
+This installs SSHplex with all its dependencies and makes the `sshplex` and `sshplex-cli` commands available system-wide.
 
 ### From Source
 
@@ -105,8 +107,8 @@ sudo dnf install tmux python3 python3-pip
 git clone https://github.com/sabrimjd/sshplex.git
 cd sshplex
 
-# Install dependencies
-pip3 install -r requirements.txt
+# Install in development mode
+pip3 install -e .
 
 # Run main TUI application
 python3 sshplex.py
@@ -137,7 +139,7 @@ This installs the `sshplex-cli` command for NetBox connectivity testing and conf
 ```bash
 git clone https://github.com/sabrimjd/sshplex.git
 cd sshplex
-pip install -r requirements.txt
+pip install -e .
 ```
 
 This gives you access to the full TUI interface with tmux integration.
