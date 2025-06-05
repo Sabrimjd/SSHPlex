@@ -24,7 +24,7 @@ Your SSHplex application has been successfully configured for packaging and dist
 ### 🔄 GitHub Actions CI/CD
 - ✅ **Continuous Integration** (`ci.yml`): Tests on every push/PR
 - ✅ **Release Workflow** (`release.yml`): Automated PyPI publishing
-- ✅ Multi-Python version testing (3.8, 3.9, 3.10, 3.11, 3.12)
+- ✅ Multi-Python version testing (3.10, 3.11, 3.12)
 - ✅ Code quality checks (flake8, mypy)
 
 ### 🛠️ Development Tools
@@ -110,7 +110,7 @@ sshplex-cli --version
 
 2. **`sshplex` (Pip Package - Main Command)**
    - Full TUI interface with tmux integration
-   - Interactive host selection  
+   - Interactive host selection
    - Complete SSH multiplexing functionality
    - Available after `pip install sshplex`
    - Same functionality as source version
@@ -171,12 +171,12 @@ Your SSHplex application is now ready for professional distribution! 🚀
 
 ## 🧪 Testing Results
 
-✅ Package imports correctly  
-✅ Version information accessible  
+✅ Package imports correctly
+✅ Version information accessible
 ✅ Main TUI (`sshplex`) command functional
-✅ CLI debug (`sshplex-cli`) command functional  
-✅ Wheel and source distributions built successfully  
+✅ CLI debug (`sshplex-cli`) command functional
+✅ Wheel and source distributions built successfully
 ✅ Both console scripts properly configured
-✅ Full TUI functionality available in pip package  
+✅ Full TUI functionality available in pip package
 
 For detailed release instructions, see `./scripts/release.sh --help`

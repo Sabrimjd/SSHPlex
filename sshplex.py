@@ -10,7 +10,7 @@ def main():
     package_path = Path(__file__).parent / "sshplex"
     if package_path.exists():
         sys.path.insert(0, str(package_path.parent))
-        
+
         # Import and call the main function from the package
         try:
             from sshplex.main import main as package_main
