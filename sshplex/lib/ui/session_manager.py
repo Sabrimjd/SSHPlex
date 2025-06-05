@@ -1,6 +1,6 @@
 """SSHplex TUI tmux session manager widget."""
 
-from typing import List, Optional
+from typing import List, Optional, Any
 from textual.containers import Container, Vertical
 from textual.widgets import DataTable, Static
 from textual.binding import Binding
@@ -84,13 +84,13 @@ class TmuxSessionManager(ModalScreen):
         Binding("down,k", "move_down", "Down", show=False),
     ]
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the tmux session manager."""
         super().__init__()
         self.logger = get_logger()
         self.sessions: List[TmuxSession] = []
         self.table: Optional[DataTable] = None
-        self.tmux_server = None
+        self.tmux_server: Optional[Any] = None
         self.broadcast_enabled = False  # Track broadcast state
 
     def compose(self) -> ComposeResult:
@@ -163,8 +163,8 @@ class TmuxSessionManager(ModalScreen):
                     created = "Unknown"
 
                 tmux_session = TmuxSession(
-                    name=session.session_name,
-                    session_id=session.session_id,
+                    name=session.session_name or "Unknown",
+                    session_id=session.session_id or "Unknown",
                     created=created,
                     windows=window_count,
                     attached=attached
@@ -179,8 +179,9 @@ class TmuxSessionManager(ModalScreen):
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to load tmux sessions: {e}")
             # Show error in table
-            self.table.clear()
-            self.table.add_row("❌", "Error loading sessions", str(e), "0")
+            if self.table is not None:
+                self.table.clear()
+                self.table.add_row("❌", "Error loading sessions", str(e), "0")
 
     def populate_table(self) -> None:
         """Populate the table with session data."""
@@ -307,6 +308,10 @@ class TmuxSessionManager(ModalScreen):
 
             try:
                 # Find the tmux session
+                if self.tmux_server is None:
+                    self.logger.error("SSHplex: tmux server not initialized")
+                    return
+
                 tmux_session = self.tmux_server.find_where({"session_name": session.name})
                 if not tmux_session:
                     self.logger.error(f"SSHplex: Session '{session.name}' not found")
@@ -352,6 +357,10 @@ class TmuxSessionManager(ModalScreen):
 
             try:
                 # Find the tmux session
+                if self.tmux_server is None:
+                    self.logger.error("SSHplex: tmux server not initialized")
+                    return
+
                 tmux_session = self.tmux_server.find_where({"session_name": session.name})
                 if not tmux_session:
                     self.logger.error(f"SSHplex: Session '{session.name}' not found")
@@ -397,6 +406,10 @@ class TmuxSessionManager(ModalScreen):
 
             try:
                 # Find the tmux session
+                if self.tmux_server is None:
+                    self.logger.error("SSHplex: tmux server not initialized")
+                    return
+
                 tmux_session = self.tmux_server.find_where({"session_name": session.name})
                 if not tmux_session:
                     self.logger.error(f"SSHplex: Session '{session.name}' not found")
@@ -439,6 +452,10 @@ class TmuxSessionManager(ModalScreen):
 
             try:
                 # Find the tmux session
+                if self.tmux_server is None:
+                    self.logger.error("SSHplex: tmux server not initialized")
+                    return
+
                 tmux_session = self.tmux_server.find_where({"session_name": session.name})
                 if not tmux_session:
                     self.logger.error(f"SSHplex: Session '{session.name}' not found")

@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from typing import Any
 from loguru import logger
 
 
@@ -48,6 +49,6 @@ def setup_logging(log_level: str = "INFO", log_file: str = "logs/sshplex.log", e
     logger.info(f"SSHplex logging initialized - Level: {log_level}, File: {log_file}")
 
 
-def get_logger():
+def get_logger() -> Any:
     """Get the configured logger instance."""
     return logger

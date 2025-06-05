@@ -1,6 +1,6 @@
 """SSHplex TUI Host Selector with Textual."""
 
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Any
 from datetime import datetime
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical, Horizontal
@@ -100,7 +100,7 @@ class HostSelector(App):
     use_panes: reactive[bool] = reactive(True)  # True for panes, False for tabs
     use_broadcast: reactive[bool] = reactive(False)  # True for broadcast enabled, False for disabled
 
-    def __init__(self, config):
+    def __init__(self, config: Any) -> None:
         """Initialize the host selector.
 
         Args:
@@ -465,7 +465,7 @@ class HostSelector(App):
         else:
             self.update_status_selection()
 
-    def on_key(self, event) -> None:
+    def on_key(self, event: Any) -> None:
         """Handle key presses - specifically check for Enter on DataTable."""
         self.log_message(f"DEBUG: Key pressed: {event.key}", level="info")
 

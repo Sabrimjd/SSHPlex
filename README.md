@@ -37,7 +37,31 @@ SSHplex is a Python-based SSH connection multiplexer that provides a modern Term
   - Custom multiplexer plugins
 - 📈 **Performance Optimization**: Enhanced performance for large host lists
 
-## 📋 Prerequisites
+## � Installation
+
+### From PyPI (Recommended)
+
+```bash
+pip install sshplex
+```
+
+### From Source
+
+```bash
+git clone https://github.com/yourusername/sshplex.git
+cd sshplex
+pip install -e .
+```
+
+### Development Setup
+
+```bash
+git clone https://github.com/yourusername/sshplex.git
+cd sshplex
+./scripts/setup-dev.sh
+```
+
+## �📋 Prerequisites
 
 - **Python 3.8+**
 - **tmux** (for terminal multiplexing)
@@ -73,101 +97,50 @@ sudo dnf install tmux python3 python3-pip
 ![tmux.png](https://raw.githubusercontent.com/sabrimjd/sshplex/master/.github/images/tmux.png)
 
 
+## 🚀 Quick Start
+
+### Option 1: Full TUI Interface (Recommended)
+```bash
+# Clone repository for full functionality
+git clone https://github.com/sabrimjd/sshplex.git
+cd sshplex
+
+# Install dependencies
+pip3 install -r requirements.txt
+
+# Run main TUI application
+python3 sshplex.py
+```
+
+### Option 2: CLI Debug Interface (Pip Install)
+```bash
+# Install from PyPI (once published)
+pip install sshplex
+
+# Use CLI debug interface
+sshplex-cli              # NetBox connectivity test
+sshplex-cli --help       # Show help
+```
+
 ## 🚀 Installation
 
-### 1. Clone the Repository
+### From PyPI (CLI Debug Interface)
+
+```bash
+pip install sshplex
+```
+
+This installs the `sshplex-cli` command for NetBox connectivity testing and configuration validation.
+
+### From Source (Full TUI Application)
 
 ```bash
 git clone https://github.com/sabrimjd/sshplex.git
 cd sshplex
+pip install -r requirements.txt
 ```
 
-### 2. Install Python Dependencies
-
-```bash
-# Navigate to the sshplex directory
-cd sshplex
-
-# Install required packages
-pip3 install -r requirements.txt
-
-# For development (optional)
-pip3 install -r requirements-dev.txt
-```
-
-### 3. First Run Configuration
-
-On first run, SSHplex will automatically create the configuration directory and copy a template configuration file:
-
-```bash
-# First run - creates ~/.config/sshplex/sshplex.yaml
-python3 sshplex.py
-```
-
-This will create:
-- `~/.config/sshplex/` directory
-- `~/.config/sshplex/sshplex.yaml` configuration file
-
-### 4. Configure SSHplex
-
-Edit the configuration file with your settings:
-
-```bash
-# Edit the configuration file
-nano ~/.config/sshplex/sshplex.yaml
-# or
-vim ~/.config/sshplex/sshplex.yaml
-```
-
-**Key configuration sections:**
-
-```yaml
-# NetBox connection settings
-netbox:
-  url: "https://your-netbox-instance.com"
-  token: "your-netbox-api-token"
-  verify_ssl: true
-  timeout: 30
-  default_filters:
-    status: "active"
-    role: "virtual-machine"
-    has_primary_ip: "true"
-
-# SSH connection settings
-ssh:
-  username: "your-ssh-username"
-  key_path: "~/.ssh/id_ed25519"  # Path to your SSH private key
-  timeout: 10
-  port: 22
-
-# tmux session settings
-tmux:
-  layout: "tiled"  # tiled, even-horizontal, even-vertical
-  broadcast: false
-  window_name: "sshplex"
-
-# Logging settings (can be disabled)
-logging:
-  enabled: true
-  level: "INFO"
-  file: "logs/sshplex.log"
-```
-
-### 5. Run SSHplex
-
-```bash
-# Start with TUI interface (default)
-python3 sshplex.py
-
-# Use custom configuration file
-python3 sshplex.py --config /path/to/custom-config.yaml
-
-# CLI mode (NetBox connectivity test)
-python3 sshplex.py --no-tui
-
-# Show version
-python3 sshplex.py --version
-```
+This gives you access to the full TUI interface with tmux integration.
 
 ## 📖 Usage
 
