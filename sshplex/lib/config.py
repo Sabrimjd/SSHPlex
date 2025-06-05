@@ -100,7 +100,7 @@ def ensure_config_directory() -> Path:
 
 def initialize_default_config() -> Path:
     """Initialize default configuration by copying template to ~/.config/sshplex/sshplex.yaml"""
-    from lib.logger import get_logger
+    from .logger import get_logger
 
     logger = get_logger()
     config_path = get_default_config_path()
@@ -136,7 +136,7 @@ def load_config(config_path: str = None) -> Config:
         FileNotFoundError: If config file doesn't exist and template can't be found
         ValueError: If config validation fails
     """
-    from lib.logger import get_logger
+    from .logger import get_logger
 
     # Use default config path if none provided
     if config_path is None:
