@@ -23,7 +23,7 @@ class NetBoxConfig(BaseModel):
     default_filters: Dict[str, str] = Field(default_factory=dict)
 
     @validator('url')
-    def validate_url(cls, v):
+    def validate_url(cls, v: str) -> str:
         """Validate NetBox URL format."""
         if not v.startswith(('http://', 'https://')):
             raise ValueError('NetBox URL must start with http:// or https://')
@@ -37,7 +37,7 @@ class LoggingConfig(BaseModel):
     file: str = "logs/sshplex.log"
 
     @validator('level')
-    def validate_level(cls, v):
+    def validate_level(cls, v: str) -> str:
         """Validate logging level."""
         valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR"]
         if v.upper() not in valid_levels:
@@ -120,7 +120,7 @@ def initialize_default_config() -> Path:
     return config_path
 
 
-def load_config(config_path: str = None) -> Config:
+def load_config(config_path: Optional[str] = None) -> Config:
     """Load and validate configuration from YAML file.
 
     Phase 3: Uses ~/.config/sshplex/sshplex.yaml as default location.
@@ -182,7 +182,7 @@ def load_config(config_path: str = None) -> Config:
         raise ValueError(f"SSHplex: Configuration validation failed: {e}")
 
 
-def get_config_info():
+def get_config_info() -> Dict[str, Any]:
     """Get information about SSHplex configuration paths and status."""
     default_path = get_default_config_path()
     template_path = get_template_config_path()

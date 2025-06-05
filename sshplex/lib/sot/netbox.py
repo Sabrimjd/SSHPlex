@@ -9,7 +9,7 @@ from .base import SoTProvider, Host
 class NetBoxProvider(SoTProvider):
     """NetBox implementation of SoT provider."""
 
-    def __init__(self, url: str, token: str, verify_ssl: bool = True, timeout: int = 30):
+    def __init__(self, url: str, token: str, verify_ssl: bool = True, timeout: int = 30) -> None:
         """Initialize NetBox provider.
 
         Args:
@@ -22,7 +22,7 @@ class NetBoxProvider(SoTProvider):
         self.token = token
         self.verify_ssl = verify_ssl
         self.timeout = timeout
-        self.api = None
+        self.api: Optional[Any] = None
         self.logger = get_logger()
 
     def connect(self) -> bool:
@@ -40,8 +40,9 @@ class NetBoxProvider(SoTProvider):
             )
 
             # Configure SSL verification and timeout
-            self.api.http_session.verify = self.verify_ssl
-            self.api.http_session.timeout = self.timeout
+            if self.api is not None:
+                self.api.http_session.verify = self.verify_ssl
+                self.api.http_session.timeout = self.timeout
 
             # Log SSL verification status
             if not self.verify_ssl:
@@ -148,7 +149,7 @@ class NetBoxProvider(SoTProvider):
             self.logger.error(f"Failed to retrieve VMs from NetBox: {e}")
             return []
 
-    def _get_primary_ip(self, vm) -> Optional[str]:
+    def _get_primary_ip(self, vm: Any) -> Optional[str]:
         """Extract primary IP address from VM object.
 
         Args:

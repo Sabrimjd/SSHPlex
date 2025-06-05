@@ -2,13 +2,14 @@
 
 import sys
 import argparse
+from typing import Any
 
 from .lib.config import load_config
 from .lib.logger import setup_logging, get_logger
 from .lib.sot.netbox import NetBoxProvider
 
 
-def main():
+def main() -> int:
     """CLI debug entry point for installed SSHplex package."""
 
     try:
@@ -51,7 +52,7 @@ def main():
         return 1
 
 
-def debug_mode(config, logger):
+def debug_mode(config: Any, logger: Any) -> int:
     """Run debug mode - NetBox connection and host listing test."""
     logger.info("Running CLI debug mode - NetBox connectivity test")
 
