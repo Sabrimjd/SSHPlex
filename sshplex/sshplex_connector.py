@@ -3,9 +3,9 @@
 from typing import List, Optional
 from datetime import datetime
 
-from lib.logger import get_logger
-from lib.multiplexer.tmux import TmuxManager
-from lib.sot.base import Host
+from .lib.logger import get_logger
+from .lib.multiplexer.tmux import TmuxManager
+from .lib.sot.base import Host
 
 
 class SSHplexConnector:

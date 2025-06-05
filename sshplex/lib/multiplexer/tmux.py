@@ -32,7 +32,7 @@ class TmuxManager(MultiplexerBase):
             # Check if session already exists
             if self.server.has_session(self.session_name):
                 self.logger.warning(f"SSHplex: Session '{self.session_name}' already exists")
-                self.session = self.server.get_session(self.session_name)
+                self.session = self.server.sessions.get(session_name=self.session_name)
             else:
                 # Create new session
                 self.session = self.server.new_session(
@@ -70,9 +70,13 @@ class TmuxManager(MultiplexerBase):
             if len(self.panes) == 0:
                 # First pane - use the existing window pane
                 pane = self.window.attached_pane
+                if pane is None:
+                    raise RuntimeError(f"No attached pane available for {hostname}")
             else:
                 # Additional panes - split the window
                 pane = self.window.split_window()
+                if pane is None:
+                    raise RuntimeError(f"Failed to create tmux pane for {hostname}")
 
             # Store pane reference
             self.panes[hostname] = pane
