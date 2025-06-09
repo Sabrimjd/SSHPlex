@@ -10,7 +10,7 @@ from textual.reactive import reactive
 from textual import events
 
 from ..logger import get_logger
-from ..sot.netbox import NetBoxProvider
+from ..sot.factory import SoTFactory
 from ..sot.base import Host
 from .session_manager import TmuxSessionManager
 
@@ -111,7 +111,7 @@ class HostSelector(App):
         self.logger = get_logger()
         self.hosts: List[Host] = []
         self.filtered_hosts: List[Host] = []
-        self.netbox: Optional[NetBoxProvider] = None
+        self.sot_factory: Optional[SoTFactory] = None
         self.table: Optional[DataTable] = None
         self.log_widget: Optional[Log] = None
         self.status_widget: Optional[Static] = None
@@ -156,7 +156,7 @@ class HostSelector(App):
         if self.table:
             self.table.focus()
 
-        # Load hosts from NetBox
+        # Load hosts from SoT providers
         self.call_later(self.load_hosts)
 
         self.log_message("SSHplex TUI started")
@@ -185,30 +185,26 @@ class HostSelector(App):
                 self.table.add_column("Description", width=40, key="description")
 
     async def load_hosts(self) -> None:
-        """Load hosts from NetBox."""
-        self.log_message("Connecting to NetBox...")
-        self.update_status("Connecting to NetBox...")
+        """Load hosts from all configured SoT providers."""
+        self.log_message("Initializing SoT providers...")
+        self.update_status("Initializing SoT providers...")
 
         try:
-            # Initialize NetBox provider
-            self.netbox = NetBoxProvider(
-                url=self.config.netbox.url,
-                token=self.config.netbox.token,
-                verify_ssl=self.config.netbox.verify_ssl,
-                timeout=self.config.netbox.timeout
-            )
+            # Initialize SoT factory
+            self.sot_factory = SoTFactory(self.config)
 
-            # Connect to NetBox
-            if not self.netbox.connect():
-                self.log_message("ERROR: Failed to connect to NetBox", level="error")
-                self.update_status("Error: NetBox connection failed")
+            # Initialize all providers
+            if not self.sot_factory.initialize_providers():
+                self.log_message("ERROR: Failed to initialize any SoT providers", level="error")
+                self.update_status("Error: SoT provider initialization failed")
                 return
 
-            self.log_message("Successfully connected to NetBox")
+            provider_names = ', '.join(self.sot_factory.get_provider_names())
+            self.log_message(f"Successfully initialized {self.sot_factory.get_provider_count()} provider(s): {provider_names}")
             self.update_status("Loading hosts...")
 
-            # Get hosts with filters
-            self.hosts = self.netbox.get_hosts(filters=self.config.netbox.default_filters)
+            # Get hosts from all providers
+            self.hosts = self.sot_factory.get_all_hosts()
             self.filtered_hosts = self.hosts.copy()  # Initialize filtered hosts
 
             if not self.hosts:
@@ -219,7 +215,7 @@ class HostSelector(App):
             # Populate table
             self.populate_table()
 
-            self.log_message(f"Loaded {len(self.hosts)} hosts successfully")
+            self.log_message(f"Loaded {len(self.hosts)} hosts successfully from {self.sot_factory.get_provider_count()} provider(s)")
             self.update_status_with_mode()
 
         except Exception as e:
