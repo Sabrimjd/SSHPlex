@@ -21,7 +21,7 @@ class SSHplexConnector:
         self.tmux_manager = TmuxManager(session_name, max_panes_per_window)
         self.logger = get_logger()
 
-    def connect_to_hosts(self, hosts: List[Host], username: str, key_path: Optional[str] = None, port: int = 22, use_panes: bool = True) -> bool:
+    def connect_to_hosts(self, hosts: List[Host], username: str, key_path: Optional[str] = None, port: int = 22, use_panes: bool = True, use_broadcast: bool = False) -> bool:
         """Establish SSH connections to the specified hosts using shell SSH.
 
         Args:
@@ -30,6 +30,7 @@ class SSHplexConnector:
             key_path: Path to SSH private key (optional)
             port: SSH port (default: 22)
             use_panes: If True, create panes; if False, create windows/tabs
+            use_broadcast: If True, enable synchronize-panes for broadcast input
         """
         if not hosts:
             self.logger.warning("SSHplex: No hosts provided for connection")
@@ -69,8 +70,16 @@ class SSHplexConnector:
             if use_panes and success_count > 1:
                 self.tmux_manager.setup_tiled_layout()
 
+            # Enable broadcast mode if requested
+            if use_broadcast and success_count > 1:
+                if self.tmux_manager.enable_broadcast():
+                    self.logger.info("SSHplex: Broadcast mode enabled")
+                else:
+                    self.logger.warning("SSHplex: Failed to enable broadcast mode")
+
             mode_text = "panes" if use_panes else "windows"
-            self.logger.info(f"SSHplex: Connected to {success_count}/{len(hosts)} hosts using {mode_text}")
+            broadcast_text = " with broadcast" if use_broadcast else ""
+            self.logger.info(f"SSHplex: Connected to {success_count}/{len(hosts)} hosts using {mode_text}{broadcast_text}")
             return success_count > 0
 
         except Exception as e:

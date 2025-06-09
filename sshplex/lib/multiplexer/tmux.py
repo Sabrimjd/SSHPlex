@@ -215,6 +215,9 @@ class TmuxManager(MultiplexerBase):
         """Attach to the tmux session."""
         try:
             if self.session:
+                # Set up custom key binding for broadcast toggle
+                self.setup_broadcast_keybinding()
+                
                 if auto_attach:
                     self.logger.info(f"SSHplex: Auto-attaching to tmux session '{self.session_name}'")
                     # Auto-attach to the session by replacing current shell
@@ -230,6 +233,26 @@ class TmuxManager(MultiplexerBase):
 
         except Exception as e:
             self.logger.error(f"SSHplex: Error attaching to session: {e}")
+
+    def setup_broadcast_keybinding(self) -> bool:
+        """Set up custom keybinding for broadcast toggle."""
+        try:
+            if not self.session:
+                return False
+
+            # Set up key binding for broadcast toggle (prefix + b)
+            # This command will toggle synchronize-panes for the current window
+            toggle_command = "if -F '#{synchronize-panes}' 'setw synchronize-panes off; display-message \"Broadcast OFF\"' 'setw synchronize-panes on; display-message \"Broadcast ON\"'"
+            
+            # Bind 'b' key (after prefix) to toggle broadcast
+            self.session.cmd('bind-key', 'b', toggle_command)
+            
+            self.logger.info("SSHplex: Set up broadcast toggle keybinding (prefix + b)")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"SSHplex: Failed to set up broadcast keybinding: {e}")
+            return False
 
     def get_session_name(self) -> str:
         """Get the tmux session name for external attachment."""
@@ -254,4 +277,75 @@ class TmuxManager(MultiplexerBase):
 
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to set tiled layout: {e}")
+            return False
+
+    def enable_broadcast(self) -> bool:
+        """Enable broadcast mode (synchronize-panes) for all windows in the session."""
+        try:
+            if not self.session:
+                self.logger.error("SSHplex: No session available for broadcast")
+                return False
+
+            broadcast_enabled = False
+            for window_id, window in self.windows.items():
+                if window and len(window.panes) > 1:
+                    window.cmd('set-window-option', 'synchronize-panes', 'on')
+                    self.logger.info(f"SSHplex: Enabled broadcast for window {window_id}")
+                    broadcast_enabled = True
+
+            if broadcast_enabled:
+                self.logger.info("SSHplex: Broadcast mode enabled for tmux session")
+            return broadcast_enabled
+
+        except Exception as e:
+            self.logger.error(f"SSHplex: Failed to enable broadcast mode: {e}")
+            return False
+
+    def disable_broadcast(self) -> bool:
+        """Disable broadcast mode (synchronize-panes) for all windows in the session."""
+        try:
+            if not self.session:
+                self.logger.error("SSHplex: No session available for broadcast")
+                return False
+
+            broadcast_disabled = False
+            for window_id, window in self.windows.items():
+                if window:
+                    window.cmd('set-window-option', 'synchronize-panes', 'off')
+                    self.logger.info(f"SSHplex: Disabled broadcast for window {window_id}")
+                    broadcast_disabled = True
+
+            if broadcast_disabled:
+                self.logger.info("SSHplex: Broadcast mode disabled for tmux session")
+            return broadcast_disabled
+
+        except Exception as e:
+            self.logger.error(f"SSHplex: Failed to disable broadcast mode: {e}")
+            return False
+
+    def toggle_broadcast(self) -> bool:
+        """Toggle broadcast mode for all windows in the session."""
+        try:
+            if not self.session:
+                self.logger.error("SSHplex: No session available for broadcast")
+                return False
+
+            # Check current broadcast state of first window with multiple panes
+            current_state = False
+            for window in self.windows.values():
+                if window and len(window.panes) > 1:
+                    # Get current synchronize-panes setting
+                    result = window.cmd('show-window-options', '-v', 'synchronize-panes')
+                    if result and hasattr(result, 'stdout') and result.stdout:
+                        current_state = result.stdout[0].strip() == 'on'
+                    break
+
+            # Toggle the state
+            if current_state:
+                return self.disable_broadcast()
+            else:
+                return self.enable_broadcast()
+
+        except Exception as e:
+            self.logger.error(f"SSHplex: Failed to toggle broadcast mode: {e}")
             return False
