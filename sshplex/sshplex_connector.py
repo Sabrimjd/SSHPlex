@@ -11,14 +11,14 @@ from .lib.sot.base import Host
 class SSHplexConnector:
     """Manages SSH connections and tmux session management."""
 
-    def __init__(self, session_name: Optional[str] = None):
-        """Initialize the connector with optional session name."""
+    def __init__(self, session_name: Optional[str] = None, max_panes_per_window: int = 5):
+        """Initialize the connector with optional session name and max panes per window."""
         if session_name is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             session_name = f"sshplex-{timestamp}"
 
         self.session_name = session_name
-        self.tmux_manager = TmuxManager(session_name)
+        self.tmux_manager = TmuxManager(session_name, max_panes_per_window)
         self.logger = get_logger()
 
     def connect_to_hosts(self, hosts: List[Host], username: str, key_path: Optional[str] = None, port: int = 22, use_panes: bool = True) -> bool:

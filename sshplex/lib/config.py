@@ -67,6 +67,14 @@ class TmuxConfig(BaseModel):
     layout: str = "tiled"  # tiled, even-horizontal, even-vertical
     broadcast: bool = False  # Start with broadcast off
     window_name: str = "sshplex"
+    max_panes_per_window: int = Field(default=5, description="Maximum panes per window before creating a new window")
+
+    @validator('max_panes_per_window')
+    def validate_max_panes_per_window(cls, v: int) -> int:
+        """Validate max panes per window."""
+        if v < 1:
+            raise ValueError('max_panes_per_window must be at least 1')
+        return v
 
 
 class AnsibleConfig(BaseModel):
