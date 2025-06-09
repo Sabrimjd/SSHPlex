@@ -1,6 +1,6 @@
 """NetBox Source of Truth provider for SSHplex."""
 
-import pynetbox
+import pynetbox  # type: ignore
 from typing import List, Dict, Any, Optional
 from ..logger import get_logger
 from .base import SoTProvider, Host
@@ -48,7 +48,7 @@ class NetBoxProvider(SoTProvider):
             if not self.verify_ssl:
                 self.logger.warning("SSL certificate verification is DISABLED")
                 try:
-                    import urllib3
+                    import urllib3  # type: ignore
                     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
                 except ImportError:
                     pass  # urllib3 not available, continue anyway
@@ -107,6 +107,8 @@ class NetBoxProvider(SoTProvider):
                 self.logger.info(f"Applying filters: {filter_params}")
 
             hosts = []
+            vm_count = 0
+            device_count = 0
             
             # Get virtual machines
             self.logger.info("Querying virtual machines...")
@@ -117,6 +119,7 @@ class NetBoxProvider(SoTProvider):
                 host = self._process_vm(vm)
                 if host:
                     hosts.append(host)
+                    vm_count += 1
 
             # Get physical devices
             self.logger.info("Querying physical devices...")
@@ -127,8 +130,9 @@ class NetBoxProvider(SoTProvider):
                 host = self._process_device(device)
                 if host:
                     hosts.append(host)
+                    device_count += 1
 
-            self.logger.info(f"Retrieved {len(hosts)} total hosts from NetBox ({len([h for h in hosts if h.platform == 'vm'])} VMs, {len([h for h in hosts if h.platform != 'vm'])} devices)")
+            self.logger.info(f"Retrieved {len(hosts)} total hosts from NetBox ({vm_count} VMs, {device_count} devices)")
             return hosts
 
         except Exception as e:
