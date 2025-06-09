@@ -109,12 +109,12 @@ class NetBoxProvider(SoTProvider):
             hosts = []
             vm_count = 0
             device_count = 0
-            
+
             # Get virtual machines
             self.logger.info("Querying virtual machines...")
             vms = list(self.api.virtualization.virtual_machines.filter(**filter_params))
             self.logger.info(f"Found {len(vms)} virtual machines")
-            
+
             for vm in vms:
                 host = self._process_vm(vm)
                 if host:
@@ -125,7 +125,7 @@ class NetBoxProvider(SoTProvider):
             self.logger.info("Querying physical devices...")
             devices = list(self.api.dcim.devices.filter(**filter_params))
             self.logger.info(f"Found {len(devices)} physical devices")
-            
+
             for device in devices:
                 host = self._process_device(device)
                 if host:
