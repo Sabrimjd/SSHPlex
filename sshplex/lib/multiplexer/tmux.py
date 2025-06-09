@@ -72,14 +72,17 @@ class TmuxManager(MultiplexerBase):
             if self.current_window_pane_count >= self.max_panes_per_window:
                 self.logger.info(f"SSHplex: Reached max panes per window ({self.max_panes_per_window}), creating new window")
                 window_index = len(self.windows)
-                new_window = self.session.new_window(window_name=f"sshplex-{window_index}")
-                if new_window:
-                    self.current_window = new_window
-                    self.windows[window_index] = new_window
-                    self.current_window_pane_count = 0
-                    self.logger.info(f"SSHplex: Created new window {window_index} for additional panes")
+                if self.session is not None:
+                    new_window = self.session.new_window(window_name=f"sshplex-{window_index}")
+                    if new_window:
+                        self.current_window = new_window
+                        self.windows[window_index] = new_window
+                        self.current_window_pane_count = 0
+                        self.logger.info(f"SSHplex: Created new window {window_index} for additional panes")
+                    else:
+                        self.logger.error("SSHplex: Failed to create new window, using current window")
                 else:
-                    self.logger.error("SSHplex: Failed to create new window, using current window")
+                    self.logger.error("SSHplex: No session available for creating new window")
 
             # Split window to create new pane (except for the first pane in current window)
             if self.current_window is None:
