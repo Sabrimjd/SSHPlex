@@ -3,8 +3,8 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sshplex2
-version = "1.0.10"
+name = "sshplex"
+version = "1.0.14"
 description = "Multiplex your SSH connections with style"
 authors = [{name = "MJAHED Sabri", email = "contact@sabrimjahed.com"}]
 readme = "README.md"
