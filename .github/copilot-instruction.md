@@ -6,7 +6,6 @@ SSHplex is a Python-based SSH connection multiplexer that provides a Terminal Us
 
 **Author**: MJAHED Sabri
 **Contact**: contact@sabrimjahed.com
-**Current Version**: 1.0.10
 **Created**: 2025-05-23
 **Repository**: `sabrimjd/sshplex`
 **License**: MIT
