@@ -11,8 +11,8 @@ from ..logger import get_logger
 class TmuxManager(MultiplexerBase):
     """tmux implementation for SSHplex multiplexer."""
 
-    def __init__(self, session_name: Optional[str] = None):
-        """Initialize tmux manager with session name."""
+    def __init__(self, session_name: Optional[str] = None, max_panes_per_window: int = 5):
+        """Initialize tmux manager with session name and max panes per window."""
         if session_name is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             session_name = f"sshplex-{timestamp}"
@@ -21,8 +21,11 @@ class TmuxManager(MultiplexerBase):
         self.logger = get_logger()
         self.server = libtmux.Server()
         self.session: Optional[libtmux.Session] = None
-        self.window: Optional[libtmux.Window] = None
+        self.current_window: Optional[libtmux.Window] = None
+        self.windows: Dict[int, libtmux.Window] = {}  # window_id -> Window
         self.panes: Dict[str, libtmux.Pane] = {}
+        self.max_panes_per_window = max_panes_per_window
+        self.current_window_pane_count = 0
 
     def create_session(self) -> bool:
         """Create a new tmux session with SSHplex branding."""
@@ -41,9 +44,12 @@ class TmuxManager(MultiplexerBase):
                     start_directory="~"
                 )
 
-            # Get the main window
+            # Get the main window and initialize tracking
             if self.session:
-                self.window = self.session.attached_window
+                self.current_window = self.session.attached_window
+                if self.current_window:
+                    self.windows[0] = self.current_window
+                    self.current_window_pane_count = 0
                 self.logger.info(f"SSHplex: tmux session '{self.session_name}' created successfully")
                 return True
             else:
@@ -56,30 +62,44 @@ class TmuxManager(MultiplexerBase):
     def create_pane(self, hostname: str, command: Optional[str] = None) -> bool:
         """Create a new pane for the given hostname."""
         try:
-            if self.session is None or self.window is None:
+            if self.session is None or self.current_window is None:
                 if not self.create_session():
                     return False
 
             self.logger.info(f"SSHplex: Creating pane for host '{hostname}'")
 
-            # Split window to create new pane (except for the first pane)
-            if self.window is None:
+            # Check if we need to create a new window due to pane limit
+            if self.current_window_pane_count >= self.max_panes_per_window:
+                self.logger.info(f"SSHplex: Reached max panes per window ({self.max_panes_per_window}), creating new window")
+                window_index = len(self.windows)
+                new_window = self.session.new_window(window_name=f"sshplex-{window_index}")
+                if new_window:
+                    self.current_window = new_window
+                    self.windows[window_index] = new_window
+                    self.current_window_pane_count = 0
+                    self.logger.info(f"SSHplex: Created new window {window_index} for additional panes")
+                else:
+                    self.logger.error("SSHplex: Failed to create new window, using current window")
+
+            # Split window to create new pane (except for the first pane in current window)
+            if self.current_window is None:
                 self.logger.error("SSHplex: No window available for pane creation")
                 return False
 
-            if len(self.panes) == 0:
-                # First pane - use the existing window pane
-                pane = self.window.attached_pane
+            if self.current_window_pane_count == 0:
+                # First pane in this window - use the existing window pane
+                pane = self.current_window.attached_pane
                 if pane is None:
                     raise RuntimeError(f"No attached pane available for {hostname}")
             else:
                 # Additional panes - split the window
-                pane = self.window.split_window()
+                pane = self.current_window.split_window()
                 if pane is None:
                     raise RuntimeError(f"Failed to create tmux pane for {hostname}")
 
-            # Store pane reference
+            # Store pane reference and increment counter
             self.panes[hostname] = pane
+            self.current_window_pane_count += 1
 
             # Set pane title
             self.set_pane_title(hostname, hostname)
@@ -88,7 +108,7 @@ class TmuxManager(MultiplexerBase):
             if command:
                 self.send_command(hostname, command)
 
-            self.logger.info(f"SSHplex: Pane created for '{hostname}' successfully")
+            self.logger.info(f"SSHplex: Pane created for '{hostname}' successfully (window panes: {self.current_window_pane_count}/{self.max_panes_per_window})")
             return True
 
         except Exception as e:
@@ -183,8 +203,10 @@ class TmuxManager(MultiplexerBase):
                 self.logger.info(f"SSHplex: Closing tmux session '{self.session_name}'")
                 self.session.kill_session()
                 self.session = None
-                self.window = None
+                self.current_window = None
+                self.windows.clear()
                 self.panes.clear()
+                self.current_window_pane_count = 0
 
         except Exception as e:
             self.logger.error(f"SSHplex: Error closing session: {e}")
@@ -214,13 +236,21 @@ class TmuxManager(MultiplexerBase):
         return self.session_name
 
     def setup_tiled_layout(self) -> bool:
-        """Set up tiled layout for multiple panes."""
+        """Set up tiled layout for multiple panes in all windows."""
         try:
-            if self.window and len(self.panes) > 1:
-                self.window.select_layout('tiled')
-                self.logger.info("SSHplex: Applied tiled layout to tmux window")
-                return True
-            return False
+            if not self.windows:
+                return False
+
+            layout_applied = False
+            for window_id, window in self.windows.items():
+                if window and len(window.panes) > 1:
+                    window.select_layout('tiled')
+                    self.logger.info(f"SSHplex: Applied tiled layout to window {window_id}")
+                    layout_applied = True
+
+            if layout_applied:
+                self.logger.info("SSHplex: Applied tiled layout to tmux windows")
+            return layout_applied
 
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to set tiled layout: {e}")

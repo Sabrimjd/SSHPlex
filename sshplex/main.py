@@ -158,10 +158,11 @@ def tui_mode(config: Any, logger: Any) -> int:
             mode = "panes" if app.use_panes else "windows"
             logger.info(f"SSHplex: Creating tmux {mode} for selected hosts")
 
-            # Create connector with timestamped session name
+            # Create connector with timestamped session name and max panes per window
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             session_name = f"sshplex-{timestamp}"
-            connector = SSHplexConnector(session_name)
+            max_panes_per_window = config.tmux.max_panes_per_window
+            connector = SSHplexConnector(session_name, max_panes_per_window)
 
             # Connect to hosts (creates panes or windows with SSH connections)
             if connector.connect_to_hosts(

@@ -36,6 +36,7 @@ tmux:
   layout: "tiled" # tiled, even-horizontal, even-vertical
   broadcast: false # Start with broadcast off
   window_name: "sshplex"
+  max_panes_per_window: 5 # Maximum panes per window before creating a new window
 
 ui:
   show_log_panel: false
