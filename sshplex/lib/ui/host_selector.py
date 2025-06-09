@@ -9,6 +9,7 @@ from textual.binding import Binding
 from textual.reactive import reactive
 from textual import events
 
+from ... import __version__
 from ..logger import get_logger
 from ..sot.factory import SoTFactory
 from ..sot.base import Host
@@ -44,6 +45,18 @@ class HostSelector(App):
         padding: 0 1;
         margin: 0 1;
         dock: bottom;
+        layout: horizontal;
+    }
+
+    #status-content {
+        width: 1fr;
+    }
+
+    #version-display {
+        width: 15;
+        background: transparent;
+        color: $text-muted;
+        text-align: right;
     }
 
     #search-container {
@@ -59,6 +72,7 @@ class HostSelector(App):
 
     DataTable {
         height: 1fr;
+        width: 100%;
     }
 
     Log {
@@ -133,9 +147,10 @@ class HostSelector(App):
         with Container(id="main-panel"):
             yield DataTable(id="host-table", cursor_type="row")
 
-        # Status bar
+        # Status bar with version display
         with Container(id="status-bar"):
-            yield Static("SSHplex - Loading hosts...", id="status")
+            yield Static("SSHplex - Loading hosts...", id="status-content")
+            yield Static(f"SSHplex v{__version__}", id="version-display")
 
         # Footer with keybindings
         yield Footer()
@@ -146,7 +161,7 @@ class HostSelector(App):
         self.table = self.query_one("#host-table", DataTable)
         if self.config.ui.show_log_panel:
             self.log_widget = self.query_one("#log", Log)
-        self.status_widget = self.query_one("#status", Static)
+        self.status_widget = self.query_one("#status-content", Static)
         self.search_input = self.query_one("#search-input", Input)
 
         # Setup table columns
@@ -162,27 +177,34 @@ class HostSelector(App):
         self.log_message("SSHplex TUI started")
 
     def setup_table(self) -> None:
-        """Setup the data table columns."""
+        """Setup the data table columns with responsive widths."""
         if not self.table:
             return
 
-        # Add checkbox column with key
+        # Calculate total columns to distribute width proportionally
+        total_columns = len(self.config.ui.table_columns) + 1  # +1 for checkbox
+        
+        # Add checkbox column (fixed small width)
         self.table.add_column("✓", width=3, key="checkbox")
 
-        # Add configured columns
+        # Add configured columns with proportional widths
         for column in self.config.ui.table_columns:
             if column == "name":
-                self.table.add_column("Name", width=15, key="name")
+                # Name gets more space as it's usually important
+                self.table.add_column("Name", width=None, key="name")
             elif column == "ip":
-                self.table.add_column("IP Address", width=15, key="ip")
+                # IP addresses have predictable length, can be smaller
+                self.table.add_column("IP Address", width=None, key="ip")
             elif column == "cluster":
-                self.table.add_column("Cluster", width=20, key="cluster")
+                self.table.add_column("Cluster", width=None, key="cluster")
             elif column == "role":
-                self.table.add_column("Role", width=15, key="role")
+                self.table.add_column("Role", width=None, key="role")
             elif column == "tags":
-                self.table.add_column("Tags", width=30, key="tags")
+                # Tags might be longer, give more space
+                self.table.add_column("Tags", width=None, key="tags")
             elif column == "description":
-                self.table.add_column("Description", width=40, key="description")
+                # Description usually needs the most space
+                self.table.add_column("Description", width=None, key="description")
 
     async def load_hosts(self) -> None:
         """Load hosts from all configured SoT providers."""
