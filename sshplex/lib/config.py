@@ -1,7 +1,7 @@
 """SSHplex configuration management with pydantic validation"""
 
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import yaml
 import shutil
 import os
@@ -69,14 +69,61 @@ class TmuxConfig(BaseModel):
     window_name: str = "sshplex"
 
 
+class AnsibleConfig(BaseModel):
+    """Ansible inventory configuration."""
+    inventory_paths: List[str] = Field(default_factory=list, description="List of paths to Ansible inventory YAML files")
+    default_filters: Dict[str, Any] = Field(default_factory=dict)
+
+    @validator('inventory_paths')
+    def validate_inventory_paths(cls, v: List[str]) -> List[str]:
+        """Validate that inventory paths are provided."""
+        if not v:
+            raise ValueError('At least one inventory path must be provided for Ansible')
+        return v
+
+
+class SoTConfig(BaseModel):
+    """Source of Truth configuration."""
+    providers: List[str] = Field(default_factory=lambda: ["netbox"], description="List of SoT providers to use: netbox, ansible")
+
+    @validator('providers')
+    def validate_providers(cls, v: List[str]) -> List[str]:
+        """Validate SoT provider names."""
+        valid_providers = ["netbox", "ansible"]
+        for provider in v:
+            if provider not in valid_providers:
+                raise ValueError(f'Invalid SoT provider: {provider}. Valid providers: {valid_providers}')
+        if not v:
+            raise ValueError('At least one SoT provider must be specified')
+        return v
+
+
 class Config(BaseModel):
     """Main SSHplex configuration model."""
     sshplex: SSHplexConfig = Field(default_factory=SSHplexConfig)
-    netbox: NetBoxConfig
+    sot: SoTConfig = Field(default_factory=SoTConfig)
+    netbox: Optional[NetBoxConfig] = None
+    ansible_inventory: Optional[AnsibleConfig] = None
     ssh: SSHConfig = Field(default_factory=SSHConfig)
     tmux: TmuxConfig = Field(default_factory=TmuxConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
+
+    @validator('netbox', always=True)
+    def validate_netbox_if_needed(cls, v: Optional[NetBoxConfig], values: Dict[str, Any]) -> Optional[NetBoxConfig]:
+        """Validate NetBox config if netbox provider is enabled."""
+        sot = values.get('sot')
+        if sot and 'netbox' in sot.providers and v is None:
+            raise ValueError('NetBox configuration is required when netbox provider is enabled')
+        return v
+
+    @validator('ansible_inventory', always=True)
+    def validate_ansible_if_needed(cls, v: Optional[AnsibleConfig], values: Dict[str, Any]) -> Optional[AnsibleConfig]:
+        """Validate Ansible config if ansible provider is enabled."""
+        sot = values.get('sot')
+        if sot and 'ansible' in sot.providers and v is None:
+            raise ValueError('Ansible configuration is required when ansible provider is enabled')
+        return v
 
 
 def get_default_config_path() -> Path:

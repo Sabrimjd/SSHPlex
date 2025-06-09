@@ -10,7 +10,7 @@ from typing import Any
 from . import __version__
 from .lib.config import load_config
 from .lib.logger import setup_logging, get_logger
-from .lib.sot.netbox import NetBoxProvider
+from .lib.sot.factory import SoTFactory
 from .lib.ui.host_selector import HostSelector
 from .sshplex_connector import SSHplexConnector
 
@@ -83,45 +83,51 @@ def main() -> int:
 
 
 def debug_mode(config: Any, logger: Any) -> int:
-    """Run in debug mode - simple NetBox connection test."""
-    logger.info("Running in debug mode - NetBox connectivity test")
+    """Run in debug mode - test all configured SoT providers."""
+    logger.info("Running in debug mode - SoT provider connectivity test")
 
-    # Initialize NetBox provider
-    logger.info("Initializing NetBox provider")
-    netbox = NetBoxProvider(
-        url=config.netbox.url,
-        token=config.netbox.token,
-        verify_ssl=config.netbox.verify_ssl,
-        timeout=config.netbox.timeout
-    )
+    # Initialize SoT factory
+    logger.info("Initializing SoT factory")
+    sot_factory = SoTFactory(config)
 
-    # Test connection
-    logger.info("Testing NetBox connection...")
-    if not netbox.connect():
-        logger.error("Failed to connect to NetBox")
-        print("❌ Failed to connect to NetBox")
+    # Initialize all providers
+    if not sot_factory.initialize_providers():
+        logger.error("Failed to initialize any SoT providers")
+        print("❌ Failed to initialize any SoT providers")
         print("Check your configuration and network connectivity")
         return 1
 
-    print("✅ Successfully connected to NetBox")
+    print(f"✅ Successfully initialized {sot_factory.get_provider_count()} SoT provider(s): {', '.join(sot_factory.get_provider_names())}")
 
-    # Retrieve VMs with filters
-    logger.info("Retrieving VMs from NetBox...")
-    hosts = netbox.get_hosts(filters=config.netbox.default_filters)
+    # Test all connections
+    logger.info("Testing SoT provider connections...")
+    connection_results = sot_factory.test_all_connections()
+
+    for provider_name, status in connection_results.items():
+        if status:
+            print(f"✅ {provider_name}: Connection successful")
+        else:
+            print(f"❌ {provider_name}: Connection failed")
+
+    # Retrieve hosts from all providers
+    logger.info("Retrieving hosts from all SoT providers...")
+    hosts = sot_factory.get_all_hosts()
 
     # Display results
     if hosts:
-        logger.info(f"Successfully retrieved {len(hosts)} VMs")
-        print(f"\n📋 Found {len(hosts)} hosts matching filters:")
-        print("-" * 60)
+        logger.info(f"Successfully retrieved {len(hosts)} hosts")
+        print(f"\n📋 Found {len(hosts)} hosts from all providers:")
+        print("-" * 80)
         for i, host in enumerate(hosts, 1):
-            status = host.metadata.get('status', 'unknown')
-            print(f"{i:3d}. {host.name:<30} {host.ip:<15} [{status}]")
-        print("-" * 60)
+            status = getattr(host, 'status', host.metadata.get('status', 'unknown'))
+            sources = host.metadata.get('sources', ['unknown'])
+            source_str = ', '.join(sources) if isinstance(sources, list) else str(sources)
+            print(f"{i:3d}. {host.name:<25} {host.ip:<15} [{status:<8}] ({source_str})")
+        print("-" * 80)
     else:
-        logger.warning("No VMs found matching the filters")
+        logger.warning("No hosts found matching the filters")
         print("⚠️  No hosts found matching the configured filters")
-        print("Check your NetBox filters in the configuration")
+        print("Check your SoT provider filters in the configuration")
 
     logger.info("SSHplex debug mode completed successfully")
     print(f"\n✅ Debug mode completed successfully")

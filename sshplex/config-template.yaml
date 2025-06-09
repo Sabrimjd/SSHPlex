@@ -1,6 +1,10 @@
-# SSHplex Configuration - tmux support
+# SSHplex Configuration - tmux support with multiple SoT providers
 sshplex:
   session_prefix: "sshplex"
+
+# Source of Truth configuration
+sot:
+  providers: ["netbox", "ansible"]  # Available: netbox, ansible
 
 netbox:
   url: "https://netbox.lan/"
@@ -11,6 +15,16 @@ netbox:
     status: "active"
     role: "virtual-machine"
     has_primary_ip: "true"
+
+# Ansible inventory configuration (only needed if 'ansible' is in sot.providers)
+ansible_inventory:
+  inventory_paths:
+    - "/path/to/your/inventory.yml"
+    - "/path/to/another/inventory.yml"
+  default_filters:
+    groups: []  # Filter by group names (empty = all groups)
+    exclude_groups: []  # Groups to exclude
+    host_patterns: []  # Regex patterns for host names (empty = all hosts)
 
 ssh:
   username: "admin"

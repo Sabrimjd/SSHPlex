@@ -13,22 +13,25 @@ SSHplex is a Python-based SSH connection multiplexer that provides a modern Term
 ### Current Features
 - 🎯 **Interactive Host Selection**: Modern TUI built with Textual for intuitive host selection
 - 🔗 **NetBox Integration**: Automatic host discovery from NetBox with configurable filters
-- 🖥️ **tmux Integration**: Creates organized tmux sessions with panes or windows for each host
+- � **Ansible Integration**: Support for Ansible YAML inventories with group filtering
+- 🏢 **Multiple Sources of Truth**: Use NetBox and Ansible inventories together or separately
+- �🖥️ **tmux Integration**: Creates organized tmux sessions with panes or windows for each host
 - ⚙️ **Flexible Configuration**: YAML-based configuration with automatic setup on first run
 - 📁 **XDG Compliance**: Configuration stored in `~/.config/sshplex/` by default
 - 🔧 **Multiple Layout Options**: Support for tiled, horizontal, and vertical tmux layouts
 - 📊 **Broadcasting Support**: Sync input across multiple SSH connections (optional)
 - 🎨 **Rich Terminal Output**: Beautiful, colored output with optional logging
 - 🔍 **Host Filtering**: Search and filter hosts in the TUI interface
+- 🏷️ **Group-based Filtering**: Filter hosts by Ansible groups or NetBox roles/clusters
 - ✅ **SSH Key Authentication**: Secure key-based authentication support
+- 🔄 **Provider Fallback**: Graceful handling when one SoT provider fails
 
 ### Planned Features
 - 🔌 **Plugin Architecture**: Support for additional Sources of Truth and multiplexers
-- 🏢 **Multiple Sources of Truth**:
+- 🏢 **Additional Sources of Truth**:
   - HashiCorp Consul integration
   - HashiCorp Bastion support
   - AWS EC2 instance discovery
-  - Ansible inventory integration
   - Static YAML/JSON host files
 - 🖥️ **Multiple Terminal Multiplexers**:
   - Terminator support
@@ -67,7 +70,8 @@ cd sshplex
 
 - **Python 3.8+**
 - **tmux** (for terminal multiplexing)
-- **NetBox** instance with API access
+- **NetBox** instance with API access (optional, if using NetBox provider)
+- **Ansible inventory files** (optional, if using Ansible provider)
 - **SSH key** configured for target hosts
 - **macOS or Linux** (Windows support via WSL)
 
@@ -175,6 +179,63 @@ Ctrl+b + z            # Zoom/unzoom current pane
 
 ## ⚙️ Configuration Options
 
+### Source of Truth Providers
+
+SSHplex supports multiple Sources of Truth that can be used together or separately:
+
+#### NetBox Configuration
+
+```yaml
+sot:
+  providers: ["netbox"]  # Use NetBox only
+
+netbox:
+  url: "https://netbox.example.com"
+  token: "your-api-token"
+  verify_ssl: true
+  timeout: 30
+  default_filters:
+    status: "active"           # Only active hosts
+    role: "virtual-machine"    # Only VMs
+    platform: "linux"         # Only Linux hosts
+    cluster: "production"      # Specific cluster
+    has_primary_ip: "true"     # Only hosts with IP addresses
+```
+
+#### Ansible Inventory Configuration
+
+```yaml
+sot:
+  providers: ["ansible"]  # Use Ansible only
+
+ansible_inventory:
+  inventory_paths:
+    - "/path/to/inventory.yml"
+    - "/path/to/production.yml"
+    - "/path/to/staging.yml"
+  default_filters:
+    groups: ["web_servers", "db_servers"]  # Filter by groups
+```
+
+#### Using Both Providers
+
+```yaml
+sot:
+  providers: ["netbox", "ansible"]  # Use both together
+
+netbox:
+  url: "https://netbox.example.com"
+  token: "your-api-token"
+  default_filters:
+    status: "active"
+
+ansible_inventory:
+  inventory_paths:
+    - "/etc/ansible/inventory.yml"
+  default_filters:
+    groups: ["production"]
+```
+
 ### NetBox Filters
 
 Customize which hosts are retrieved from NetBox:
@@ -187,6 +248,53 @@ netbox:
     platform: "linux"         # Only Linux hosts
     cluster: "production"      # Specific cluster
     has_primary_ip: "true"     # Only hosts with IP addresses
+```
+
+### Ansible Inventory Format
+
+SSHplex supports standard Ansible YAML inventory files:
+
+```yaml
+# Example inventory.yml
+all:
+  children:
+    production:
+      children:
+        web_servers:
+          hosts:
+            web1:
+              ansible_host: 192.168.1.10
+              ansible_user: ubuntu
+              ansible_port: 2222
+              environment: prod
+            web2:
+              ansible_host: 192.168.1.11
+              ansible_user: ubuntu
+              environment: prod
+        db_servers:
+          hosts:
+            db1:
+              ansible_host: 192.168.2.10
+              ansible_user: postgres
+              environment: prod
+    staging:
+      hosts:
+        staging-web:
+          ansible_host: 192.168.100.10
+          ansible_user: ubuntu
+          environment: staging
+```
+
+### Group Filtering
+
+Filter hosts by Ansible groups or parent groups:
+
+```yaml
+ansible_inventory:
+  default_filters:
+    groups: ["production"]        # All hosts in production group
+    # groups: ["web_servers"]     # Only web servers
+    # groups: ["db_servers"]      # Only database servers
 ```
 
 ### tmux Layouts
@@ -215,15 +323,31 @@ logging:
    - Check network connectivity
    - Ensure SSL settings match your NetBox instance
 
-2. **SSH Key Authentication Failed**
+2. **Ansible Inventory Not Loading**
+   - Verify inventory file paths exist and are readable
+   - Check YAML syntax with `yamllint` or similar tool
+   - Ensure inventory files follow Ansible format
+   - Verify group names in filters match inventory structure
+
+3. **No Hosts Found After Filtering**
+   - Check that group filters match existing groups in inventory
+   - Verify NetBox filters match available hosts
+   - Try removing filters temporarily to see all available hosts
+
+4. **SSH Key Authentication Failed**
    - Verify SSH key path in configuration
    - Ensure key has proper permissions (`chmod 600`)
    - Test manual SSH connection to target hosts
 
-3. **tmux Session Not Created**
+5. **tmux Session Not Created**
    - Ensure tmux is installed and in PATH
    - Check SSH connectivity to at least one host
    - Verify tmux is not already running a session with the same name
+
+6. **Mixed Provider Issues**
+   - SSHplex continues with available providers if one fails
+   - Check logs to see which providers initialized successfully
+   - Ensure at least one provider is properly configured
 
 ### Debug Mode
 
