@@ -220,7 +220,7 @@ class TmuxManager(MultiplexerBase):
             if self.session:
                 # Set up custom key binding for broadcast toggle
                 self.setup_broadcast_keybinding()
-                
+
                 if auto_attach:
                     self.logger.info(f"SSHplex: Auto-attaching to tmux session '{self.session_name}'")
                     # Auto-attach to the session by replacing current shell
@@ -246,10 +246,10 @@ class TmuxManager(MultiplexerBase):
             # Set up key binding for broadcast toggle (prefix + b)
             # This command will toggle synchronize-panes for the current window
             toggle_command = "if -F '#{synchronize-panes}' 'setw synchronize-panes off; display-message \"Broadcast OFF\"' 'setw synchronize-panes on; display-message \"Broadcast ON\"'"
-            
+
             # Bind 'b' key (after prefix) to toggle broadcast
             self.session.cmd('bind-key', 'b', toggle_command)
-            
+
             self.logger.info("SSHplex: Set up broadcast toggle keybinding (prefix + b)")
             return True
 
