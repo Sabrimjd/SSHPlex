@@ -105,6 +105,7 @@ class HostSelector(App):
         Binding("s", "show_sessions", "Sessions", show=True),
         Binding("p", "toggle_panes", "Toggle Panes/Tabs", show=True),
         Binding("b", "toggle_broadcast", "Toggle Broadcast", show=True),
+        Binding("r", "refresh_hosts", "Refresh Sources", show=True),
         Binding("escape", "focus_table", "Focus Table", show=False),
         Binding("q", "quit", "Quit", show=True),
     ]
@@ -183,7 +184,7 @@ class HostSelector(App):
 
         # Calculate total columns to distribute width proportionally
         total_columns = len(self.config.ui.table_columns) + 1  # +1 for checkbox
-        
+
         # Add checkbox column (fixed small width)
         self.table.add_column("✓", width=3, key="checkbox")
 
@@ -206,16 +207,31 @@ class HostSelector(App):
                 # Description usually needs the most space
                 self.table.add_column("Description", width=None, key="description")
 
-    async def load_hosts(self) -> None:
-        """Load hosts from all configured SoT providers."""
-        self.log_message("Initializing SoT providers...")
-        self.update_status("Initializing SoT providers...")
+    async def load_hosts(self, force_refresh: bool = False) -> None:
+        """Load hosts from all configured SoT providers with caching support.
+        
+        Args:
+            force_refresh: If True, bypass cache and fetch fresh data from providers
+        """
+        if force_refresh:
+            self.log_message("Force refreshing hosts from all SoT providers...")
+            self.update_status("Refreshing hosts from providers...")
+        else:
+            self.log_message("Loading hosts (checking cache first)...")
+            self.update_status("Loading hosts...")
 
         try:
             # Initialize SoT factory
             self.sot_factory = SoTFactory(self.config)
 
-            # Initialize all providers
+            # Check cache status first
+            if not force_refresh:
+                cache_info = self.sot_factory.get_cache_info()
+                if cache_info:
+                    cache_age = cache_info.get('age_hours', 0)
+                    self.log_message(f"Found cache with {cache_info.get('host_count', 0)} hosts (age: {cache_age:.1f} hours)")
+
+            # Initialize all providers (needed for refresh even if cache exists)
             if not self.sot_factory.initialize_providers():
                 self.log_message("ERROR: Failed to initialize any SoT providers", level="error")
                 self.update_status("Error: SoT provider initialization failed")
@@ -223,10 +239,9 @@ class HostSelector(App):
 
             provider_names = ', '.join(self.sot_factory.get_provider_names())
             self.log_message(f"Successfully initialized {self.sot_factory.get_provider_count()} provider(s): {provider_names}")
-            self.update_status("Loading hosts...")
 
-            # Get hosts from all providers
-            self.hosts = self.sot_factory.get_all_hosts()
+            # Get hosts (with caching support)
+            self.hosts = self.sot_factory.get_all_hosts(force_refresh=force_refresh)
             self.filtered_hosts = self.hosts.copy()  # Initialize filtered hosts
 
             if not self.hosts:
@@ -237,7 +252,8 @@ class HostSelector(App):
             # Populate table
             self.populate_table()
 
-            self.log_message(f"Loaded {len(self.hosts)} hosts successfully from {self.sot_factory.get_provider_count()} provider(s)")
+            source_msg = "fresh data from providers" if force_refresh else "cache/providers"
+            self.log_message(f"Loaded {len(self.hosts)} hosts successfully from {source_msg}")
             self.update_status_with_mode()
 
         except Exception as e:
@@ -360,6 +376,11 @@ class HostSelector(App):
         self.log_message("Opening tmux session manager...")
         session_manager = TmuxSessionManager()
         self.push_screen(session_manager)
+
+    def action_refresh_hosts(self) -> None:
+        """Refresh hosts by fetching fresh data from all SoT providers."""
+        self.log_message("Refreshing hosts from SoT providers...")
+        self.call_later(self.load_hosts, force_refresh=True)
 
     def update_row_checkbox(self, row_key: str, selected: bool) -> None:
         """Update the checkbox for a specific row."""
