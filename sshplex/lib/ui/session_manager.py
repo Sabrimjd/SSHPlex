@@ -99,7 +99,7 @@ class TmuxSessionManager(ModalScreen):
             yield Static("🖥️  SSHplex - tmux Session Manager", id="session-header")
             yield Static("📡 Broadcast: OFF", id="broadcast-status")
             yield DataTable(id="session-table", cursor_type="row")
-            yield Static("Enter: Connect | K: Kill | B: Broadcast | P: Pane | Shift+P: Window | R: Refresh | ESC: Close", id="session-footer")
+            yield Static("Enter: Connect | K: Kill | B: Broadcast | R: Refresh | ESC: Close", id="session-footer")
 
     def on_mount(self) -> None:
         """Initialize the session manager."""

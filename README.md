@@ -15,7 +15,7 @@ SSHplex is a Python-based SSH connection multiplexer that provides a modern Term
 - 🔗 **NetBox Integration**: Automatic host discovery from NetBox with configurable filters
 - � **Ansible Integration**: Support for Ansible YAML inventories with group filtering
 - 🏢 **Multiple Sources of Truth**: Use NetBox and Ansible inventories together or separately
-- �🖥️ **tmux Integration**: Creates organized tmux sessions with panes or windows for each host
+- ���️ **tmux Integration**: Creates organized tmux sessions with panes or windows for each host
 - ⚙️ **Flexible Configuration**: YAML-based configuration with automatic setup on first run
 - 📁 **XDG Compliance**: Configuration stored in `~/.config/sshplex/` by default
 - 🔧 **Multiple Layout Options**: Support for tiled, horizontal, and vertical tmux layouts
