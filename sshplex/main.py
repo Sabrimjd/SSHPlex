@@ -158,10 +158,11 @@ def tui_mode(config: Any, logger: Any) -> int:
             mode = "panes" if app.use_panes else "windows"
             logger.info(f"SSHplex: Creating tmux {mode} for selected hosts")
 
-            # Create connector with timestamped session name
+            # Create connector with timestamped session name and max panes per window
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             session_name = f"sshplex-{timestamp}"
-            connector = SSHplexConnector(session_name)
+            max_panes_per_window = config.tmux.max_panes_per_window
+            connector = SSHplexConnector(session_name, max_panes_per_window)
 
             # Connect to hosts (creates panes or windows with SSH connections)
             if connector.connect_to_hosts(
@@ -169,7 +170,8 @@ def tui_mode(config: Any, logger: Any) -> int:
                 username=config.ssh.username,
                 key_path=config.ssh.key_path,
                 port=config.ssh.port,
-                use_panes=app.use_panes
+                use_panes=app.use_panes,
+                use_broadcast=app.use_broadcast
             ):
                 session_name = connector.get_session_name()
                 mode_display = "panes" if app.use_panes else "windows"
@@ -180,12 +182,15 @@ def tui_mode(config: Any, logger: Any) -> int:
                 print(f"\n✅ SSHplex Session Created Successfully!")
                 print(f"📡 tmux session: {session_name}")
                 print(f"🔗 {len(result)} SSH connections established in {mode_display}")
+                broadcast_status = " (ENABLED)" if app.use_broadcast else " (DISABLED)"
+                print(f"📢 Broadcast mode: {broadcast_status}")
                 print(f"\n🚀 Auto-attaching to session...")
                 print(f"\n⚡ tmux commands (once attached):")
                 if app.use_panes:
                     print(f"   - Switch panes: Ctrl+b then arrow keys")
                 else:
                     print(f"   - Switch windows: Ctrl+b then n/p or number keys")
+                print(f"   - Toggle broadcast: Ctrl+b then b")
                 print(f"   - Detach session: Ctrl+b then d")
                 print(f"   - List sessions: tmux list-sessions")
 
