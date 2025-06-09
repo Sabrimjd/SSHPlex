@@ -106,6 +106,25 @@ class SoTConfig(BaseModel):
         return v
 
 
+class CacheConfig(BaseModel):
+    """Host cache configuration."""
+    enabled: bool = True
+    cache_dir: str = "~/cache/sshplex"
+    ttl_hours: int = Field(default=24, description="Cache time-to-live in hours")
+
+    @validator('ttl_hours')
+    def validate_ttl_hours(cls, v: int) -> int:
+        """Validate cache TTL."""
+        if v < 1:
+            raise ValueError('cache ttl_hours must be at least 1')
+        return v
+
+    @validator('cache_dir')
+    def validate_cache_dir(cls, v: str) -> str:
+        """Expand cache directory path."""
+        return os.path.expanduser(v)
+
+
 class Config(BaseModel):
     """Main SSHplex configuration model."""
     sshplex: SSHplexConfig = Field(default_factory=SSHplexConfig)
@@ -116,6 +135,7 @@ class Config(BaseModel):
     tmux: TmuxConfig = Field(default_factory=TmuxConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
+    cache: CacheConfig = Field(default_factory=CacheConfig)
 
     @validator('netbox', always=True)
     def validate_netbox_if_needed(cls, v: Optional[NetBoxConfig], values: Dict[str, Any]) -> Optional[NetBoxConfig]:

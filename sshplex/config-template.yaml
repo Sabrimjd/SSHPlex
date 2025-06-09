@@ -47,3 +47,9 @@ logging:
   enabled: false
   level: "DEBUG" # DEBUG, INFO, WARNING, ERROR
   file: "logs/sshplex.log"
+
+# Host cache configuration for faster startup
+cache:
+  enabled: true
+  cache_dir: "~/.cache/sshplex"  # Directory to store cached host data
+  ttl_hours: 24  # Cache time-to-live in hours (24 = refresh daily)

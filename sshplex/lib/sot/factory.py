@@ -2,6 +2,7 @@
 
 from typing import List, Dict, Any, Optional
 from ..logger import get_logger
+from ..cache import HostCache
 from .base import SoTProvider, Host
 from .netbox import NetBoxProvider
 from .ansible import AnsibleProvider
@@ -19,6 +20,19 @@ class SoTFactory:
         self.config = config
         self.logger = get_logger()
         self.providers: List[SoTProvider] = []
+        
+        # Initialize cache with configuration
+        cache_config = getattr(config, 'cache', None)
+        if cache_config and cache_config.enabled:
+            self.cache = HostCache(
+                cache_dir=cache_config.cache_dir,
+                cache_ttl_hours=cache_config.ttl_hours
+            )
+        else:
+            # Use default cache settings if not configured
+            self.cache = HostCache()
+        
+        self._cached_hosts: Optional[List[Host]] = None
 
     def initialize_providers(self) -> bool:
         """Initialize all configured SoT providers.
@@ -85,15 +99,32 @@ class SoTFactory:
             filters=self.config.ansible_inventory.default_filters
         )
 
-    def get_all_hosts(self, additional_filters: Optional[Dict[str, Any]] = None) -> List[Host]:
-        """Get hosts from all configured providers.
+    def get_all_hosts(self, additional_filters: Optional[Dict[str, Any]] = None, force_refresh: bool = False) -> List[Host]:
+        """Get hosts from all configured providers with caching support.
 
         Args:
             additional_filters: Additional filters to apply to all providers
+            force_refresh: If True, bypass cache and fetch fresh data from providers
 
         Returns:
             Combined list of hosts from all providers
         """
+        # If we have cached hosts and not forcing refresh, return them
+        if not force_refresh and self._cached_hosts is not None:
+            self.logger.debug("Returning already loaded hosts from memory")
+            return self._cached_hosts
+
+        # Try to load from cache first (unless forcing refresh)
+        if not force_refresh:
+            cached_hosts = self.cache.load_hosts()
+            if cached_hosts is not None:
+                self.logger.info(f"Loaded {len(cached_hosts)} hosts from cache")
+                self._cached_hosts = cached_hosts
+                return cached_hosts
+
+        # Cache miss or force refresh - fetch from providers
+        self.logger.info("Cache miss or refresh requested - fetching hosts from providers")
+        
         if not self.providers:
             self.logger.error("No SoT providers initialized")
             return []
@@ -144,6 +175,18 @@ class SoTFactory:
 
         final_hosts = list(unique_hosts.values())
         self.logger.info(f"Retrieved {len(final_hosts)} unique hosts from {len(self.providers)} providers")
+        
+        # Save to cache
+        provider_info = {
+            'provider_count': len(self.providers),
+            'provider_names': self.get_provider_names(),
+            'filters_applied': additional_filters or {}
+        }
+        self.cache.save_hosts(final_hosts, provider_info)
+        
+        # Store in memory for quick access
+        self._cached_hosts = final_hosts
+        
         return final_hosts
 
     def _get_provider_filters(self, provider: SoTProvider,
@@ -225,3 +268,40 @@ class SoTFactory:
             List of provider class names
         """
         return [type(provider).__name__ for provider in self.providers]
+
+    def refresh_cache(self, additional_filters: Optional[Dict[str, Any]] = None) -> List[Host]:
+        """Force refresh of the host cache from all providers.
+
+        Args:
+            additional_filters: Additional filters to apply to all providers
+
+        Returns:
+            Freshly loaded hosts from all providers
+        """
+        self.logger.info("Forcing cache refresh from all providers")
+        return self.get_all_hosts(additional_filters=additional_filters, force_refresh=True)
+
+    def get_cache_info(self) -> Optional[Dict[str, Any]]:
+        """Get cache information.
+
+        Returns:
+            Dictionary with cache metadata or None if no cache exists
+        """
+        return self.cache.get_cache_info()
+
+    def clear_cache(self) -> bool:
+        """Clear the host cache.
+
+        Returns:
+            True if cache was cleared successfully, False otherwise
+        """
+        self._cached_hosts = None
+        return self.cache.clear_cache()
+
+    def is_cache_valid(self) -> bool:
+        """Check if the cache is valid and up-to-date.
+
+        Returns:
+            True if cache is valid, False otherwise
+        """
+        return self.cache.is_cache_valid()
