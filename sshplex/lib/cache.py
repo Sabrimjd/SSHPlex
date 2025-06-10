@@ -20,15 +20,15 @@ class HostCache:
             cache_ttl_hours: Cache time-to-live in hours (default 24 hours)
         """
         self.logger = get_logger()
-        
+
         if cache_dir is None:
             cache_dir = os.path.expanduser("~/cache/sshplex")
-        
+
         self.cache_dir = Path(cache_dir)
         self.cache_ttl = timedelta(hours=cache_ttl_hours)
         self.cache_file = self.cache_dir / "hosts.yaml"
         self.metadata_file = self.cache_dir / "cache_metadata.yaml"
-        
+
         # Ensure cache directory exists
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -44,7 +44,7 @@ class HostCache:
         try:
             with open(self.metadata_file, 'r') as f:
                 metadata = yaml.safe_load(f)
-            
+
             if not metadata or 'timestamp' not in metadata:
                 return False
 
@@ -142,19 +142,19 @@ class HostCache:
         try:
             with open(self.metadata_file, 'r') as f:
                 raw_metadata = yaml.safe_load(f)
-            
+
             # Validate that metadata is a dictionary
             if not isinstance(raw_metadata, dict):
                 self.logger.warning("Cache metadata is not a valid dictionary")
                 return None
-                
+
             metadata: Dict[str, Any] = raw_metadata
-            
+
             if metadata and 'timestamp' in metadata:
                 cache_time = datetime.fromisoformat(metadata['timestamp'])
                 metadata['age_hours'] = (datetime.now() - cache_time).total_seconds() / 3600
                 metadata['is_valid'] = self.is_cache_valid()
-            
+
             return metadata
 
         except Exception as e:
@@ -172,7 +172,7 @@ class HostCache:
                 self.cache_file.unlink()
             if self.metadata_file.exists():
                 self.metadata_file.unlink()
-            
+
             self.logger.info("Cache cleared successfully")
             return True
 
