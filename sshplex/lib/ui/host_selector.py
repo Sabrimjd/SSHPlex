@@ -206,10 +206,13 @@ class HostSelector(App):
             elif column == "description":
                 # Description usually needs the most space
                 self.table.add_column("Description", width=None, key="description")
+            elif column == "provider":
+                # Provider column for showing source
+                self.table.add_column("Provider", width=None, key="provider")
 
     async def load_hosts(self, force_refresh: bool = False) -> None:
         """Load hosts from all configured SoT providers with caching support.
-        
+
         Args:
             force_refresh: If True, bypass cache and fetch fresh data from providers
         """
@@ -295,6 +298,10 @@ class HostSelector(App):
                     row_data.append(getattr(host, 'tags', ''))
                 elif column == "description":
                     row_data.append(getattr(host, 'description', ''))
+                elif column == "provider":
+                    # Get provider from metadata or attribute
+                    provider = getattr(host, 'provider', host.metadata.get('provider', 'unknown'))
+                    row_data.append(provider)
 
             self.table.add_row(*row_data, key=host.name)
 

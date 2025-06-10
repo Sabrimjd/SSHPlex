@@ -6,6 +6,7 @@ from ..cache import HostCache
 from .base import SoTProvider, Host
 from .netbox import NetBoxProvider
 from .ansible import AnsibleProvider
+from .static import StaticProvider
 
 
 class SoTFactory:
@@ -20,7 +21,7 @@ class SoTFactory:
         self.config = config
         self.logger = get_logger()
         self.providers: List[SoTProvider] = []
-        
+
         # Initialize cache with configuration
         cache_config = getattr(config, 'cache', None)
         if cache_config and cache_config.enabled:
@@ -31,11 +32,11 @@ class SoTFactory:
         else:
             # Use default cache settings if not configured
             self.cache = HostCache()
-        
+
         self._cached_hosts: Optional[List[Host]] = None
 
     def initialize_providers(self) -> bool:
-        """Initialize all configured SoT providers.
+        """Initialize all configured SoT providers from import configurations.
 
         Returns:
             True if at least one provider was successfully initialized
@@ -43,28 +44,36 @@ class SoTFactory:
         self.providers = []
         success_count = 0
 
-        for provider_name in self.config.sot.providers:
+        # Check if we have import configurations
+        if not hasattr(self.config.sot, 'import_') or not self.config.sot.import_:
+            self.logger.error("No import configurations found in sot.import")
+            return False
+
+        for import_config in self.config.sot.import_:
             try:
                 provider: Optional[SoTProvider] = None
-                if provider_name == "netbox":
-                    provider = self._create_netbox_provider()
-                elif provider_name == "ansible":
-                    provider = self._create_ansible_provider()
+
+                if import_config.type == "static":
+                    provider = self._create_static_provider(import_config)
+                elif import_config.type == "netbox":
+                    provider = self._create_netbox_provider_from_import(import_config)
+                elif import_config.type == "ansible":
+                    provider = self._create_ansible_provider_from_import(import_config)
                 else:
-                    self.logger.error(f"Unknown SoT provider: {provider_name}")
+                    self.logger.error(f"Unknown SoT provider type: {import_config.type}")
                     continue
 
                 if provider and provider.connect():
                     self.providers.append(provider)
                     success_count += 1
-                    self.logger.info(f"Successfully initialized {provider_name} provider")
+                    self.logger.info(f"Successfully initialized {import_config.type} provider '{import_config.name}'")
                 else:
-                    self.logger.error(f"Failed to initialize {provider_name} provider")
+                    self.logger.error(f"Failed to initialize {import_config.type} provider '{import_config.name}'")
 
             except Exception as e:
-                self.logger.error(f"Error initializing {provider_name} provider: {e}")
+                self.logger.error(f"Error initializing {import_config.type} provider '{import_config.name}': {e}")
 
-        self.logger.info(f"Initialized {success_count}/{len(self.config.sot.providers)} SoT providers")
+        self.logger.info(f"Initialized {success_count}/{len(self.config.sot.import_)} SoT providers")
         return success_count > 0
 
     def _create_netbox_provider(self) -> Optional[NetBoxProvider]:
@@ -99,6 +108,73 @@ class SoTFactory:
             filters=self.config.ansible_inventory.default_filters
         )
 
+    def _create_static_provider(self, import_config: Any) -> Optional[StaticProvider]:
+        """Create Static provider instance from import configuration.
+
+        Args:
+            import_config: Import configuration object
+
+        Returns:
+            StaticProvider instance or None if configuration invalid
+        """
+        if not import_config.hosts:
+            self.logger.error(f"Static provider '{import_config.name}' has no hosts configured")
+            return None
+
+        return StaticProvider(
+            name=import_config.name,
+            hosts=import_config.hosts
+        )
+
+    def _create_netbox_provider_from_import(self, import_config: Any) -> Optional[NetBoxProvider]:
+        """Create NetBox provider instance from import configuration.
+
+        Args:
+            import_config: Import configuration object
+
+        Returns:
+            NetBoxProvider instance or None if configuration invalid
+        """
+        if not import_config.url or not import_config.token:
+            self.logger.error(f"NetBox provider '{import_config.name}' missing required url or token")
+            return None
+
+        provider = NetBoxProvider(
+            url=import_config.url,
+            token=import_config.token,
+            verify_ssl=import_config.verify_ssl if import_config.verify_ssl is not None else True,
+            timeout=import_config.timeout or 30
+        )
+
+        # Store additional attributes
+        setattr(provider, 'provider_name', import_config.name)
+        setattr(provider, 'import_filters', import_config.default_filters or {})
+
+        return provider
+
+    def _create_ansible_provider_from_import(self, import_config: Any) -> Optional[AnsibleProvider]:
+        """Create Ansible provider instance from import configuration.
+
+        Args:
+            import_config: Import configuration object
+
+        Returns:
+            AnsibleProvider instance or None if configuration invalid
+        """
+        if not import_config.inventory_paths:
+            self.logger.error(f"Ansible provider '{import_config.name}' has no inventory_paths configured")
+            return None
+
+        provider = AnsibleProvider(
+            inventory_paths=import_config.inventory_paths,
+            filters=import_config.default_filters or {}
+        )
+
+        # Store additional attributes
+        setattr(provider, 'provider_name', import_config.name)
+
+        return provider
+
     def get_all_hosts(self, additional_filters: Optional[Dict[str, Any]] = None, force_refresh: bool = False) -> List[Host]:
         """Get hosts from all configured providers with caching support.
 
@@ -124,7 +200,7 @@ class SoTFactory:
 
         # Cache miss or force refresh - fetch from providers
         self.logger.info("Cache miss or refresh requested - fetching hosts from providers")
-        
+
         if not self.providers:
             self.logger.error("No SoT providers initialized")
             return []
@@ -175,7 +251,7 @@ class SoTFactory:
 
         final_hosts = list(unique_hosts.values())
         self.logger.info(f"Retrieved {len(final_hosts)} unique hosts from {len(self.providers)} providers")
-        
+
         # Save to cache
         provider_info = {
             'provider_count': len(self.providers),
@@ -183,10 +259,10 @@ class SoTFactory:
             'filters_applied': additional_filters or {}
         }
         self.cache.save_hosts(final_hosts, provider_info)
-        
+
         # Store in memory for quick access
         self._cached_hosts = final_hosts
-        
+
         return final_hosts
 
     def _get_provider_filters(self, provider: SoTProvider,
@@ -202,10 +278,15 @@ class SoTFactory:
         """
         filters = {}
 
-        # Add provider-specific default filters
-        if isinstance(provider, NetBoxProvider) and self.config.netbox:
+        # Add provider-specific default filters from import configuration
+        import_filters = getattr(provider, 'import_filters', None)
+        if import_filters:
+            filters.update(import_filters)
+        elif isinstance(provider, NetBoxProvider) and self.config.netbox:
+            # Fallback to old configuration structure if available
             filters.update(self.config.netbox.default_filters)
         elif isinstance(provider, AnsibleProvider) and self.config.ansible_inventory:
+            # Fallback to old configuration structure if available
             filters.update(self.config.ansible_inventory.default_filters)
 
         # Merge additional filters
@@ -223,6 +304,16 @@ class SoTFactory:
         Returns:
             Source identifier string
         """
+        # First check if the host already has provider information
+        provider = getattr(host, 'provider', None)
+        if provider:
+            return str(provider)
+
+        # Check metadata for provider information
+        if 'provider' in host.metadata:
+            return str(host.metadata['provider'])
+
+        # Legacy source detection logic
         if hasattr(host, 'inventory_file') or 'inventory_file' in host.metadata:
             inventory_file = getattr(host, 'inventory_file', host.metadata.get('inventory_file', ''))
             return f"ansible:{inventory_file}"

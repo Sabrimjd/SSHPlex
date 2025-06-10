@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional, List
 import yaml
 import shutil
 import os
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, model_validator
 
 from .. import __version__
 
@@ -24,27 +24,12 @@ class NetBoxConfig(BaseModel):
     timeout: int = 30
     default_filters: Dict[str, str] = Field(default_factory=dict)
 
-    @validator('url')
-    def validate_url(cls, v: str) -> str:
-        """Validate NetBox URL format."""
-        if not v.startswith(('http://', 'https://')):
-            raise ValueError('NetBox URL must start with http:// or https://')
-        return v
-
 
 class LoggingConfig(BaseModel):
     """Logging configuration."""
     enabled: bool = True
     level: str = "INFO"
     file: str = "logs/sshplex.log"
-
-    @validator('level')
-    def validate_level(cls, v: str) -> str:
-        """Validate logging level."""
-        valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR"]
-        if v.upper() not in valid_levels:
-            raise ValueError(f'Log level must be one of: {valid_levels}')
-        return v.upper()
 
 
 class UIConfig(BaseModel):
@@ -69,41 +54,36 @@ class TmuxConfig(BaseModel):
     window_name: str = "sshplex"
     max_panes_per_window: int = Field(default=5, description="Maximum panes per window before creating a new window")
 
-    @validator('max_panes_per_window')
-    def validate_max_panes_per_window(cls, v: int) -> int:
-        """Validate max panes per window."""
-        if v < 1:
-            raise ValueError('max_panes_per_window must be at least 1')
-        return v
-
 
 class AnsibleConfig(BaseModel):
     """Ansible inventory configuration."""
     inventory_paths: List[str] = Field(default_factory=list, description="List of paths to Ansible inventory YAML files")
     default_filters: Dict[str, Any] = Field(default_factory=dict)
 
-    @validator('inventory_paths')
-    def validate_inventory_paths(cls, v: List[str]) -> List[str]:
-        """Validate that inventory paths are provided."""
-        if not v:
-            raise ValueError('At least one inventory path must be provided for Ansible')
-        return v
+
+class SoTImportConfig(BaseModel):
+    """Individual SoT import configuration."""
+    name: str = Field(..., description="Unique name for this import")
+    type: str = Field(..., description="Provider type: static, netbox, ansible")
+
+    # Static provider fields
+    hosts: Optional[List[Dict[str, Any]]] = None
+
+    # NetBox provider fields
+    url: Optional[str] = None
+    token: Optional[str] = None
+    verify_ssl: Optional[bool] = True
+    timeout: Optional[int] = 30
+    default_filters: Optional[Dict[str, Any]] = Field(default_factory=dict)
+
+    # Ansible provider fields
+    inventory_paths: Optional[List[str]] = None
 
 
 class SoTConfig(BaseModel):
     """Source of Truth configuration."""
-    providers: List[str] = Field(default_factory=lambda: ["netbox"], description="List of SoT providers to use: netbox, ansible")
-
-    @validator('providers')
-    def validate_providers(cls, v: List[str]) -> List[str]:
-        """Validate SoT provider names."""
-        valid_providers = ["netbox", "ansible"]
-        for provider in v:
-            if provider not in valid_providers:
-                raise ValueError(f'Invalid SoT provider: {provider}. Valid providers: {valid_providers}')
-        if not v:
-            raise ValueError('At least one SoT provider must be specified')
-        return v
+    providers: List[str] = Field(default_factory=lambda: ["static"], description="List of SoT providers to use: static, netbox, ansible")
+    import_: List[SoTImportConfig] = Field(alias='import', default_factory=list, description="List of import configurations")
 
 
 class CacheConfig(BaseModel):
@@ -111,18 +91,6 @@ class CacheConfig(BaseModel):
     enabled: bool = True
     cache_dir: str = "~/cache/sshplex"
     ttl_hours: int = Field(default=24, description="Cache time-to-live in hours")
-
-    @validator('ttl_hours')
-    def validate_ttl_hours(cls, v: int) -> int:
-        """Validate cache TTL."""
-        if v < 1:
-            raise ValueError('cache ttl_hours must be at least 1')
-        return v
-
-    @validator('cache_dir')
-    def validate_cache_dir(cls, v: str) -> str:
-        """Expand cache directory path."""
-        return os.path.expanduser(v)
 
 
 class Config(BaseModel):
@@ -136,22 +104,6 @@ class Config(BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
-
-    @validator('netbox', always=True)
-    def validate_netbox_if_needed(cls, v: Optional[NetBoxConfig], values: Dict[str, Any]) -> Optional[NetBoxConfig]:
-        """Validate NetBox config if netbox provider is enabled."""
-        sot = values.get('sot')
-        if sot and 'netbox' in sot.providers and v is None:
-            raise ValueError('NetBox configuration is required when netbox provider is enabled')
-        return v
-
-    @validator('ansible_inventory', always=True)
-    def validate_ansible_if_needed(cls, v: Optional[AnsibleConfig], values: Dict[str, Any]) -> Optional[AnsibleConfig]:
-        """Validate Ansible config if ansible provider is enabled."""
-        sot = values.get('sot')
-        if sot and 'ansible' in sot.providers and v is None:
-            raise ValueError('Ansible configuration is required when ansible provider is enabled')
-        return v
 
 
 def get_default_config_path() -> Path:
