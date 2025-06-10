@@ -4,27 +4,63 @@ sshplex:
 
 # Source of Truth configuration
 sot:
-  providers: ["netbox", "ansible"]  # Available: netbox, ansible
-
-netbox:
-  url: "https://netbox.lan/"
-  token: "CHANGE_TOKEN_HERE"
-  verify_ssl: false
-  timeout: 30
-  default_filters:
-    status: "active"
-    role: "virtual-machine"
-    has_primary_ip: "true"
-
-# Ansible inventory configuration (only needed if 'ansible' is in sot.providers)
-ansible_inventory:
-  inventory_paths:
-    - "/path/to/your/inventory.yml"
-    - "/path/to/another/inventory.yml"
-  default_filters:
-    groups: []  # Filter by group names (empty = all groups)
-    exclude_groups: []  # Groups to exclude
-    host_patterns: []  # Regex patterns for host names (empty = all hosts)
+  providers: ["static", "netbox", "ansible"]  # Available: static, netbox, ansible
+  import:
+    - name: "production-servers"
+      type: static
+      hosts:
+        - name: "web-server-01"
+          ip: "192.168.1.10"
+          description: "Production web server"
+          tags: ["web", "production"]
+        - name: "db-server-01"
+          ip: "192.168.1.20"
+          description: "Primary database server"
+          tags: ["database", "production"]
+    - name: "test-servers"
+      type: static
+      hosts:
+        - name: "test-web-01"
+          ip: "192.168.2.10"
+          description: "Test web server"
+          tags: ["web", "test"]
+    - name: "primary-netbox"
+      type: netbox
+      url: "https://netbox.lan/"
+      token: "CHANGE_TOKEN_HERE"
+      verify_ssl: false
+      timeout: 30
+      default_filters:
+        status: "active"
+        role: "virtual-machine"
+        has_primary_ip: "true"
+    - name: "secondary-netbox"
+      type: netbox
+      url: "https://netbox2.lan/"
+      token: "CHANGE_TOKEN_HERE_2"
+      verify_ssl: false
+      timeout: 30
+      default_filters:
+        status: "active"
+        role: "router"
+        has_primary_ip: "true"
+    - name: "production-inventory"
+      type: ansible
+      inventory_paths:
+        - "/path/to/production/inventory.yml"
+      default_filters:
+        groups: ["webservers", "databases"]
+        exclude_groups: []
+        host_patterns: []
+    - name: "staging-inventory"
+      type: ansible
+      inventory_paths:
+        - "/path/to/staging/inventory.yml"
+        - "/path/to/staging/additional.yml"
+      default_filters:
+        groups: []
+        exclude_groups: ["maintenance"]
+        host_patterns: ["^staging-.*"]
 
 ssh:
   username: "admin"
@@ -41,7 +77,7 @@ tmux:
 ui:
   show_log_panel: false
   log_panel_height: 20
-  table_columns: ["name", "ip", "cluster", "tags", "description"]
+  table_columns: ["name", "ip", "cluster", "tags", "description", "provider"]
 
 logging:
   enabled: false

@@ -290,8 +290,13 @@ class AnsibleProvider(SoTProvider):
                 ansible_user=ansible_user,
                 ansible_connection=ansible_connection,
                 ansible_group=group_name,
-                inventory_file=inventory_path
+                inventory_file=inventory_path,
+                provider=getattr(self, 'provider_name', 'ansible')
             )
+
+            # Add source information to metadata
+            host.metadata['sources'] = [getattr(self, 'provider_name', 'ansible')]
+            host.metadata['provider'] = getattr(self, 'provider_name', 'ansible')
 
             # Add all other host variables as metadata
             for key, value in host_vars.items():

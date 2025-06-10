@@ -14,7 +14,10 @@ SSHplex is a Python-based SSH connection multiplexer that provides a modern Term
 - 🎯 **Interactive Host Selection**: Modern TUI built with Textual for intuitive host selection
 - 🔗 **NetBox Integration**: Automatic host discovery from NetBox with configurable filters
 - 📋 **Ansible Integration**: Support for Ansible YAML inventories with group filtering
-- 🏢 **Multiple Sources of Truth**: Use NetBox and Ansible inventories together or separately
+- 📁 **Static Host Lists**: Define custom host lists directly in configuration
+- 🏢 **Multiple Sources of Truth**: Use NetBox, Ansible inventories, and static lists together or separately
+- 🔄 **Multi-Provider Support**: Configure multiple instances of the same provider type (e.g., multiple NetBox instances)
+- 🏷️ **Provider Identification**: Each host includes source provider information in the UI
 - ⚡ **Intelligent Caching**: Local host caching for lightning-fast startup (configurable TTL)
 - 🖥️ **tmux Integration**: Creates organized tmux sessions with panes or windows for each host
 - ⚙️ **Flexible Configuration**: YAML-based configuration with automatic setup on first run
@@ -33,7 +36,8 @@ SSHplex is a Python-based SSH connection multiplexer that provides a modern Term
   - HashiCorp Consul integration
   - HashiCorp Bastion support
   - AWS EC2 instance discovery
-  - Static YAML/JSON host files
+  - Kubernetes pod discovery
+  - Docker container discovery
 - 🖥️ **Multiple Terminal Multiplexers**:
   - Terminator support
   - Hyper terminal integration
@@ -179,9 +183,83 @@ Ctrl+b + z            # Zoom/unzoom current pane
 
 ## ⚙️ Configuration Options
 
-### Source of Truth Providers
+SSHplex now supports a flexible import-based configuration system that allows multiple named instances of any provider type:
 
-SSHplex supports multiple Sources of Truth that can be used together or separately:
+```yaml
+sot:
+  providers: ["static", "netbox", "ansible"]  # Available provider types
+  import:
+    # Multiple static providers
+    - name: "production-servers"
+      type: static
+      hosts:
+        - name: "web-server-01"
+          ip: "192.168.1.10"
+          description: "Production web server"
+          tags: ["web", "production"]
+        - name: "db-server-01"
+          ip: "192.168.1.20"
+          description: "Primary database server"
+          tags: ["database", "production"]
+
+    - name: "test-servers"
+      type: static
+      hosts:
+        - name: "test-web-01"
+          ip: "192.168.2.10"
+          description: "Test web server"
+          tags: ["web", "test"]
+
+    # Multiple NetBox instances
+    - name: "primary-netbox"
+      type: netbox
+      url: "https://netbox.prod.example.com/"
+      token: "your-production-token"
+      verify_ssl: true
+      timeout: 30
+      default_filters:
+        status: "active"
+        role: "virtual-machine"
+        has_primary_ip: "true"
+
+    - name: "secondary-netbox"
+      type: netbox
+      url: "https://netbox.dev.example.com/"
+      token: "your-dev-token"
+      verify_ssl: false
+      timeout: 30
+      default_filters:
+        status: "active"
+        role: "router"
+
+    # Multiple Ansible inventories
+    - name: "production-inventory"
+      type: ansible
+      inventory_paths:
+        - "/path/to/production/inventory.yml"
+      default_filters:
+        groups: ["webservers", "databases"]
+        exclude_groups: []
+        host_patterns: []
+
+    - name: "staging-inventory"
+      type: ansible
+      inventory_paths:
+        - "/path/to/staging/inventory.yml"
+        - "/path/to/staging/additional.yml"
+      default_filters:
+        groups: []
+        exclude_groups: ["maintenance"]
+        host_patterns: ["^staging-.*"]
+
+# UI Configuration - Provider column shows source information
+ui:
+  table_columns: ["name", "ip", "cluster", "tags", "description", "provider"]
+```
+
+### Legacy Configuration (Still Supported)
+
+The original configuration format is still supported for backward compatibility:
 
 #### NetBox Configuration
 
@@ -198,8 +276,23 @@ netbox:
     status: "active"           # Only active hosts
     role: "virtual-machine"    # Only VMs
     platform: "linux"         # Only Linux hosts
-    cluster: "production"      # Specific cluster
-    has_primary_ip: "true"     # Only hosts with IP addresses
+#### Static Host Lists
+
+```yaml
+sot:
+  providers: ["static"]  # Use static hosts only
+  import:
+    - name: "my-servers"
+      type: static
+      hosts:
+        - name: "server-01"
+          ip: "192.168.1.10"
+          description: "Web server"
+          tags: ["web", "production"]
+        - name: "server-02"
+          ip: "192.168.1.11"
+          description: "Database server"
+          tags: ["database", "production"]
 ```
 
 #### Ansible Inventory Configuration
@@ -207,47 +300,110 @@ netbox:
 ```yaml
 sot:
   providers: ["ansible"]  # Use Ansible only
-
-ansible_inventory:
-  inventory_paths:
-    - "/path/to/inventory.yml"
-    - "/path/to/production.yml"
-    - "/path/to/staging.yml"
-  default_filters:
-    groups: ["web_servers", "db_servers"]  # Filter by groups
+  import:
+    - name: "production-hosts"
+      type: ansible
+      inventory_paths:
+        - "/path/to/inventory.yml"
+        - "/path/to/production.yml"
+      default_filters:
+        groups: ["web_servers", "db_servers"]  # Filter by groups
+        exclude_groups: ["maintenance"]        # Exclude groups
+        host_patterns: ["^prod-.*"]           # Regex patterns
 ```
 
-#### Using Both Providers
+#### Using Multiple Providers
 
 ```yaml
 sot:
-  providers: ["netbox", "ansible"]  # Use both together
+  providers: ["static", "netbox", "ansible"]  # Use all together
+  import:
+    - name: "static-hosts"
+      type: static
+      hosts: [...]
 
-netbox:
-  url: "https://netbox.example.com"
-  token: "your-api-token"
-  default_filters:
-    status: "active"
+    - name: "netbox-prod"
+      type: netbox
+      url: "https://netbox.example.com"
+      token: "your-api-token"
+      default_filters:
+        status: "active"
 
-ansible_inventory:
-  inventory_paths:
-    - "/etc/ansible/inventory.yml"
-  default_filters:
-    groups: ["production"]
+    - name: "ansible-inventory"
+      type: ansible
+      inventory_paths: ["/path/to/inventory.yml"]
+      default_filters:
+        groups: ["production"]
 ```
 
-### NetBox Filters
+### Provider Features
 
-Customize which hosts are retrieved from NetBox:
+#### Static Provider
+- Define hosts directly in configuration
+- Support for custom metadata (description, tags, etc.)
+- Multiple static provider instances with different names
+- No external dependencies
+
+#### NetBox Provider
+- Automatic host discovery from NetBox API
+- Configurable filters (status, role, platform, cluster, etc.)
+- Multiple NetBox instance support
+- SSL verification control
+- Timeout configuration
+
+#### Ansible Provider
+- Support for standard Ansible YAML inventory files
+- Group-based filtering with include/exclude options
+- Host pattern matching with regex support
+- Multiple inventory file support
+- Automatic variable extraction from inventory
+
+### Advanced Configuration Examples
+
+#### Multi-Environment Setup
 
 ```yaml
-netbox:
-  default_filters:
-    status: "active"           # Only active hosts
-    role: "virtual-machine"    # Only VMs
-    platform: "linux"         # Only Linux hosts
-    cluster: "production"      # Specific cluster
-    has_primary_ip: "true"     # Only hosts with IP addresses
+# Production + Staging + Development environments
+sot:
+  providers: ["static", "netbox", "ansible"]
+  import:
+    # Production static hosts
+    - name: "prod-critical"
+      type: static
+      hosts:
+        - name: "prod-lb-01"
+          ip: "10.0.1.10"
+          description: "Production Load Balancer"
+          tags: ["production", "critical", "loadbalancer"]
+
+    # Production NetBox
+    - name: "prod-netbox"
+      type: netbox
+      url: "https://netbox.prod.company.com"
+      token: "prod-token"
+      default_filters:
+        status: "active"
+        cluster: "production"
+
+    # Staging Ansible inventory
+    - name: "staging-hosts"
+      type: ansible
+      inventory_paths: ["/etc/ansible/staging.yml"]
+      default_filters:
+        groups: ["staging"]
+        exclude_groups: ["deprecated"]
+
+    # Development environment
+    - name: "dev-netbox"
+      type: netbox
+      url: "https://netbox.dev.company.com"
+      token: "dev-token"
+      default_filters:
+        status: "active"
+        cluster: "development"
+
+ui:
+  table_columns: ["name", "ip", "cluster", "tags", "provider"]  # Show provider source
 ```
 
 ### Ansible Inventory Format
@@ -333,18 +489,34 @@ logging:
    - Check that group filters match existing groups in inventory
    - Verify NetBox filters match available hosts
    - Try removing filters temporarily to see all available hosts
+   - Check provider names in logs to ensure all providers are initializing
 
-4. **SSH Key Authentication Failed**
+4. **Static Hosts Not Appearing**
+   - Verify YAML syntax in configuration file
+   - Check that host entries have required `name` and `ip` fields
+   - Ensure static provider is listed in `sot.providers` array
+
+5. **Multiple Provider Issues**
+   - Check provider names are unique in `sot.import` list
+   - Verify each provider type is listed in `sot.providers` array
+   - Check logs to see which providers initialized successfully
+   - Ensure at least one provider is properly configured
+
+6. **Provider Column Not Showing**
+   - Add `"provider"` to `ui.table_columns` in configuration
+   - Clear cache and restart SSHplex to refresh UI
+
+7. **SSH Key Authentication Failed**
    - Verify SSH key path in configuration
    - Ensure key has proper permissions (`chmod 600`)
    - Test manual SSH connection to target hosts
 
-5. **tmux Session Not Created**
+8. **tmux Session Not Created**
    - Ensure tmux is installed and in PATH
    - Check SSH connectivity to at least one host
    - Verify tmux is not already running a session with the same name
 
-6. **Mixed Provider Issues**
+9. **Mixed Provider Issues**
    - SSHplex continues with available providers if one fails
    - Check logs to see which providers initialized successfully
    - Ensure at least one provider is properly configured
