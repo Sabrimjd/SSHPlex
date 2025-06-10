@@ -198,8 +198,13 @@ class NetBoxProvider(SoTProvider):
                 platform="vm",  # Mark as virtual machine
                 cluster=str(vm.cluster) if vm.cluster else "unknown",
                 tags=tags,
-                description=str(vm.description) if vm.description else ""
+                description=str(vm.description) if vm.description else "",
+                provider=getattr(self, 'provider_name', 'netbox')
             )
+
+            # Add source information to metadata
+            host.metadata['sources'] = [getattr(self, 'provider_name', 'netbox')]
+            host.metadata['provider'] = getattr(self, 'provider_name', 'netbox')
 
             self.logger.debug(f"Added VM host: {host}")
             return host
@@ -243,8 +248,13 @@ class NetBoxProvider(SoTProvider):
                 platform=str(device.platform) if device.platform else "device",
                 cluster=str(device.rack) if device.rack else "unknown",  # Use rack as cluster for devices
                 tags=tags,
-                description=str(device.comments) if device.comments else ""
+                description=str(device.comments) if device.comments else "",
+                provider=getattr(self, 'provider_name', 'netbox')
             )
+
+            # Add source information to metadata
+            host.metadata['sources'] = [getattr(self, 'provider_name', 'netbox')]
+            host.metadata['provider'] = getattr(self, 'provider_name', 'netbox')
 
             self.logger.debug(f"Added device host: {host}")
             return host
