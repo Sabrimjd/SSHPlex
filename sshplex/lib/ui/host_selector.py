@@ -3,17 +3,78 @@
 from typing import List, Optional, Set, Any
 from datetime import datetime
 from textual.app import App, ComposeResult
-from textual.containers import Container, Vertical, Horizontal
-from textual.widgets import DataTable, Log, Static, Footer, Input
+from textual.containers import Container, Vertical, Horizontal, Grid
+from textual.widgets import DataTable, Log, Static, Footer, Input, LoadingIndicator, Label
 from textual.binding import Binding
 from textual.reactive import reactive
+from textual.screen import Screen
 from textual import events
+import asyncio
 
 from ... import __version__
 from ..logger import get_logger
 from ..sot.factory import SoTFactory
 from ..sot.base import Host
 from .session_manager import TmuxSessionManager
+
+
+class LoadingScreen(Screen):
+    """Modal screen that displays loading progress while refreshing data sources."""
+
+    CSS = """
+    LoadingScreen {
+        align: center middle;
+    }
+
+    #loading-dialog {
+        layout: vertical;
+        padding: 3;
+        width: 60;
+        height: 15;
+        border: thick $primary;
+        background: $surface;
+        content-align: center middle;
+    }
+
+    #loading-message {
+        text-align: center;
+        color: $text;
+        margin-bottom: 1;
+        width: 100%;
+    }
+
+    #loading-indicator {
+        margin-bottom: 1;
+        width: 100%;
+        content-align: center middle;
+    }
+
+    #loading-status {
+        text-align: center;
+        color: $text-muted;
+        width: 100%;
+    }
+    """
+
+    def __init__(self, message: str = "🔄 Refreshing Data Sources", status: str = "Initializing...") -> None:
+        super().__init__()
+        self.message = message
+        self.status = status
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="loading-dialog"):
+            yield Label(self.message, id="loading-message")
+            yield LoadingIndicator(id="loading-indicator")
+            yield Label(self.status, id="loading-status")
+
+    def update_status(self, status: str) -> None:
+        """Update the loading status message."""
+        try:
+            status_label = self.query_one("#loading-status", Label)
+            status_label.update(status)
+        except Exception:
+            # If the widget isn't mounted yet, just ignore the update
+            pass
 
 
 class HostSelector(App):
@@ -39,17 +100,25 @@ class HostSelector(App):
     }
 
     #status-bar {
-        height: 3;
+        height: 2;
         background: $surface;
         color: $text;
-        padding: 0 1;
-        margin: 0 1;
+        padding: 0 0;
+        margin: 0 0;
         dock: bottom;
         layout: horizontal;
     }
 
     #status-content {
         width: 1fr;
+    }
+
+    #cache-display {
+        width: 20;
+        background: transparent;
+        color: $text-muted;
+        text-align: center;
+        margin: 0 1;
     }
 
     #version-display {
@@ -131,6 +200,8 @@ class HostSelector(App):
         self.log_widget: Optional[Log] = None
         self.status_widget: Optional[Static] = None
         self.search_input: Optional[Input] = None
+        self.cache_widget: Optional[Static] = None
+        self.loading_screen: Optional[LoadingScreen] = None
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -148,9 +219,10 @@ class HostSelector(App):
         with Container(id="main-panel"):
             yield DataTable(id="host-table", cursor_type="row")
 
-        # Status bar with version display
+        # Status bar with cache info and version display
         with Container(id="status-bar"):
             yield Static("SSHplex - Loading hosts...", id="status-content")
+            yield Static("Cache: --", id="cache-display")
             yield Static(f"SSHplex v{__version__}", id="version-display")
 
         # Footer with keybindings
@@ -164,6 +236,7 @@ class HostSelector(App):
             self.log_widget = self.query_one("#log", Log)
         self.status_widget = self.query_one("#status-content", Static)
         self.search_input = self.query_one("#search-input", Input)
+        self.cache_widget = self.query_one("#cache-display", Static)
 
         # Setup table columns
         self.setup_table()
@@ -173,7 +246,7 @@ class HostSelector(App):
             self.table.focus()
 
         # Load hosts from SoT providers
-        self.call_later(self.load_hosts)
+        self.run_worker(self.load_hosts(), name="initial_load")
 
         self.log_message("SSHplex TUI started")
 
@@ -210,12 +283,84 @@ class HostSelector(App):
                 # Provider column for showing source
                 self.table.add_column("Provider", width=None, key="provider")
 
+    def show_loading_screen(self, message: str = "🔄 Refreshing Data Sources", status: str = "Initializing...") -> None:
+        """Show the loading screen modal."""
+        self.loading_screen = LoadingScreen(message=message, status=status)
+        self.push_screen(self.loading_screen)
+
+    def hide_loading_screen(self) -> None:
+        """Hide the loading screen modal."""
+        if self.loading_screen:
+            self.pop_screen()
+            self.loading_screen = None
+
+    def update_cache_display(self) -> None:
+        """Update the cache display with current cache information."""
+        if not self.cache_widget or not self.sot_factory:
+            return
+
+        try:
+            cache_info = self.sot_factory.get_cache_info()
+            if cache_info:
+                age_hours = cache_info.get('age_hours', 0)
+                if age_hours < 1:
+                    age_minutes = int(age_hours * 60)
+                    cache_text = f"Cache: {age_minutes}m"
+                elif age_hours < 24:
+                    cache_text = f"Cache: {age_hours:.1f}h"
+                else:
+                    age_days = int(age_hours / 24)
+                    cache_text = f"Cache: {age_days}d"
+
+                # Add TTL info
+                ttl_hours = getattr(self.config.cache, 'ttl_hours', 24)
+                cache_text += f" (TTL: {ttl_hours}h)"
+            else:
+                cache_text = "Cache: None"
+
+            self.cache_widget.update(cache_text)
+        except Exception:
+            self.cache_widget.update("Cache: --")
+
+    def update_loading_status(self, status: str) -> None:
+        """Update the loading status message.
+
+        Args:
+            status: Status message to display
+        """
+        if self.loading_screen:
+            try:
+                self.loading_screen.update_status(status)
+            except Exception as e:
+                # Log the error but don't crash the app
+                self.log_message(f"Warning: Could not update loading status: {e}", level="warning")
+
     async def load_hosts(self, force_refresh: bool = False) -> None:
         """Load hosts from all configured SoT providers with caching support.
 
         Args:
             force_refresh: If True, bypass cache and fetch fresh data from providers
         """
+        # Determine if we need to show loading screen
+        show_loading = force_refresh
+
+        # Check if cache exists for initial load
+        if not force_refresh:
+            # Initialize SoT factory to check cache
+            temp_factory = SoTFactory(self.config)
+            cache_info = temp_factory.get_cache_info()
+            if not cache_info:
+                # No cache exists, this is first run - show loading screen
+                show_loading = True
+
+        # Show loading screen for refresh operations or initial load without cache
+        if show_loading:
+            if force_refresh:
+                self.show_loading_screen("🔄 Refreshing Data Sources", "Initializing providers...")
+            else:
+                self.show_loading_screen("📡 Loading Data Sources", "Initializing providers...")
+            await asyncio.sleep(0.2)  # Give the modal time to mount properly
+
         if force_refresh:
             self.log_message("Force refreshing hosts from all SoT providers...")
             self.update_status("Refreshing hosts from providers...")
@@ -225,6 +370,10 @@ class HostSelector(App):
 
         try:
             # Initialize SoT factory
+            if show_loading:
+                self.update_loading_status("Initializing SoT factory...")
+                await asyncio.sleep(0.1)  # Allow UI to update
+
             self.sot_factory = SoTFactory(self.config)
 
             # Check cache status first
@@ -235,33 +384,59 @@ class HostSelector(App):
                     self.log_message(f"Found cache with {cache_info.get('host_count', 0)} hosts (age: {cache_age:.1f} hours)")
 
             # Initialize all providers (needed for refresh even if cache exists)
+            if show_loading:
+                self.update_loading_status("Connecting to providers...")
+                await asyncio.sleep(0.1)  # Allow UI to update
+
             if not self.sot_factory.initialize_providers():
                 self.log_message("ERROR: Failed to initialize any SoT providers", level="error")
                 self.update_status("Error: SoT provider initialization failed")
+                if show_loading:
+                    self.hide_loading_screen()
                 return
 
             provider_names = ', '.join(self.sot_factory.get_provider_names())
             self.log_message(f"Successfully initialized {self.sot_factory.get_provider_count()} provider(s): {provider_names}")
 
             # Get hosts (with caching support)
+            if show_loading:
+                if force_refresh:
+                    self.update_loading_status("Fetching fresh host data...")
+                else:
+                    self.update_loading_status("Loading host data...")
+                await asyncio.sleep(0.1)  # Allow UI to update
+
             self.hosts = self.sot_factory.get_all_hosts(force_refresh=force_refresh)
             self.filtered_hosts = self.hosts.copy()  # Initialize filtered hosts
 
             if not self.hosts:
                 self.log_message("WARNING: No hosts found matching filters", level="warning")
                 self.update_status("No hosts found")
+                if show_loading:
+                    self.hide_loading_screen()
                 return
 
             # Populate table
+            if show_loading:
+                self.update_loading_status("Updating display...")
+                await asyncio.sleep(0.1)  # Allow UI to update
+
             self.populate_table()
 
             source_msg = "fresh data from providers" if force_refresh else "cache/providers"
             self.log_message(f"Loaded {len(self.hosts)} hosts successfully from {source_msg}")
             self.update_status_with_mode()
+            self.update_cache_display()
+
+            # Hide loading screen if it was shown
+            if show_loading:
+                self.hide_loading_screen()
 
         except Exception as e:
             self.log_message(f"ERROR: Failed to load hosts: {e}", level="error")
             self.update_status(f"Error: {e}")
+            if show_loading:
+                self.hide_loading_screen()
 
     def populate_table(self) -> None:
         """Populate the table with host data."""
@@ -387,7 +562,7 @@ class HostSelector(App):
     def action_refresh_hosts(self) -> None:
         """Refresh hosts by fetching fresh data from all SoT providers."""
         self.log_message("Refreshing hosts from SoT providers...")
-        self.call_later(self.load_hosts, force_refresh=True)
+        self.run_worker(self.load_hosts(force_refresh=True), name="refresh_hosts")
 
     def update_row_checkbox(self, row_key: str, selected: bool) -> None:
         """Update the checkbox for a specific row."""
