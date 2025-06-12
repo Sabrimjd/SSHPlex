@@ -92,21 +92,6 @@ sudo apt update && sudo apt install tmux python3 python3-pip
 sudo dnf install tmux python3 python3-pip
 ```
 
-## 📸 Screenshots
-
-### TUI Host Selection Interface
-
-![host_lists.png](https://raw.githubusercontent.com/sabrimjd/sshplex/master/.github/images/host_lists.png)
-
-### TUI Session manager
-
-![session_manager.png](https://raw.githubusercontent.com/sabrimjd/sshplex/master/.github/images/session_manager.png)
-
-### TMUX Session with Multiple SSH Connections
-
-![tmux.png](https://raw.githubusercontent.com/sabrimjd/sshplex/master/.github/images/tmux.png)
-
-
 ## 🚀 Quick Start
 
 ### Option 1: Full TUI Interface (Recommended)
