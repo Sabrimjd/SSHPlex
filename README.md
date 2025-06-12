@@ -1,4 +1,4 @@
-![logo.png](https://raw.githubusercontent.com/sabrimjd/sshplex/master/.github/images/logo.png)
+![SSHPlex Demo](demo/demo.gif)
 
 **Multiplex your SSH connections with style**
 
