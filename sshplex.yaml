@@ -9,11 +9,11 @@ sot:
     - name: "prod-inventory"
       type: ansible
       inventory_paths:
-        - "/Users/pal31/projects/sshplex/prod-inventory.yaml"
+        - "/Users/myuser/projects/sshplex/prod-inventory.yaml"
     - name: "nonprod-inventory"
       type: ansible
       inventory_paths:
-        - "/Users/pal31/projects/sshplex/nonprod-inventory.yaml"
+        - "/Users/myuser/projects/sshplex/nonprod-inventory.yaml"
       # default_filters:
       #   groups: ["RabbitMQ_Metrics_ag02"]
       #   exclude_groups: []
@@ -21,7 +21,7 @@ sot:
 
 
 ssh:
-  username: "pal31"
+  username: "myuser"
   key_path: "~/.ssh/id_rsa"
   timeout: 10
   port: 22
