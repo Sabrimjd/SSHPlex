@@ -116,7 +116,7 @@ class TmuxManager(MultiplexerBase):
                         ensure_window_available()
                         vertical_split = True  # first split in new window
                         pane = self.current_window.split_window(vertical=vertical_split)
-                
+
                 if pane is None:
                     raise RuntimeError(f"Failed to create tmux pane for {hostname}")
 
@@ -248,26 +248,44 @@ class TmuxManager(MultiplexerBase):
                 if auto_attach:
                     self.logger.info(f"SSHplex: Auto-attaching to tmux session '{self.session_name}'")
                     # Auto-attach to the session by replacing current shell
-                    import os
-                    import sys
-                    # Use exec to replace the current Python process with tmux attach
-                    # os.execlp("tmux", "tmux", "-CC", "attach-session", "-t", self.session_name)
-                    import subprocess
-                    # subprocess.call(["iterm", "-CC", "attach-session", "-t", self.session_name])
-                    """
-                    Open a new iTerm2 window and attach to the given tmux session in control mode.
-                    """
-                    apple_script = f'''
-                    tell application "iTerm2"
-                        create window with default profile
-                        tell current session of current window
-                            set name to "{self.session_name}"
-                            write text "tmux -CC attach-session -t {self.session_name}; exit"
-                        end tell
-                    end tell
-                    '''
-                    subprocess.Popen(["osascript", "-e", apple_script])
 
+                    import platform
+                    import subprocess
+
+                    system = platform.system().lower()
+
+                    try:
+                        if "darwin" in system:  # macOS
+                            apple_script = f'''
+                            tell application "iTerm2"
+                                create window with default profile
+                                tell current session of current window
+                                    set name to "{self.session_name}"
+                                    write text "tmux -CC attach-session -t {self.session_name}; exit"
+                                end tell
+                            end tell
+                            '''
+                            # Launch osascript in the background
+                            subprocess.Popen(
+                                ["osascript", "-e", apple_script],
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                start_new_session=True  # ensures no signal ties to your main TUI
+                            )
+
+                        elif "linux" in system:
+                            subprocess.Popen(
+                                ["gnome-terminal", "--", "tmux", "-CC", "attach-session", "-t", self.session_name],
+                                start_new_session=True
+                            )
+
+                        elif "windows" in system:
+                            subprocess.Popen(
+                                ["wt", "tmux", "-CC", "attach-session", "-t", self.session_name],
+                                start_new_session=True
+                            )
+                    except Exception as e:
+                        print(f"⚠️ Failed to launch tmux session: {e}")
                 else:
                     self.logger.info(f"SSHplex: Tmux session '{self.session_name}' is ready for attachment")
                     print(f"\nTo attach to the session, run: tmux attach-session -t {self.session_name}")
