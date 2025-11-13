@@ -556,8 +556,70 @@ class HostSelector(App):
         self.log_message("INFO: Exiting SSHplex TUI application...", level="info")
 
         # Exit the app and return selected hosts
-        self.action_deselect_all()
-        self.app.exit(selected_host_objects)
+        # self.action_deselect_all()
+
+        # Log the settings and selection results
+        mode = "Panes" if self.use_panes else "Tabs"
+        broadcast = "ON" if self.use_broadcast else "OFF"
+        self.log_message(f"SSHplex settings - Mode: {mode}, Broadcast: {broadcast}")
+
+        # The app.run() may return None or a list of hosts
+        if isinstance(selected_host_objects, list) and len(selected_host_objects) > 0:
+            self.log_message(f"User selected {len(selected_host_objects)} hosts for connection")
+            for host in selected_host_objects:
+                self.log_message(f"  - {host.name} ({host.ip})")
+
+            # Create tmux panes or windows for selected hosts
+            mode = "panes" if self.use_panes else "windows"
+            self.log_message(f"SSHplex: Creating tmux {mode} for selected hosts")
+
+            # Create connector with timestamped session name and max panes per window
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            session_name = f"sshplex-{timestamp}"
+            max_panes_per_window = self.config.tmux.max_panes_per_window
+            from ...sshplex_connector import SSHplexConnector
+            connector = SSHplexConnector(session_name, max_panes_per_window)
+
+            # Connect to hosts (creates panes or windows with SSH connections)
+            if connector.connect_to_hosts(
+                hosts=selected_host_objects,
+                username=self.config.ssh.username,
+                key_path=self.config.ssh.key_path,
+                port=self.config.ssh.port,
+                use_panes=self.use_panes,
+                use_broadcast=self.use_broadcast
+            ):
+                session_name = connector.get_session_name()
+                mode_display = "panes" if self.use_panes else "windows"
+                self.log_message(f"SSHplex: Successfully created tmux session '{session_name}' with {mode_display}")
+                self.log_message(f"SSHplex: {len(selected_host_objects)} SSH connections established")
+
+                # Display success message and auto-attach
+                print(f"\n✅ SSHplex Session Created Successfully!")
+                print(f"📡 tmux session: {session_name}")
+                print(f"🔗 {len(selected_host_objects)} SSH connections established in {mode_display}")
+                broadcast_status = " (ENABLED)" if self.use_broadcast else " (DISABLED)"
+                print(f"📢 Broadcast mode: {broadcast_status}")
+                print(f"\n🚀 Auto-attaching to session...")
+                print(f"\n⚡ tmux commands (once attached):")
+                if self.use_panes:
+                    print(f"   - Switch panes: Ctrl+b then arrow keys")
+                else:
+                    print(f"   - Switch windows: Ctrl+b then n/p or number keys")
+                print(f"   - Toggle broadcast: Ctrl+b then b")
+                print(f"   - Detach session: Ctrl+b then d")
+                print(f"   - List sessions: tmux list-sessions")
+
+                # Auto-attach to the session (this will replace the current process)
+                connector.attach_to_session(auto_attach=True)
+            else:
+                self.log_message("SSHplex: Failed to create SSH connections")
+                return 1
+
+        else:
+            self.log_message("No hosts were selected")
+
+        #self.app.exit(selected_host_objects)
 
     def action_show_sessions(self) -> None:
         """Show the tmux session manager modal."""
