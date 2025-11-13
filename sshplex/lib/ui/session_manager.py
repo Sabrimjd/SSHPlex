@@ -247,7 +247,22 @@ class TmuxSessionManager(ModalScreen):
 
                 # Auto-attach to the session by replacing current process
                 import os
-                os.execlp("tmux", "tmux", "attach-session", "-t", session.name)
+                #os.execlp("tmux", "tmux", "attach-session", "-t", session.name)
+                import subprocess
+                #subprocess.call(["tmux", "-CC", "attach-session", "-t", self.session_name])
+                apple_script = f'''
+                tell application "iTerm2"
+                    repeat with w in windows
+                        if name of w contains "{session.name}" then
+                            select w
+                            activate
+                            return
+                        end if
+                    end repeat
+                end tell
+                '''
+
+                subprocess.run(["osascript", "-e", apple_script])
             else:
                 self.logger.warning(f"SSHplex: Invalid cursor row {cursor_row}")
         except Exception as e:

@@ -60,45 +60,68 @@ class TmuxManager(MultiplexerBase):
             return False
 
     def create_pane(self, hostname: str, command: Optional[str] = None) -> bool:
-        """Create a new pane for the given hostname."""
+        """Create a new pane for the given hostname, maximizing the number of panes per window."""
         try:
+            # Ensure session and current window exist
             if self.session is None or self.current_window is None:
                 if not self.create_session():
                     return False
 
             self.logger.info(f"SSHplex: Creating pane for host '{hostname}'")
 
-            # Check if we need to create a new window due to pane limit
-            if self.current_window_pane_count >= self.max_panes_per_window:
-                self.logger.info(f"SSHplex: Reached max panes per window ({self.max_panes_per_window}), creating new window")
-                window_index = len(self.windows)
-                if self.session is not None:
-                    new_window = self.session.new_window(window_name=f"sshplex-{window_index}")
-                    if new_window:
-                        self.current_window = new_window
-                        self.windows[window_index] = new_window
-                        self.current_window_pane_count = 0
-                        self.logger.info(f"SSHplex: Created new window {window_index} for additional panes")
+            # Helper: create new window if needed
+            def ensure_window_available():
+                if self.current_window_pane_count >= self.max_panes_per_window:
+                    self.logger.info(f"SSHplex: Reached max panes per window ({self.max_panes_per_window}), creating new window")
+                    window_index = len(self.windows)
+                    if self.session is not None:
+                        new_window = self.session.new_window(window_name=f"sshplex-{window_index}")
+                        if new_window:
+                            self.current_window = new_window
+                            self.windows[window_index] = new_window
+                            self.current_window_pane_count = 0
+                            self.logger.info(f"SSHplex: Created new window {window_index} for additional panes")
+                        else:
+                            self.logger.error("SSHplex: Failed to create new window, using current window")
                     else:
-                        self.logger.error("SSHplex: Failed to create new window, using current window")
-                else:
-                    self.logger.error("SSHplex: No session available for creating new window")
+                        self.logger.error("SSHplex: No session available for creating new window")
 
-            # Split window to create new pane (except for the first pane in current window)
+            ensure_window_available()
+
             if self.current_window is None:
                 self.logger.error("SSHplex: No window available for pane creation")
                 return False
 
+            # Create pane
             if self.current_window_pane_count == 0:
-                # First pane in this window - use the existing window pane
+                # First pane in this window: use attached pane
                 pane = self.current_window.attached_pane
                 if pane is None:
                     raise RuntimeError(f"No attached pane available for {hostname}")
             else:
-                # Additional panes - split the window
-                pane = self.current_window.split_window()
+                # Additional panes - attempt split with fallback
+                vertical_split = (self.current_window_pane_count % 2 == 0)
+                try:
+                    pane = self.current_window.split_window(vertical=vertical_split)
+                except Exception as e:
+                    # Handle "no space" error by resizing or creating a new window
+                    self.logger.warning(f"Pane split failed ({e}), attempting layout adjustment")
+                    try:
+                        # Resize window to fit more panes
+                        self.current_window.resize_window(height=80, width=200)
+                        pane = self.current_window.split_window(vertical=vertical_split)
+                    except Exception:
+                        # If still fails, create a new window
+                        self.logger.info("Creating new window due to insufficient space")
+                        ensure_window_available()
+                        vertical_split = True  # first split in new window
+                        pane = self.current_window.split_window(vertical=vertical_split)
+                
                 if pane is None:
                     raise RuntimeError(f"Failed to create tmux pane for {hostname}")
+
+            # Balance layout for best use of space
+            self.current_window.select_layout("tiled")
 
             # Store pane reference and increment counter
             self.panes[hostname] = pane
@@ -107,11 +130,12 @@ class TmuxManager(MultiplexerBase):
             # Set pane title
             self.set_pane_title(hostname, hostname)
 
-            # Execute the provided command (should be SSH command)
+            # Execute command if provided
             if command:
                 self.send_command(hostname, command)
 
-            self.logger.info(f"SSHplex: Pane created for '{hostname}' successfully (window panes: {self.current_window_pane_count}/{self.max_panes_per_window})")
+            self.logger.info(f"SSHplex: Pane created for '{hostname}' successfully "
+                            f"(window panes: {self.current_window_pane_count}/{self.max_panes_per_window})")
             return True
 
         except Exception as e:
@@ -227,7 +251,23 @@ class TmuxManager(MultiplexerBase):
                     import os
                     import sys
                     # Use exec to replace the current Python process with tmux attach
-                    os.execlp("tmux", "tmux", "attach-session", "-t", self.session_name)
+                    # os.execlp("tmux", "tmux", "-CC", "attach-session", "-t", self.session_name)
+                    import subprocess
+                    # subprocess.call(["iterm", "-CC", "attach-session", "-t", self.session_name])
+                    """
+                    Open a new iTerm2 window and attach to the given tmux session in control mode.
+                    """
+                    apple_script = f'''
+                    tell application "iTerm2"
+                        create window with default profile
+                        tell current session of current window
+                            set name to "{self.session_name}"
+                            write text "tmux -CC attach-session -t {self.session_name}; exit"
+                        end tell
+                    end tell
+                    '''
+                    subprocess.Popen(["osascript", "-e", apple_script])
+
                 else:
                     self.logger.info(f"SSHplex: Tmux session '{self.session_name}' is ready for attachment")
                     print(f"\nTo attach to the session, run: tmux attach-session -t {self.session_name}")
