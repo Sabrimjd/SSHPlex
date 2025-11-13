@@ -88,7 +88,7 @@ class SSHplexConnector:
 
     def _build_ssh_command(self, hostname: str, username: str, key_path: Optional[str] = None, port: int = 22) -> str:
         """Build SSH command string."""
-        cmd_parts = ["ssh"]
+        cmd_parts = ["TERM=xterm-256color ssh"]
 
         # Add SSH options
         cmd_parts.extend(["-o", "StrictHostKeyChecking=no"])
