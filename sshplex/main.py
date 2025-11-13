@@ -196,7 +196,7 @@ def tui_mode(config: Any, logger: Any) -> int:
 
                 # Auto-attach to the session (this will replace the current process)
                 connector.attach_to_session(auto_attach=True)
-
+                tui_mode(config, logger)
             else:
                 logger.error("SSHplex: Failed to create SSH connections")
                 return 1

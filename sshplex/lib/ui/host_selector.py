@@ -213,7 +213,7 @@ class HostSelector(App):
 
         # Search input (hidden by default)
         with Container(id="search-container"):
-            yield Input(placeholder="Search hosts by name...", id="search-input")
+            yield Input(placeholder="Search hosts...", id="search-input")
 
         # Main content panel
         with Container(id="main-panel"):
@@ -266,6 +266,9 @@ class HostSelector(App):
             if column == "name":
                 # Name gets more space as it's usually important
                 self.table.add_column("Name", width=None, key="name")
+            if column == "site":
+                # Name gets more space as it's usually important
+                self.table.add_column("Site", width=None, key="site")
             elif column == "ip":
                 # IP addresses have predictable length, can be smaller
                 self.table.add_column("IP Address", width=None, key="ip")
@@ -463,6 +466,8 @@ class HostSelector(App):
             for column in self.config.ui.table_columns:
                 if column == "name":
                     row_data.append(host.name)
+                if column == "site":
+                    row_data.append(host.site)
                 elif column == "ip":
                     row_data.append(host.ip)
                 elif column == "cluster":
@@ -551,6 +556,7 @@ class HostSelector(App):
         self.log_message("INFO: Exiting SSHplex TUI application...", level="info")
 
         # Exit the app and return selected hosts
+        self.action_deselect_all()
         self.app.exit(selected_host_objects)
 
     def action_show_sessions(self) -> None:
@@ -665,14 +671,24 @@ class HostSelector(App):
             self.filter_hosts()
 
     def filter_hosts(self) -> None:
-        """Filter hosts based on search term."""
-        if not self.search_filter:
-            self.filtered_hosts = self.hosts.copy()
-        else:
-            self.filtered_hosts = [
-                host for host in self.hosts
-                if self.search_filter in host.name.lower()
-            ]
+        term = (self.search_filter or "").lower()
+        import fnmatch
+
+        term = (term or "").strip().lower()
+
+        # Automatically add wildcards around the search term
+        if not term.startswith("*"):
+            term = "*" + term
+        if not term.endswith("*"):
+            term = term + "*"
+
+        self.filtered_hosts = [
+            host for host in self.hosts
+            if any(
+                fnmatch.fnmatchcase((getattr(host, attr, "") or "").lower(), term)
+                for attr in ("name", "cluster", "ip", "role")
+            )
+        ]
 
         # Re-populate table with filtered results
         self.populate_table()
