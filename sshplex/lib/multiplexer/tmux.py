@@ -1,5 +1,7 @@
 """SSHplex tmux multiplexer implementation."""
 
+import subprocess
+
 import libtmux
 from typing import Optional, Dict
 from datetime import datetime
@@ -261,6 +263,7 @@ class TmuxManager(MultiplexerBase):
                                 create window with default profile
                                 tell current session of current window
                                     set name to "{self.session_name}"
+                                    write text "tmux set-option -t {self.session_name} -g mouse on"
                                     write text "tmux -CC attach-session -t {self.session_name}; exit"
                                 end tell
                             end tell
