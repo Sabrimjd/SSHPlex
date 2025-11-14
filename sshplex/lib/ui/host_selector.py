@@ -556,7 +556,7 @@ class HostSelector(App):
         self.log_message("INFO: Exiting SSHplex TUI application...", level="info")
 
         # Exit the app and return selected hosts
-        # self.action_deselect_all()
+        self.action_deselect_all()
 
         # Log the settings and selection results
         mode = "Panes" if self.use_panes else "Tabs"
