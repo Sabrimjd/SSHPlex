@@ -263,6 +263,9 @@ class TmuxManager(MultiplexerBase):
                                 create window with default profile
                                 tell current session of current window
                                     set name to "{self.session_name}"
+                                    write text "set-option -g allow-rename off"
+                                    write text "set-option -g automatic-rename off"
+                                    write text "tmux rename-window -t {self.session_name} '{self.session_name}'"
                                     write text "tmux set-option -t {self.session_name} -g mouse on"
                                     write text "tmux -CC attach-session -t {self.session_name}; exit"
                                 end tell
