@@ -585,7 +585,7 @@ class HostSelector(App):
     def action_show_sessions(self) -> None:
         """Show the tmux session manager modal."""
         self.log_message("Opening tmux session manager...")
-        session_manager = TmuxSessionManager()
+        session_manager = TmuxSessionManager(self.config)
         self.push_screen(session_manager)
 
     def action_refresh_hosts(self) -> None:
