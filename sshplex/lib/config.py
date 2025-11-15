@@ -53,6 +53,7 @@ class TmuxConfig(BaseModel):
     broadcast: bool = False  # Start with broadcast off
     window_name: str = "sshplex"
     max_panes_per_window: int = Field(default=5, description="Maximum panes per window before creating a new window")
+    control_with_iterm2: bool = False  # Start with broadcast off
 
 
 class AnsibleConfig(BaseModel):
@@ -60,6 +61,15 @@ class AnsibleConfig(BaseModel):
     inventory_paths: List[str] = Field(default_factory=list, description="List of paths to Ansible inventory YAML files")
     default_filters: Dict[str, Any] = Field(default_factory=dict)
 
+class ConsulConfig(BaseModel):
+    """Consul-specific configuration with defaults."""
+    host: str = Field("consul.example.com", description="Consul host address")
+    port: int = Field(443, description="Consul port number")
+    token: str = Field("default_token", description="Consul token for authentication")
+    scheme: str = Field("https", description="URL scheme (e.g., 'https')")
+    verify: bool = Field(False, description="Whether to verify SSL certificates")
+    dc: str = Field("dc1", description="Datacenter name")
+    cert: str = Field("", description="Path to SSL certificate")
 
 class SoTImportConfig(BaseModel):
     """Individual SoT import configuration."""
@@ -79,6 +89,8 @@ class SoTImportConfig(BaseModel):
     # Ansible provider fields
     inventory_paths: Optional[List[str]] = None
 
+    # Consul provider fields
+    config: Optional[ConsulConfig] = None
 
 class SoTConfig(BaseModel):
     """Source of Truth configuration."""
