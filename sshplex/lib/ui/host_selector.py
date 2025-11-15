@@ -263,28 +263,7 @@ class HostSelector(App):
 
         # Add configured columns with proportional widths
         for column in self.config.ui.table_columns:
-            if column == "name":
-                # Name gets more space as it's usually important
-                self.table.add_column("Name", width=None, key="name")
-            if column == "site":
-                # Name gets more space as it's usually important
-                self.table.add_column("Site", width=None, key="site")
-            elif column == "ip":
-                # IP addresses have predictable length, can be smaller
-                self.table.add_column("IP Address", width=None, key="ip")
-            elif column == "cluster":
-                self.table.add_column("Cluster", width=None, key="cluster")
-            elif column == "role":
-                self.table.add_column("Role", width=None, key="role")
-            elif column == "tags":
-                # Tags might be longer, give more space
-                self.table.add_column("Tags", width=None, key="tags")
-            elif column == "description":
-                # Description usually needs the most space
-                self.table.add_column("Description", width=None, key="description")
-            elif column == "provider":
-                # Provider column for showing source
-                self.table.add_column("Provider", width=None, key="provider")
+          self.table.add_column(column, width=None, key=column)
 
     def show_loading_screen(self, message: str = "🔄 Refreshing Data Sources", status: str = "Initializing...") -> None:
         """Show the loading screen modal."""
@@ -464,24 +443,7 @@ class HostSelector(App):
                 row_data[0] = "[x]"
 
             for column in self.config.ui.table_columns:
-                if column == "name":
-                    row_data.append(host.name)
-                if column == "site":
-                    row_data.append(host.site)
-                elif column == "ip":
-                    row_data.append(host.ip)
-                elif column == "cluster":
-                    row_data.append(getattr(host, 'cluster', 'N/A'))
-                elif column == "role":
-                    row_data.append(getattr(host, 'role', 'N/A'))
-                elif column == "tags":
-                    row_data.append(getattr(host, 'tags', ''))
-                elif column == "description":
-                    row_data.append(getattr(host, 'description', ''))
-                elif column == "provider":
-                    # Get provider from metadata or attribute
-                    provider = getattr(host, 'provider', host.metadata.get('provider', 'unknown'))
-                    row_data.append(provider)
+                row_data.append(getattr(host, column, 'N/A'))
 
             self.table.add_row(*row_data, key=host.name)
 
@@ -747,7 +709,7 @@ class HostSelector(App):
             host for host in self.hosts
             if any(
                 fnmatch.fnmatchcase((getattr(host, attr, "") or "").lower(), term)
-                for attr in ("name", "cluster", "ip", "role")
+                for attr in self.config.ui.table_columns
             )
         ]
 
