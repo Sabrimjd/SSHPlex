@@ -7,11 +7,13 @@ from datetime import datetime
 from .base import MultiplexerBase
 from ..logger import get_logger
 
+import platform
+import subprocess
 
 class TmuxManager(MultiplexerBase):
     """tmux implementation for SSHplex multiplexer."""
 
-    def __init__(self, session_name: Optional[str], tmux_config: Optional[any]):
+    def __init__(self, session_name: Optional[str], config: Optional[any]):
         """Initialize tmux manager with session name and max panes per window."""
         if session_name is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -24,9 +26,9 @@ class TmuxManager(MultiplexerBase):
         self.current_window: Optional[libtmux.Window] = None
         self.windows: Dict[int, libtmux.Window] = {}  # window_id -> Window
         self.panes: Dict[str, libtmux.Pane] = {}
-        self.tmux_config = tmux_config
-        self.max_panes_per_window = self.tmux_config.max_panes_per_window
+        self.config = config
         self.current_window_pane_count = 0
+        self.system = platform.system().lower()
 
     def create_session(self) -> bool:
         """Create a new tmux session with SSHplex branding."""
@@ -60,7 +62,7 @@ class TmuxManager(MultiplexerBase):
             self.logger.error(f"SSHplex: Failed to create tmux session: {e}")
             return False
 
-    def create_pane(self, hostname: str, command: Optional[str] = None) -> bool:
+    def create_pane(self, hostname: str, command: str, max_panes_per_window: str) -> bool:
         """Create a new pane for the given hostname, maximizing the number of panes per window."""
         try:
             # Ensure session and current window exist
@@ -72,8 +74,8 @@ class TmuxManager(MultiplexerBase):
 
             # Helper: create new window if needed
             def ensure_window_available():
-                if self.current_window_pane_count >= self.max_panes_per_window:
-                    self.logger.info(f"SSHplex: Reached max panes per window ({self.max_panes_per_window}), creating new window")
+                if self.current_window_pane_count >= max_panes_per_window:
+                    self.logger.info(f"SSHplex: Reached max panes per window ({max_panes_per_window}), creating new window")
                     window_index = len(self.windows)
                     if self.session is not None:
                         new_window = self.session.new_window(window_name=f"sshplex-{window_index}")
@@ -136,7 +138,7 @@ class TmuxManager(MultiplexerBase):
                 self.send_command(hostname, command)
 
             self.logger.info(f"SSHplex: Pane created for '{hostname}' successfully "
-                            f"(window panes: {self.current_window_pane_count}/{self.max_panes_per_window})")
+                            f"(window panes: {self.current_window_pane_count}/{max_panes_per_window})")
             return True
 
         except Exception as e:
@@ -250,11 +252,8 @@ class TmuxManager(MultiplexerBase):
                 if auto_attach:
                     self.logger.info(f"SSHplex: Auto-attaching to tmux session '{self.session_name}'")
 
-                    import platform
-                    import subprocess
-                    system = platform.system().lower()
                     try:
-                        if "darwin" in system and self.tmux_config.control_with_iterm2:  # macOS
+                        if "darwin" in self.system and self.config.tmux.control_with_iterm2:  # macOS
                             apple_script = f'''
                             tell application "iTerm2"
                                 create window with default profile
@@ -267,8 +266,6 @@ class TmuxManager(MultiplexerBase):
                             # Launch osascript in the background
                             subprocess.Popen(
                                 ["osascript", "-e", apple_script],
-                                stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL,
                                 start_new_session=True  # ensures no signal ties to your main TUI
                             )
 
