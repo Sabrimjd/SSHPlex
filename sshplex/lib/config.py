@@ -38,6 +38,14 @@ class UIConfig(BaseModel):
     log_panel_height: int = 20  # Percentage of screen height
     table_columns: list = Field(default_factory=lambda: ["name", "ip", "cluster", "role", "tags"])
 
+class Proxy(BaseModel):
+    """ImportProxies configuration with defaults."""
+    name: str = Field("", description="Proxy name")
+    imports: list = Field([], description="List of imports that will use this proxy")
+    host: str = Field("", description="Proxy host or ip")
+    username: str = Field("", description="Proxy username")
+    key_path: str = Field("", description="Proxy key")
+
 
 class SSHConfig(BaseModel):
     """SSH connection configuration."""
@@ -45,7 +53,7 @@ class SSHConfig(BaseModel):
     key_path: str = Field(default="~/.ssh/id_rsa", description="Path to SSH private key")
     timeout: int = 10
     port: int = 22
-
+    proxy: List[Proxy] = Field(alias='proxy', default_factory=list, description="List of proxies")
 
 class TmuxConfig(BaseModel):
     """tmux configuration."""

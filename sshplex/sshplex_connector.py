@@ -11,14 +11,15 @@ from .lib.sot.base import Host
 class SSHplexConnector:
     """Manages SSH connections and tmux session management."""
 
-    def __init__(self, session_name: Optional[str], tmux_config: Optional[any] ):
+    def __init__(self, session_name: Optional[str], config: Optional[any] ):
         """Initialize the connector with optional session name and max panes per window."""
         if session_name is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             session_name = f"sshplex-{timestamp}"
 
         self.session_name = session_name
-        self.tmux_manager = TmuxManager(session_name, tmux_config)
+        self.config = config
+        self.tmux_manager = TmuxManager(session_name, config.tmux)
         self.logger = get_logger()
 
     def connect_to_hosts(self, hosts: List[Host], username: str, key_path: Optional[str] = None, port: int = 22, use_panes: bool = True, use_broadcast: bool = False) -> bool:
@@ -47,7 +48,7 @@ class SSHplexConnector:
                 hostname = host.ip if host.ip else host.name
 
                 # Build SSH command
-                ssh_command = self._build_ssh_command(hostname, username, key_path, port)
+                ssh_command = self._build_ssh_command(host, username, key_path, port)
 
                 self.logger.info(f"SSHplex: Connecting to {hostname} as {username}")
 
@@ -86,9 +87,24 @@ class SSHplexConnector:
             self.logger.error(f"SSHplex: Error during connection process: {e}")
             return False
 
-    def _build_ssh_command(self, hostname: str, username: str, key_path: Optional[str] = None, port: int = 22) -> str:
+    def _build_ssh_command(self, host: any, username: str, key_path: Optional[str] = None, port: int = 22) -> str:
         """Build SSH command string."""
         cmd_parts = ["TERM=xterm-256color ssh"]
+
+        try:
+          key = host.metadata['provider']
+          proxy = next(
+              (item for item in self.config.ssh.proxy if key in item.imports),
+              None
+          )
+          if proxy:
+              cmd_parts.extend([
+                  "-o", f"ProxyCommand='ssh -i {proxy.key_path} -W %h:%p {proxy.username}@{proxy.host}'"
+              ])
+        except Exception as e:
+          self.logger.error(f"SSHplex: Proxy not configured: {e}")
+
+        hostname = host.ip if host.ip else host.name
 
         # Add SSH options
         cmd_parts.extend(["-o", "StrictHostKeyChecking=no"])

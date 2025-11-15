@@ -517,9 +517,6 @@ class HostSelector(App):
         self.log_message(f"INFO: Connection request complete. Mode: {mode}, Broadcast: {broadcast}, Hosts: {len(selected_host_objects)}", level="info")
         self.log_message("INFO: Exiting SSHplex TUI application...", level="info")
 
-        # Exit the app and return selected hosts
-        self.action_deselect_all()
-
         # Log the settings and selection results
         mode = "Panes" if self.use_panes else "Tabs"
         broadcast = "ON" if self.use_broadcast else "OFF"
@@ -539,7 +536,7 @@ class HostSelector(App):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             session_name = f"sshplex-{timestamp}"
             from ...sshplex_connector import SSHplexConnector
-            connector = SSHplexConnector(session_name, tmux_config = self.config.tmux)
+            connector = SSHplexConnector(session_name, config = self.config)
 
             # Connect to hosts (creates panes or windows with SSH connections)
             if connector.connect_to_hosts(
@@ -580,7 +577,8 @@ class HostSelector(App):
         else:
             self.log_message("No hosts were selected")
 
-        #self.app.exit(selected_host_objects)
+        # Exit the app and return selected hosts
+        self.action_deselect_all()
 
     def action_show_sessions(self) -> None:
         """Show the tmux session manager modal."""
