@@ -251,6 +251,7 @@ class TmuxSessionManager(ModalScreen):
                 try:
                     if "darwin" in system and self.config.tmux.control_with_iterm2:  # macOS
                       tmux_session = self.tmux_server.find_where({"session_name": session.name})
+                      # TODO: Fix bug on opening as tabs (multiple windows are open)
                       tmux_session.switch_client()
                     else:
                       # Auto-attach to the session by replacing current process
