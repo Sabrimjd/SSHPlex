@@ -152,7 +152,7 @@ class TmuxManager(MultiplexerBase):
                 return False
 
             # Create new window with hostname as the window name
-            window = self.session.new_window(window_name=self.session_name)
+            window = self.session.new_window(window_name=hostname)
 
             if not window:
                 self.logger.error(f"SSHplex: Failed to create window for '{hostname}'")
