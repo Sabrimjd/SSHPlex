@@ -61,13 +61,15 @@ class TmuxManager(MultiplexerBase):
             self.logger.error(f"SSHplex: Failed to create tmux session: {e}")
             return False
 
-    def create_pane(self, hostname: str, command: Optional[str] = None) -> bool:
+    def create_pane(self, host: str, command: Optional[str] = None) -> bool:
         """Create a new pane for the given hostname, maximizing the number of panes per window."""
         try:
             # Ensure session and current window exist
             if self.session is None or self.current_window is None:
                 if not self.create_session():
                     return False
+
+            hostname = f"{host.ip} | {host.name}"
 
             self.logger.info(f"SSHplex: Creating pane for host '{hostname}'")
 
@@ -144,15 +146,18 @@ class TmuxManager(MultiplexerBase):
             self.logger.error(f"SSHplex: Failed to create pane for '{hostname}': {e}")
             return False
 
-    def create_window(self, hostname: str, command: Optional[str] = None) -> bool:
+    def create_window(self, host: str, command: Optional[str] = None) -> bool:
         """Create a new window (tab) in the tmux session and execute a command."""
+
         try:
             if not self.session:
                 self.logger.error("SSHplex: No active tmux session for window creation")
                 return False
 
+            hostname = f"{host.ip} | {host.name}"
+
             # Create new window with hostname as the window name
-            window = self.session.new_window(window_name=hostname)
+            window = self.session.new_window(window_name=self.session_name)
 
             if not window:
                 self.logger.error(f"SSHplex: Failed to create window for '{hostname}'")
@@ -165,6 +170,7 @@ class TmuxManager(MultiplexerBase):
                 return False
 
             # Store the pane reference
+            pane.send_keys(f'echo -ne "\\033]0;{hostname}\\007"', enter=False)
             self.panes[hostname] = pane
 
             # Execute the provided command (should be SSH command)
@@ -263,8 +269,6 @@ class TmuxManager(MultiplexerBase):
                                 create window with default profile
                                 tell current session of current window
                                     set name to "{self.session_name}"
-                                    write text "set-option -g allow-rename off"
-                                    write text "set-option -g automatic-rename off"
                                     write text "tmux rename-window -t {self.session_name} '{self.session_name}'"
                                     write text "tmux set-option -t {self.session_name} -g mouse on"
                                     write text "tmux -CC attach-session -t {self.session_name}; exit"
