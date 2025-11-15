@@ -7,6 +7,7 @@ from .base import SoTProvider, Host
 from .netbox import NetBoxProvider
 from .ansible import AnsibleProvider
 from .static import StaticProvider
+from .consul import ConsulProvider
 
 
 class SoTFactory:
@@ -59,6 +60,8 @@ class SoTFactory:
                     provider = self._create_netbox_provider_from_import(import_config)
                 elif import_config.type == "ansible":
                     provider = self._create_ansible_provider_from_import(import_config)
+                elif import_config.type == "consul":
+                    provider = self._create_consul_provider(import_config)
                 else:
                     self.logger.error(f"Unknown SoT provider type: {import_config.type}")
                     continue
@@ -124,6 +127,23 @@ class SoTFactory:
         return StaticProvider(
             name=import_config.name,
             hosts=import_config.hosts
+        )
+
+    def _create_consul_provider(self, import_config: Any) -> Optional[ConsulProvider]:
+        """Create Consul provider instance from import configuration.
+
+        Args:
+            import_config: Import configuration object
+
+        Returns:
+            ConsulProvider instance or None if configuration invalid
+        """
+        if not import_config.config:
+            self.logger.error(f"Consul provider '{import_config.name}' has no configuraton")
+            return None
+
+        return ConsulProvider(
+            import_config=import_config
         )
 
     def _create_netbox_provider_from_import(self, import_config: Any) -> Optional[NetBoxProvider]:

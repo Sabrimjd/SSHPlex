@@ -61,6 +61,15 @@ sot:
         groups: []
         exclude_groups: ["maintenance"]
         host_patterns: ["^staging-.*"]
+    - name: "consul-nonprod"
+      type: consul
+      config:
+        host: "consul.nonprod.example.com"
+        port: 443
+        token: "CHANGE_TOKEN_HERE"
+        scheme: "https"
+        verify: false
+        dc: "lisbon"
 
 ssh:
   username: "admin"
@@ -73,6 +82,7 @@ tmux:
   broadcast: false # Start with broadcast off
   window_name: "sshplex"
   max_panes_per_window: 5 # Maximum panes per window before creating a new window
+  control_with_iterm2: false # Only available for OSX
 
 ui:
   show_log_panel: false

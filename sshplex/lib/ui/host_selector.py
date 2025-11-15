@@ -576,9 +576,8 @@ class HostSelector(App):
             # Create connector with timestamped session name and max panes per window
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             session_name = f"sshplex-{timestamp}"
-            max_panes_per_window = self.config.tmux.max_panes_per_window
             from ...sshplex_connector import SSHplexConnector
-            connector = SSHplexConnector(session_name, max_panes_per_window)
+            connector = SSHplexConnector(session_name, tmux_config = self.config.tmux)
 
             # Connect to hosts (creates panes or windows with SSH connections)
             if connector.connect_to_hosts(

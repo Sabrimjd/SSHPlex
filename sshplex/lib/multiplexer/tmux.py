@@ -1,7 +1,5 @@
 """SSHplex tmux multiplexer implementation."""
 
-import subprocess
-
 import libtmux
 from typing import Optional, Dict
 from datetime import datetime
@@ -13,7 +11,7 @@ from ..logger import get_logger
 class TmuxManager(MultiplexerBase):
     """tmux implementation for SSHplex multiplexer."""
 
-    def __init__(self, session_name: Optional[str] = None, max_panes_per_window: int = 5):
+    def __init__(self, session_name: Optional[str], tmux_config: Optional[any]):
         """Initialize tmux manager with session name and max panes per window."""
         if session_name is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -26,7 +24,8 @@ class TmuxManager(MultiplexerBase):
         self.current_window: Optional[libtmux.Window] = None
         self.windows: Dict[int, libtmux.Window] = {}  # window_id -> Window
         self.panes: Dict[str, libtmux.Pane] = {}
-        self.max_panes_per_window = max_panes_per_window
+        self.tmux_config = tmux_config
+        self.max_panes_per_window = self.tmux_config.max_panes_per_window
         self.current_window_pane_count = 0
 
     def create_session(self) -> bool:
@@ -255,15 +254,12 @@ class TmuxManager(MultiplexerBase):
 
                 if auto_attach:
                     self.logger.info(f"SSHplex: Auto-attaching to tmux session '{self.session_name}'")
-                    # Auto-attach to the session by replacing current shell
 
                     import platform
                     import subprocess
-
                     system = platform.system().lower()
-
                     try:
-                        if "darwin" in system:  # macOS
+                        if "darwin" in system and self.tmux_config.control_with_iterm2:  # macOS
                             apple_script = f'''
                             tell application "iTerm2"
                                 create window with default profile
@@ -283,19 +279,14 @@ class TmuxManager(MultiplexerBase):
                                 start_new_session=True  # ensures no signal ties to your main TUI
                             )
 
-                        elif "linux" in system:
-                            subprocess.Popen(
-                                ["gnome-terminal", "--", "tmux", "-CC", "attach-session", "-t", self.session_name],
-                                start_new_session=True
-                            )
+                        else:
+                          import os
+                          import sys
+                          # Use exec to replace the current Python process with tmux attach
+                          os.execlp("tmux", "tmux", "attach-session", "-t", self.session_name)
 
-                        elif "windows" in system:
-                            subprocess.Popen(
-                                ["wt", "tmux", "-CC", "attach-session", "-t", self.session_name],
-                                start_new_session=True
-                            )
                     except Exception as e:
-                        print(f"⚠️ Failed to launch tmux session: {e}")
+                        self.logger.info(f"⚠️ Failed to launch tmux session: {e}")
                 else:
                     self.logger.info(f"SSHplex: Tmux session '{self.session_name}' is ready for attachment")
                     print(f"\nTo attach to the session, run: tmux attach-session -t {self.session_name}")

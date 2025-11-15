@@ -1,7 +1,6 @@
 """Ansible YAML Inventory Source of Truth provider for SSHplex."""
 
 import yaml
-import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union, Tuple
 from ..logger import get_logger
@@ -45,7 +44,7 @@ class AnsibleProvider(SoTProvider):
                     self.logger.info(f"Loading inventory from: {inventory_path}")
 
                     with open(inventory_path, 'r') as f:
-                        inventory_data = json.load(f)
+                        inventory_data = yaml.safe_load(f)
 
                     if not inventory_data:
                         self.logger.warning(f"Empty inventory file: {inventory_path}")
@@ -110,23 +109,14 @@ class AnsibleProvider(SoTProvider):
                 self.logger.info(f"Applying filters: {active_filters}")
 
             hosts = []
+
             for inventory in self.inventories:
-                # inventory_hosts = self._extract_hosts_from_inventory(
-                #     inventory['data'],
-                #     inventory['path'],
-                #     active_filters
-                # )
-                # hosts.extend(inventory_hosts)
-                for host, vars in inventory['data']['_meta']['hostvars'].items():
-                    
-                    r = self._create_host_from_vars(
-                        host,
-                        vars,
-                        group_name=vars.get('clusterId'),
-                        inventory_path="",
-                        host_patterns=""
-                    )
-                    hosts.append(r)
+                inventory_hosts = self._extract_hosts_from_inventory(
+                    inventory['data'],
+                    inventory['path'],
+                    active_filters
+                )
+                hosts.extend(inventory_hosts)
 
             # Remove duplicates based on name + ip combination
             unique_hosts = {}
@@ -290,7 +280,7 @@ class AnsibleProvider(SoTProvider):
                 name=host_name,
                 ip=ip,
                 status="active",  # Assume active since it's in inventory
-                role=host_vars.get('role', ''),  # Use group as role
+                role=group_name,  # Use group as role
                 platform="ansible",  # Mark as from Ansible
                 cluster=group_name,  # Use group as cluster
                 tags=f"ansible,{group_name}",
@@ -301,8 +291,7 @@ class AnsibleProvider(SoTProvider):
                 ansible_connection=ansible_connection,
                 ansible_group=group_name,
                 inventory_file=inventory_path,
-                provider=getattr(self, 'provider_name', 'ansible'),
-                site=host_vars.get('site', '')
+                provider=getattr(self, 'provider_name', 'ansible')
             )
 
             # Add source information to metadata
