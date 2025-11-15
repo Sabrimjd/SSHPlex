@@ -53,14 +53,14 @@ class SSHplexConnector:
 
                 if use_panes:
                     # Create pane with SSH command
-                    if self.tmux_manager.create_pane(hostname, ssh_command):
+                    if self.tmux_manager.create_pane(host, ssh_command):
                         success_count += 1
                         self.logger.info(f"SSHplex: Successfully created pane for {hostname}")
                     else:
                         self.logger.error(f"SSHplex: Failed to create pane for {hostname}")
                 else:
                     # Create window (tab) with SSH command
-                    if self.tmux_manager.create_window(hostname, ssh_command):
+                    if self.tmux_manager.create_window(host, ssh_command):
                         success_count += 1
                         self.logger.info(f"SSHplex: Successfully created window for {hostname}")
                     else:
