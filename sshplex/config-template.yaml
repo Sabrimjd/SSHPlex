@@ -76,6 +76,12 @@ ssh:
   key_path: "~/.ssh/id_ed25519"
   timeout: 10
   port: 22
+  proxy:
+    - name: "consul-nonprod-proxy"
+      imports: ['consul-nonprod']
+      host: 10.15.6.9
+      username: "admin"
+      key_path: "~/.ssh/id_rsa"
 
 tmux:
   layout: "tiled" # tiled, even-horizontal, even-vertical
