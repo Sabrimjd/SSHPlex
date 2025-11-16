@@ -202,6 +202,7 @@ class HostSelector(App):
         self.search_input: Optional[Input] = None
         self.cache_widget: Optional[Static] = None
         self.loading_screen: Optional[LoadingScreen] = None
+        self.sort_reverse = False
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -256,7 +257,7 @@ class HostSelector(App):
             return
 
         # Calculate total columns to distribute width proportionally
-        total_columns = len(self.config.ui.table_columns) + 1  # +1 for checkbox
+        # total_columns = len(self.config.ui.table_columns) + 1  # +1 for checkbox
 
         # Add checkbox column (fixed small width)
         self.table.add_column("✓", width=3, key="checkbox")
@@ -264,6 +265,16 @@ class HostSelector(App):
         # Add configured columns with proportional widths
         for column in self.config.ui.table_columns:
           self.table.add_column(column, width=None, key=column)
+
+    def on_data_table_header_selected(self, event: DataTable.HeaderSelected):
+      col = event.column_key.value
+      self.sort_reverse = not self.sort_reverse
+      hosts_to_display = self.get_hosts_to_display()
+      hosts_to_display.sort(
+          key=lambda r: getattr(r, col),
+          reverse=self.sort_reverse
+      )
+      self.populate_table(hosts_to_display)
 
     def show_loading_screen(self, message: str = "🔄 Refreshing Data Sources", status: str = "Initializing...") -> None:
         """Show the loading screen modal."""
@@ -403,7 +414,7 @@ class HostSelector(App):
                 self.update_loading_status("Updating display...")
                 await asyncio.sleep(0.1)  # Allow UI to update
 
-            self.populate_table()
+            self.populate_table(self.get_hosts_to_display())
 
             source_msg = "fresh data from providers" if force_refresh else "cache/providers"
             self.log_message(f"Loaded {len(self.hosts)} hosts successfully from {source_msg}")
@@ -420,16 +431,18 @@ class HostSelector(App):
             if show_loading:
                 self.hide_loading_screen()
 
-    def populate_table(self) -> None:
+    # Use filtered hosts if search is active, otherwise use all hosts
+    def get_hosts_to_display(self)-> None:
+      hosts_to_display = self.filtered_hosts if self.search_filter else self.hosts
+      return hosts_to_display
+
+    def populate_table(self, hosts_to_display) -> None:
         """Populate the table with host data."""
         if not self.table:
             return
 
         # Clear existing table data
         self.table.clear()
-
-        # Use filtered hosts if search is active, otherwise use all hosts
-        hosts_to_display = self.filtered_hosts if self.search_filter else self.hosts
 
         if not hosts_to_display:
             return
@@ -712,7 +725,7 @@ class HostSelector(App):
         ]
 
         # Re-populate table with filtered results
-        self.populate_table()
+        self.populate_table(self.get_hosts_to_display())
 
         # Update status
         if self.search_filter:
