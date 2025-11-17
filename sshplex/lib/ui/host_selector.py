@@ -271,7 +271,7 @@ class HostSelector(App):
       self.sort_reverse = not self.sort_reverse
       hosts_to_display = self.get_hosts_to_display()
       hosts_to_display.sort(
-          key=lambda r: getattr(r, col),
+          key=lambda r: getattr(r, col, ""),
           reverse=self.sort_reverse
       )
       self.populate_table(hosts_to_display)
