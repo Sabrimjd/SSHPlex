@@ -10,6 +10,7 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual import events
 import asyncio
+import pyperclip
 
 from ... import __version__
 from ..logger import get_logger
@@ -177,6 +178,7 @@ class HostSelector(App):
         Binding("r", "refresh_hosts", "Refresh Sources", show=True),
         Binding("escape", "focus_table", "Focus Table", show=False),
         Binding("q", "quit", "Quit", show=True),
+        Binding("c", "copy_select", "Copy", show=True),
     ]
 
     selected_hosts: reactive[Set[str]] = reactive(set())
@@ -459,6 +461,42 @@ class HostSelector(App):
                 row_data.append(getattr(host, column, 'N/A'))
 
             self.table.add_row(*row_data, key=host.name)
+
+    def action_copy_select(self) -> None:
+
+        hosts = self.get_hosts_to_display()
+        columns = self.config.ui.table_columns
+
+        # Build raw table (list of lists)
+        table = []
+
+        # Header
+        table.append(columns)
+
+        # Host rows
+        for host in hosts:
+            row = [str(getattr(host, col, "N/A")) for col in columns]
+            table.append(row)
+
+        # Compute max width for each column
+        col_widths = [
+            max(len(row[i]) for row in table)
+            for i in range(len(columns))
+        ]
+
+        # Build aligned lines
+        lines = []
+        for row in table:
+            line = "  ".join(  # two spaces between columns
+                row[i].ljust(col_widths[i])
+                for i in range(len(columns))
+            )
+            lines.append(line)
+
+        # Final clipboard text
+        text = "\n".join(lines)
+        pyperclip.copy(text)
+
 
     def action_toggle_select(self) -> None:
         """Toggle selection of current row."""
