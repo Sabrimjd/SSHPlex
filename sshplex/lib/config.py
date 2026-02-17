@@ -61,7 +61,7 @@ class TmuxConfig(BaseModel):
     broadcast: bool = False  # Start with broadcast off
     window_name: str = "sshplex"
     max_panes_per_window: int = Field(default=5, description="Maximum panes per window before creating a new window")
-    control_with_iterm2: bool = False  # Start with broadcast off
+    control_with_iterm2: bool = False  # Use iTerm2 tmux integration on macOS
 
 
 class AnsibleConfig(BaseModel):
@@ -82,7 +82,7 @@ class ConsulConfig(BaseModel):
 class SoTImportConfig(BaseModel):
     """Individual SoT import configuration."""
     name: str = Field(..., description="Unique name for this import")
-    type: str = Field(..., description="Provider type: static, netbox, ansible")
+    type: str = Field(..., description="Provider type: static, netbox, ansible, consul")
 
     # Static provider fields
     hosts: Optional[List[Dict[str, Any]]] = None

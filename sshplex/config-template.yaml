@@ -4,7 +4,7 @@ sshplex:
 
 # Source of Truth configuration
 sot:
-  providers: ["static", "netbox", "ansible"]  # Available: static, netbox, ansible
+  providers: ["static", "netbox", "ansible", "consul"]  # Available: static, netbox, ansible, consul
   import:
     - name: "production-servers"
       type: static
@@ -70,6 +70,7 @@ sot:
         scheme: "https"
         verify: false
         dc: "lisbon"
+        cert: ""  # Path to SSL certificate (optional)
 
 ssh:
   username: "admin"
@@ -88,7 +89,7 @@ tmux:
   broadcast: false # Start with broadcast off
   window_name: "sshplex"
   max_panes_per_window: 5 # Maximum panes per window before creating a new window
-  control_with_iterm2: false # Only available for OSX
+  control_with_iterm2: false # Use iTerm2 tmux integration (macOS only)
 
 ui:
   show_log_panel: false
