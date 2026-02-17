@@ -7,19 +7,22 @@ from .lib.logger import get_logger
 from .lib.multiplexer.tmux import TmuxManager
 from .lib.sot.base import Host
 
+import platform
 
 class SSHplexConnector:
     """Manages SSH connections and tmux session management."""
 
-    def __init__(self, session_name: Optional[str] = None, max_panes_per_window: int = 5):
+    def __init__(self, session_name: Optional[str], config: Optional[any] ):
         """Initialize the connector with optional session name and max panes per window."""
         if session_name is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             session_name = f"sshplex-{timestamp}"
 
         self.session_name = session_name
-        self.tmux_manager = TmuxManager(session_name, max_panes_per_window)
+        self.config = config
+        self.tmux_manager = TmuxManager(session_name, config)
         self.logger = get_logger()
+        self.system = platform.system().lower()
 
     def connect_to_hosts(self, hosts: List[Host], username: str, key_path: Optional[str] = None, port: int = 22, use_panes: bool = True, use_broadcast: bool = False) -> bool:
         """Establish SSH connections to the specified hosts using shell SSH.
@@ -47,24 +50,33 @@ class SSHplexConnector:
                 hostname = host.ip if host.ip else host.name
 
                 # Build SSH command
-                ssh_command = self._build_ssh_command(hostname, username, key_path, port)
+                ssh_command = self._build_ssh_command(host, username, key_path, port)
 
                 self.logger.info(f"SSHplex: Connecting to {hostname} as {username}")
 
                 if use_panes:
                     # Create pane with SSH command
-                    if self.tmux_manager.create_pane(hostname, ssh_command):
+                    if self.tmux_manager.create_pane(hostname, ssh_command, self.config.tmux.max_panes_per_window):
                         success_count += 1
                         self.logger.info(f"SSHplex: Successfully created pane for {hostname}")
                     else:
                         self.logger.error(f"SSHplex: Failed to create pane for {hostname}")
                 else:
                     # Create window (tab) with SSH command
-                    if self.tmux_manager.create_window(hostname, ssh_command):
-                        success_count += 1
-                        self.logger.info(f"SSHplex: Successfully created window for {hostname}")
+                    if "darwin" in self.system and self.config.tmux.control_with_iterm2:
+                      # Create pane with SSH command
+                      use_panes = False
+                      if self.tmux_manager.create_pane(hostname, ssh_command, 1):
+                          success_count += 1
+                          self.logger.info(f"SSHplex: Successfully created window for {hostname}")
+                      else:
+                          self.logger.error(f"SSHplex: Failed to create window for {hostname}")
                     else:
-                        self.logger.error(f"SSHplex: Failed to create window for {hostname}")
+                      if self.tmux_manager.create_window(hostname, ssh_command):
+                          success_count += 1
+                          self.logger.info(f"SSHplex: Successfully created window for {hostname}")
+                      else:
+                          self.logger.error(f"SSHplex: Failed to create window for {hostname}")
 
             # Apply tiled layout for multiple panes (only when using panes, not windows)
             if use_panes and success_count > 1:
@@ -86,9 +98,24 @@ class SSHplexConnector:
             self.logger.error(f"SSHplex: Error during connection process: {e}")
             return False
 
-    def _build_ssh_command(self, hostname: str, username: str, key_path: Optional[str] = None, port: int = 22) -> str:
+    def _build_ssh_command(self, host: any, username: str, key_path: Optional[str] = None, port: int = 22) -> str:
         """Build SSH command string."""
-        cmd_parts = ["ssh"]
+        cmd_parts = ["TERM=xterm-256color ssh"]
+
+        try:
+          key = host.metadata['provider']
+          proxy = next(
+              (item for item in self.config.ssh.proxy if key in item.imports),
+              None
+          )
+          if proxy:
+              cmd_parts.extend([
+                  "-o", f"ProxyCommand='ssh -i {proxy.key_path} -W %h:%p {proxy.username}@{proxy.host}'"
+              ])
+        except Exception as e:
+          self.logger.error(f"SSHplex: Proxy not configured: {e}")
+
+        hostname = host.ip if host.ip else host.name
 
         # Add SSH options
         cmd_parts.extend(["-o", "StrictHostKeyChecking=no"])
