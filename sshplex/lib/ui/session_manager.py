@@ -250,13 +250,12 @@ class TmuxSessionManager(ModalScreen):
                 system = platform.system().lower()
                 try:
                     if "darwin" in system and self.config.tmux.control_with_iterm2:  # macOS
-                      tmux_session = self.tmux_server.find_where({"session_name": session.name})
-                      # TODO: Fix bug on opening as tabs (multiple windows are open)
-                      tmux_session.switch_client()
+                        tmux_session = self.tmux_server.find_where({"session_name": session.name})
+                        tmux_session.switch_client()
                     else:
-                      # Auto-attach to the session by replacing current process
-                      import os
-                      os.execlp("tmux", "tmux", "attach-session", "-t", session.name)
+                        # Auto-attach to the session by replacing current process
+                        import os
+                        os.execlp("tmux", "tmux", "attach-session", "-t", session.name)
 
                 except Exception as e:
                     self.logger.info(f"⚠️ Failed to attach to tmux session: {e}")

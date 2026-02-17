@@ -141,7 +141,50 @@ def tui_mode(config: Any, logger: Any) -> int:
     try:
         # Start the host selector TUI
         app = HostSelector(config=config)
-        app.run()
+        selected_hosts = app.run()
+
+        if not selected_hosts:
+            logger.info("No hosts selected, exiting")
+            return 0
+
+        logger.info(f"User selected {len(selected_hosts)} hosts for connection")
+
+        use_panes = app.use_panes
+        use_broadcast = app.use_broadcast
+        mode_display = "panes" if use_panes else "windows"
+
+        # Create connector and establish connections
+        from .sshplex_connector import SSHplexConnector
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_name = f"sshplex-{timestamp}"
+        connector = SSHplexConnector(session_name, config=config)
+
+        if connector.connect_to_hosts(
+            hosts=selected_hosts,
+            username=config.ssh.username,
+            key_path=config.ssh.key_path,
+            port=config.ssh.port,
+            use_panes=use_panes,
+            use_broadcast=use_broadcast
+        ):
+            session_name = connector.get_session_name()
+            logger.info(f"Successfully created tmux session '{session_name}' with {mode_display}")
+
+            print(f"\nSSHplex Session Created Successfully!")
+            print(f"tmux session: {session_name}")
+            print(f"{len(selected_hosts)} SSH connections established in {mode_display}")
+            broadcast_status = "ENABLED" if use_broadcast else "DISABLED"
+            print(f"Broadcast mode: {broadcast_status}")
+            print(f"\nAuto-attaching to session...")
+
+            # Auto-attach to the session (this will replace the current process)
+            connector.attach_to_session(auto_attach=True)
+        else:
+            logger.error("Failed to create SSH connections")
+            print("Failed to create SSH connections")
+            return 1
+
         return 0
 
     except Exception as e:

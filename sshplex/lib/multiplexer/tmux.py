@@ -1,7 +1,7 @@
 """SSHplex tmux multiplexer implementation."""
 
 import libtmux
-from typing import Optional, Dict
+from typing import Any, Optional, Dict
 from datetime import datetime
 
 from .base import MultiplexerBase
@@ -13,7 +13,7 @@ import subprocess
 class TmuxManager(MultiplexerBase):
     """tmux implementation for SSHplex multiplexer."""
 
-    def __init__(self, session_name: Optional[str], config: Optional[any]):
+    def __init__(self, session_name: Optional[str], config: Optional[Any] = None):
         """Initialize tmux manager with session name and max panes per window."""
         if session_name is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -62,7 +62,7 @@ class TmuxManager(MultiplexerBase):
             self.logger.error(f"SSHplex: Failed to create tmux session: {e}")
             return False
 
-    def create_pane(self, hostname: str, command: str, max_panes_per_window: str) -> bool:
+    def create_pane(self, hostname: str, command: Optional[str] = None, max_panes_per_window: int = 5) -> bool:
         """Create a new pane for the given hostname, maximizing the number of panes per window."""
         try:
             # Ensure session and current window exist
@@ -270,10 +270,10 @@ class TmuxManager(MultiplexerBase):
                             )
 
                         else:
-                          import os
-                          import sys
-                          # Use exec to replace the current Python process with tmux attach
-                          os.execlp("tmux", "tmux", "attach-session", "-t", self.session_name)
+                            import os
+                            import sys
+                            # Use exec to replace the current Python process with tmux attach
+                            os.execlp("tmux", "tmux", "attach-session", "-t", self.session_name)
 
                     except Exception as e:
                         self.logger.info(f"⚠️ Failed to launch tmux session: {e}")
