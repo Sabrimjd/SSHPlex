@@ -10,6 +10,7 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual import events
 import asyncio
+import pyperclip
 
 from ... import __version__
 from ..logger import get_logger
@@ -177,6 +178,7 @@ class HostSelector(App):
         Binding("r", "refresh_hosts", "Refresh Sources", show=True),
         Binding("escape", "focus_table", "Focus Table", show=False),
         Binding("q", "quit", "Quit", show=True),
+        Binding("c", "copy_select", "Copy", show=True),
     ]
 
     selected_hosts: reactive[Set[str]] = reactive(set())
@@ -202,6 +204,7 @@ class HostSelector(App):
         self.search_input: Optional[Input] = None
         self.cache_widget: Optional[Static] = None
         self.loading_screen: Optional[LoadingScreen] = None
+        self.sort_reverse = False
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -213,7 +216,7 @@ class HostSelector(App):
 
         # Search input (hidden by default)
         with Container(id="search-container"):
-            yield Input(placeholder="Search hosts by name...", id="search-input")
+            yield Input(placeholder="Search hosts...", id="search-input")
 
         # Main content panel
         with Container(id="main-panel"):
@@ -256,32 +259,24 @@ class HostSelector(App):
             return
 
         # Calculate total columns to distribute width proportionally
-        total_columns = len(self.config.ui.table_columns) + 1  # +1 for checkbox
+        # total_columns = len(self.config.ui.table_columns) + 1  # +1 for checkbox
 
         # Add checkbox column (fixed small width)
         self.table.add_column("✓", width=3, key="checkbox")
 
         # Add configured columns with proportional widths
         for column in self.config.ui.table_columns:
-            if column == "name":
-                # Name gets more space as it's usually important
-                self.table.add_column("Name", width=None, key="name")
-            elif column == "ip":
-                # IP addresses have predictable length, can be smaller
-                self.table.add_column("IP Address", width=None, key="ip")
-            elif column == "cluster":
-                self.table.add_column("Cluster", width=None, key="cluster")
-            elif column == "role":
-                self.table.add_column("Role", width=None, key="role")
-            elif column == "tags":
-                # Tags might be longer, give more space
-                self.table.add_column("Tags", width=None, key="tags")
-            elif column == "description":
-                # Description usually needs the most space
-                self.table.add_column("Description", width=None, key="description")
-            elif column == "provider":
-                # Provider column for showing source
-                self.table.add_column("Provider", width=None, key="provider")
+          self.table.add_column(column, width=None, key=column)
+
+    def on_data_table_header_selected(self, event: DataTable.HeaderSelected):
+      col = event.column_key.value
+      self.sort_reverse = not self.sort_reverse
+      hosts_to_display = self.get_hosts_to_display()
+      hosts_to_display.sort(
+          key=lambda r: getattr(r, col, ""),
+          reverse=self.sort_reverse
+      )
+      self.populate_table(hosts_to_display)
 
     def show_loading_screen(self, message: str = "🔄 Refreshing Data Sources", status: str = "Initializing...") -> None:
         """Show the loading screen modal."""
@@ -421,7 +416,7 @@ class HostSelector(App):
                 self.update_loading_status("Updating display...")
                 await asyncio.sleep(0.1)  # Allow UI to update
 
-            self.populate_table()
+            self.populate_table(self.get_hosts_to_display())
 
             source_msg = "fresh data from providers" if force_refresh else "cache/providers"
             self.log_message(f"Loaded {len(self.hosts)} hosts successfully from {source_msg}")
@@ -438,16 +433,18 @@ class HostSelector(App):
             if show_loading:
                 self.hide_loading_screen()
 
-    def populate_table(self) -> None:
+    # Use filtered hosts if search is active, otherwise use all hosts
+    def get_hosts_to_display(self)-> None:
+      hosts_to_display = self.filtered_hosts if self.search_filter else self.hosts
+      return hosts_to_display
+
+    def populate_table(self, hosts_to_display) -> None:
         """Populate the table with host data."""
         if not self.table:
             return
 
         # Clear existing table data
         self.table.clear()
-
-        # Use filtered hosts if search is active, otherwise use all hosts
-        hosts_to_display = self.filtered_hosts if self.search_filter else self.hosts
 
         if not hosts_to_display:
             return
@@ -461,24 +458,45 @@ class HostSelector(App):
                 row_data[0] = "[x]"
 
             for column in self.config.ui.table_columns:
-                if column == "name":
-                    row_data.append(host.name)
-                elif column == "ip":
-                    row_data.append(host.ip)
-                elif column == "cluster":
-                    row_data.append(getattr(host, 'cluster', 'N/A'))
-                elif column == "role":
-                    row_data.append(getattr(host, 'role', 'N/A'))
-                elif column == "tags":
-                    row_data.append(getattr(host, 'tags', ''))
-                elif column == "description":
-                    row_data.append(getattr(host, 'description', ''))
-                elif column == "provider":
-                    # Get provider from metadata or attribute
-                    provider = getattr(host, 'provider', host.metadata.get('provider', 'unknown'))
-                    row_data.append(provider)
+                row_data.append(getattr(host, column, 'N/A'))
 
             self.table.add_row(*row_data, key=host.name)
+
+    def action_copy_select(self) -> None:
+
+        hosts = self.get_hosts_to_display()
+        columns = self.config.ui.table_columns
+
+        # Build raw table (list of lists)
+        table = []
+
+        # Header
+        table.append(columns)
+
+        # Host rows
+        for host in hosts:
+            row = [str(getattr(host, col, "N/A")) for col in columns]
+            table.append(row)
+
+        # Compute max width for each column
+        col_widths = [
+            max(len(row[i]) for row in table)
+            for i in range(len(columns))
+        ]
+
+        # Build aligned lines
+        lines = []
+        for row in table:
+            line = "  ".join(  # two spaces between columns
+                row[i].ljust(col_widths[i])
+                for i in range(len(columns))
+            )
+            lines.append(line)
+
+        # Final clipboard text
+        text = "\n".join(lines)
+        pyperclip.copy(text)
+
 
     def action_toggle_select(self) -> None:
         """Toggle selection of current row."""
@@ -550,13 +568,73 @@ class HostSelector(App):
         self.log_message(f"INFO: Connection request complete. Mode: {mode}, Broadcast: {broadcast}, Hosts: {len(selected_host_objects)}", level="info")
         self.log_message("INFO: Exiting SSHplex TUI application...", level="info")
 
+        # Log the settings and selection results
+        mode = "Panes" if self.use_panes else "Tabs"
+        broadcast = "ON" if self.use_broadcast else "OFF"
+        self.log_message(f"SSHplex settings - Mode: {mode}, Broadcast: {broadcast}")
+
+        # The app.run() may return None or a list of hosts
+        if isinstance(selected_host_objects, list) and len(selected_host_objects) > 0:
+            self.log_message(f"User selected {len(selected_host_objects)} hosts for connection")
+            for host in selected_host_objects:
+                self.log_message(f"  - {host.name} ({host.ip})")
+
+            # Create tmux panes or windows for selected hosts
+            mode = "panes" if self.use_panes else "windows"
+            self.log_message(f"SSHplex: Creating tmux {mode} for selected hosts")
+
+            # Create connector with timestamped session name and max panes per window
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            session_name = f"sshplex-{timestamp}"
+            from ...sshplex_connector import SSHplexConnector
+            connector = SSHplexConnector(session_name, config = self.config)
+
+            # Connect to hosts (creates panes or windows with SSH connections)
+            if connector.connect_to_hosts(
+                hosts=selected_host_objects,
+                username=self.config.ssh.username,
+                key_path=self.config.ssh.key_path,
+                port=self.config.ssh.port,
+                use_panes=self.use_panes,
+                use_broadcast=self.use_broadcast
+            ):
+                session_name = connector.get_session_name()
+                mode_display = "panes" if self.use_panes else "windows"
+                self.log_message(f"SSHplex: Successfully created tmux session '{session_name}' with {mode_display}")
+                self.log_message(f"SSHplex: {len(selected_host_objects)} SSH connections established")
+
+                # Display success message and auto-attach
+                print(f"\n✅ SSHplex Session Created Successfully!")
+                print(f"📡 tmux session: {session_name}")
+                print(f"🔗 {len(selected_host_objects)} SSH connections established in {mode_display}")
+                broadcast_status = " (ENABLED)" if self.use_broadcast else " (DISABLED)"
+                print(f"📢 Broadcast mode: {broadcast_status}")
+                print(f"\n🚀 Auto-attaching to session...")
+                print(f"\n⚡ tmux commands (once attached):")
+                if self.use_panes:
+                    print(f"   - Switch panes: Ctrl+b then arrow keys")
+                else:
+                    print(f"   - Switch windows: Ctrl+b then n/p or number keys")
+                print(f"   - Toggle broadcast: Ctrl+b then b")
+                print(f"   - Detach session: Ctrl+b then d")
+                print(f"   - List sessions: tmux list-sessions")
+
+                # Auto-attach to the session (this will replace the current process)
+                connector.attach_to_session(auto_attach=True)
+            else:
+                self.log_message("SSHplex: Failed to create SSH connections")
+                return 1
+
+        else:
+            self.log_message("No hosts were selected")
+
         # Exit the app and return selected hosts
-        self.app.exit(selected_host_objects)
+        self.action_deselect_all()
 
     def action_show_sessions(self) -> None:
         """Show the tmux session manager modal."""
         self.log_message("Opening tmux session manager...")
-        session_manager = TmuxSessionManager()
+        session_manager = TmuxSessionManager(self.config)
         self.push_screen(session_manager)
 
     def action_refresh_hosts(self) -> None:
@@ -665,17 +743,27 @@ class HostSelector(App):
             self.filter_hosts()
 
     def filter_hosts(self) -> None:
-        """Filter hosts based on search term."""
-        if not self.search_filter:
-            self.filtered_hosts = self.hosts.copy()
-        else:
-            self.filtered_hosts = [
-                host for host in self.hosts
-                if self.search_filter in host.name.lower()
-            ]
+        term = (self.search_filter or "").lower()
+        import fnmatch
+
+        term = (term or "").strip().lower()
+
+        # Automatically add wildcards around the search term
+        if not term.startswith("*"):
+            term = "*" + term
+        if not term.endswith("*"):
+            term = term + "*"
+
+        self.filtered_hosts = [
+            host for host in self.hosts
+            if any(
+                fnmatch.fnmatchcase((getattr(host, attr, "") or "").lower(), term)
+                for attr in self.config.ui.table_columns
+            )
+        ]
 
         # Re-populate table with filtered results
-        self.populate_table()
+        self.populate_table(self.get_hosts_to_display())
 
         # Update status
         if self.search_filter:

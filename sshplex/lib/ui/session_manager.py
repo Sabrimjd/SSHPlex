@@ -84,7 +84,7 @@ class TmuxSessionManager(ModalScreen):
         Binding("down,k", "move_down", "Down", show=False),
     ]
 
-    def __init__(self) -> None:
+    def __init__(self, config: Any) -> None:
         """Initialize the tmux session manager."""
         super().__init__()
         self.logger = get_logger()
@@ -92,6 +92,7 @@ class TmuxSessionManager(ModalScreen):
         self.table: Optional[DataTable] = None
         self.tmux_server: Optional[Any] = None
         self.broadcast_enabled = False  # Track broadcast state
+        self.config = config
 
     def compose(self) -> ComposeResult:
         """Create the session manager layout."""
@@ -245,9 +246,21 @@ class TmuxSessionManager(ModalScreen):
                 import time
                 time.sleep(0.1)
 
-                # Auto-attach to the session by replacing current process
-                import os
-                os.execlp("tmux", "tmux", "attach-session", "-t", session.name)
+                import platform
+                system = platform.system().lower()
+                try:
+                    if "darwin" in system and self.config.tmux.control_with_iterm2:  # macOS
+                      tmux_session = self.tmux_server.find_where({"session_name": session.name})
+                      # TODO: Fix bug on opening as tabs (multiple windows are open)
+                      tmux_session.switch_client()
+                    else:
+                      # Auto-attach to the session by replacing current process
+                      import os
+                      os.execlp("tmux", "tmux", "attach-session", "-t", session.name)
+
+                except Exception as e:
+                    self.logger.info(f"⚠️ Failed to attach to tmux session: {e}")
+
             else:
                 self.logger.warning(f"SSHplex: Invalid cursor row {cursor_row}")
         except Exception as e:

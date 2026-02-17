@@ -38,6 +38,14 @@ class UIConfig(BaseModel):
     log_panel_height: int = 20  # Percentage of screen height
     table_columns: list = Field(default_factory=lambda: ["name", "ip", "cluster", "role", "tags"])
 
+class Proxy(BaseModel):
+    """ImportProxies configuration with defaults."""
+    name: str = Field("", description="Proxy name")
+    imports: list = Field([], description="List of imports that will use this proxy")
+    host: str = Field("", description="Proxy host or ip")
+    username: str = Field("", description="Proxy username")
+    key_path: str = Field("", description="Proxy key")
+
 
 class SSHConfig(BaseModel):
     """SSH connection configuration."""
@@ -45,7 +53,7 @@ class SSHConfig(BaseModel):
     key_path: str = Field(default="~/.ssh/id_rsa", description="Path to SSH private key")
     timeout: int = 10
     port: int = 22
-
+    proxy: List[Proxy] = Field(alias='proxy', default_factory=list, description="List of proxies")
 
 class TmuxConfig(BaseModel):
     """tmux configuration."""
@@ -53,6 +61,7 @@ class TmuxConfig(BaseModel):
     broadcast: bool = False  # Start with broadcast off
     window_name: str = "sshplex"
     max_panes_per_window: int = Field(default=5, description="Maximum panes per window before creating a new window")
+    control_with_iterm2: bool = False  # Start with broadcast off
 
 
 class AnsibleConfig(BaseModel):
@@ -60,6 +69,15 @@ class AnsibleConfig(BaseModel):
     inventory_paths: List[str] = Field(default_factory=list, description="List of paths to Ansible inventory YAML files")
     default_filters: Dict[str, Any] = Field(default_factory=dict)
 
+class ConsulConfig(BaseModel):
+    """Consul-specific configuration with defaults."""
+    host: str = Field("consul.example.com", description="Consul host address")
+    port: int = Field(443, description="Consul port number")
+    token: str = Field("default_token", description="Consul token for authentication")
+    scheme: str = Field("https", description="URL scheme (e.g., 'https')")
+    verify: bool = Field(False, description="Whether to verify SSL certificates")
+    dc: str = Field("dc1", description="Datacenter name")
+    cert: str = Field("", description="Path to SSL certificate")
 
 class SoTImportConfig(BaseModel):
     """Individual SoT import configuration."""
@@ -79,6 +97,8 @@ class SoTImportConfig(BaseModel):
     # Ansible provider fields
     inventory_paths: Optional[List[str]] = None
 
+    # Consul provider fields
+    config: Optional[ConsulConfig] = None
 
 class SoTConfig(BaseModel):
     """Source of Truth configuration."""
