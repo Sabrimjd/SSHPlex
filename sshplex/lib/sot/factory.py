@@ -1,5 +1,7 @@
 """Source of Truth provider factory for SSHplex."""
 
+from __future__ import annotations
+
 from typing import List, Dict, Any, Optional
 from ..logger import get_logger
 from ..cache import HostCache

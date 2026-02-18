@@ -129,7 +129,7 @@ def debug_mode(config: Any, logger: Any) -> int:
         print("Check your SoT provider filters in the configuration")
 
     logger.info("SSHplex debug mode completed successfully")
-    print(f"\n✅ Debug mode completed successfully")
+    print("\n✅ Debug mode completed successfully")
     return 0
 
 
@@ -170,12 +170,12 @@ def tui_mode(config: Any, logger: Any) -> int:
             session_name = connector.get_session_name()
             logger.info(f"Successfully created tmux session '{session_name}' with {mode_display}")
 
-            print(f"\nSSHplex Session Created Successfully!")
+            print("\nSSHplex Session Created Successfully!")
             print(f"tmux session: {session_name}")
             print(f"{len(selected_hosts)} SSH connections established in {mode_display}")
             broadcast_status = "ENABLED" if use_broadcast else "DISABLED"
             print(f"Broadcast mode: {broadcast_status}")
-            print(f"\nAuto-attaching to session...")
+            print("\nAuto-attaching to session...")
 
             # Auto-attach to the session (this will replace the current process)
             connector.attach_to_session(auto_attach=True)
