@@ -6,7 +6,6 @@ from textual.widgets import DataTable, Static, Button
 from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual.app import ComposeResult
-from textual import on
 import libtmux
 
 from ..logger import get_logger
@@ -483,7 +482,7 @@ class TmuxSessionManager(ModalScreen):
 
                     if new_pane:
                         # Set a title for the new pane
-                        new_pane.send_keys(f'printf "\\033]2;New Pane\\033\\\\"', enter=True)
+                        new_pane.send_keys('printf "\\033]2;New Pane\\033\\\\"', enter=True)
 
                         # Apply tiled layout to organize all panes nicely
                         window.select_layout('tiled')
@@ -533,7 +532,7 @@ class TmuxSessionManager(ModalScreen):
                     # Get the first pane in the new window and set title
                     if new_window.panes:
                         first_pane = new_window.panes[0]
-                        first_pane.send_keys(f'printf "\\033]2;New Window\\033\\\\"', enter=True)
+                        first_pane.send_keys('printf "\\033]2;New Window\\033\\\\"', enter=True)
                         first_pane.send_keys('echo "🪟 New SSHplex window created!"', enter=True)
 
                     self.logger.info(f"SSHplex: Created new window in session '{session.name}'")

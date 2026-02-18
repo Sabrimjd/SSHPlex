@@ -101,7 +101,7 @@ def debug_mode(config: Any, logger: Any) -> int:
         print("Check your SoT provider filters in the configuration")
 
     logger.info("SSHplex CLI debug mode completed successfully")
-    print(f"\n✅ CLI debug mode completed successfully")
+    print("\n✅ CLI debug mode completed successfully")
     print("Note: For the full TUI interface, run the main application")
     return 0
 

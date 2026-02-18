@@ -2,6 +2,7 @@
 
 import os
 import yaml
+import threading
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
@@ -10,7 +11,10 @@ from .sot.base import Host
 
 
 class HostCache:
-    """Cache manager for storing and retrieving hosts from different SoT providers."""
+    """Cache manager for storing and retrieving hosts from different SoT providers.
+    
+    Thread-safe implementation for concurrent access protection.
+    """
 
     def __init__(self, cache_dir: Optional[str] = None, cache_ttl_hours: int = 24):
         """Initialize the cache manager.
@@ -28,6 +32,9 @@ class HostCache:
         self.cache_ttl = timedelta(hours=cache_ttl_hours)
         self.cache_file = self.cache_dir / "hosts.yaml"
         self.metadata_file = self.cache_dir / "cache_metadata.yaml"
+        
+        # Thread lock for concurrent access protection
+        self._lock = threading.RLock()
 
         # Ensure cache directory exists
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -38,22 +45,26 @@ class HostCache:
         Returns:
             True if cache exists and is not expired, False otherwise
         """
-        if not self.cache_file.exists() or not self.metadata_file.exists():
-            return False
-
-        try:
-            with open(self.metadata_file, 'r') as f:
-                metadata = yaml.safe_load(f)
-
-            if not metadata or 'timestamp' not in metadata:
+        with self._lock:
+            if not self.cache_file.exists() or not self.metadata_file.exists():
                 return False
 
-            cache_time = datetime.fromisoformat(metadata['timestamp'])
-            return datetime.now() - cache_time < self.cache_ttl
+            try:
+                with open(self.metadata_file, 'r') as f:
+                    metadata = yaml.safe_load(f)
 
-        except Exception as e:
-            self.logger.warning(f"Failed to validate cache: {e}")
-            return False
+                if not metadata or 'timestamp' not in metadata:
+                    return False
+
+                cache_time = datetime.fromisoformat(metadata['timestamp'])
+                return datetime.now() - cache_time < self.cache_ttl
+
+            except (yaml.YAMLError, ValueError, KeyError) as e:
+                self.logger.warning(f"Failed to validate cache: {e}")
+                return False
+            except Exception as e:
+                self.logger.error(f"Unexpected error validating cache: {e}")
+                return False
 
     def save_hosts(self, hosts: List[Host], provider_info: Dict[str, Any]) -> bool:
         """Save hosts to cache with metadata.
@@ -65,38 +76,42 @@ class HostCache:
         Returns:
             True if cache was saved successfully, False otherwise
         """
-        try:
-            # Prepare hosts data for serialization
-            hosts_data = []
-            for host in hosts:
-                host_dict = {
-                    'name': host.name,
-                    'ip': host.ip,
-                    'metadata': host.metadata
+        with self._lock:
+            try:
+                # Prepare hosts data for serialization
+                hosts_data = []
+                for host in hosts:
+                    host_dict = {
+                        'name': host.name,
+                        'ip': host.ip,
+                        'metadata': host.metadata
+                    }
+                    hosts_data.append(host_dict)
+
+                # Save hosts data
+                with open(self.cache_file, 'w') as f:
+                    yaml.dump(hosts_data, f, default_flow_style=False, sort_keys=True)
+
+                # Save metadata
+                cache_metadata = {
+                    'timestamp': datetime.now().isoformat(),
+                    'host_count': len(hosts),
+                    'providers': provider_info,
+                    'cache_version': '1.0'
                 }
-                hosts_data.append(host_dict)
 
-            # Save hosts data
-            with open(self.cache_file, 'w') as f:
-                yaml.dump(hosts_data, f, default_flow_style=False, sort_keys=True)
+                with open(self.metadata_file, 'w') as f:
+                    yaml.dump(cache_metadata, f, default_flow_style=False, sort_keys=True)
 
-            # Save metadata
-            cache_metadata = {
-                'timestamp': datetime.now().isoformat(),
-                'host_count': len(hosts),
-                'providers': provider_info,
-                'cache_version': '1.0'
-            }
+                self.logger.info(f"Successfully cached {len(hosts)} hosts to {self.cache_file}")
+                return True
 
-            with open(self.metadata_file, 'w') as f:
-                yaml.dump(cache_metadata, f, default_flow_style=False, sort_keys=True)
-
-            self.logger.info(f"Successfully cached {len(hosts)} hosts to {self.cache_file}")
-            return True
-
-        except Exception as e:
-            self.logger.error(f"Failed to save hosts to cache: {e}")
-            return False
+            except (yaml.YAMLError, IOError, OSError) as e:
+                self.logger.error(f"Failed to save hosts to cache: {e}")
+                return False
+            except Exception as e:
+                self.logger.error(f"Unexpected error saving cache: {e}")
+                return False
 
     def load_hosts(self) -> Optional[List[Host]]:
         """Load hosts from cache.
@@ -104,31 +119,42 @@ class HostCache:
         Returns:
             List of Host objects if cache is valid and loaded successfully, None otherwise
         """
-        if not self.is_cache_valid():
-            return None
+        with self._lock:
+            if not self.is_cache_valid():
+                return None
 
-        try:
-            with open(self.cache_file, 'r') as f:
-                hosts_data = yaml.safe_load(f)
+            try:
+                with open(self.cache_file, 'r') as f:
+                    hosts_data = yaml.safe_load(f)
 
-            if not hosts_data:
-                return []
+                if not hosts_data:
+                    return []
 
-            hosts = []
-            for host_dict in hosts_data:
-                host = Host(
-                    name=host_dict['name'],
-                    ip=host_dict['ip'],
-                    **host_dict.get('metadata', {})
-                )
-                hosts.append(host)
+                hosts = []
+                for host_dict in hosts_data:
+                    if not isinstance(host_dict, dict):
+                        self.logger.warning(f"Skipping invalid host data: {host_dict}")
+                        continue
+                    if 'name' not in host_dict or 'ip' not in host_dict:
+                        self.logger.warning(f"Skipping host with missing required fields: {host_dict}")
+                        continue
+                        
+                    host = Host(
+                        name=host_dict['name'],
+                        ip=host_dict['ip'],
+                        **host_dict.get('metadata', {})
+                    )
+                    hosts.append(host)
 
-            self.logger.info(f"Successfully loaded {len(hosts)} hosts from cache")
-            return hosts
+                self.logger.info(f"Successfully loaded {len(hosts)} hosts from cache")
+                return hosts
 
-        except Exception as e:
-            self.logger.error(f"Failed to load hosts from cache: {e}")
-            return None
+            except (yaml.YAMLError, KeyError, TypeError) as e:
+                self.logger.error(f"Failed to load hosts from cache: {e}")
+                return None
+            except Exception as e:
+                self.logger.error(f"Unexpected error loading cache: {e}")
+                return None
 
     def get_cache_info(self) -> Optional[Dict[str, Any]]:
         """Get cache metadata information.
@@ -136,30 +162,34 @@ class HostCache:
         Returns:
             Dictionary with cache information or None if cache doesn't exist
         """
-        if not self.metadata_file.exists():
-            return None
-
-        try:
-            with open(self.metadata_file, 'r') as f:
-                raw_metadata = yaml.safe_load(f)
-
-            # Validate that metadata is a dictionary
-            if not isinstance(raw_metadata, dict):
-                self.logger.warning("Cache metadata is not a valid dictionary")
+        with self._lock:
+            if not self.metadata_file.exists():
                 return None
 
-            metadata: Dict[str, Any] = raw_metadata
+            try:
+                with open(self.metadata_file, 'r') as f:
+                    raw_metadata = yaml.safe_load(f)
 
-            if metadata and 'timestamp' in metadata:
-                cache_time = datetime.fromisoformat(metadata['timestamp'])
-                metadata['age_hours'] = (datetime.now() - cache_time).total_seconds() / 3600
-                metadata['is_valid'] = self.is_cache_valid()
+                # Validate that metadata is a dictionary
+                if not isinstance(raw_metadata, dict):
+                    self.logger.warning("Cache metadata is not a valid dictionary")
+                    return None
 
-            return metadata
+                metadata: Dict[str, Any] = raw_metadata
 
-        except Exception as e:
-            self.logger.error(f"Failed to read cache metadata: {e}")
-            return None
+                if metadata and 'timestamp' in metadata:
+                    cache_time = datetime.fromisoformat(metadata['timestamp'])
+                    metadata['age_hours'] = (datetime.now() - cache_time).total_seconds() / 3600
+                    metadata['is_valid'] = self.is_cache_valid()
+
+                return metadata
+
+            except (yaml.YAMLError, ValueError, KeyError) as e:
+                self.logger.error(f"Failed to read cache metadata: {e}")
+                return None
+            except Exception as e:
+                self.logger.error(f"Unexpected error reading cache metadata: {e}")
+                return None
 
     def clear_cache(self) -> bool:
         """Clear the cache by removing cache files.
@@ -167,18 +197,22 @@ class HostCache:
         Returns:
             True if cache was cleared successfully, False otherwise
         """
-        try:
-            if self.cache_file.exists():
-                self.cache_file.unlink()
-            if self.metadata_file.exists():
-                self.metadata_file.unlink()
+        with self._lock:
+            try:
+                if self.cache_file.exists():
+                    self.cache_file.unlink()
+                if self.metadata_file.exists():
+                    self.metadata_file.unlink()
 
-            self.logger.info("Cache cleared successfully")
-            return True
+                self.logger.info("Cache cleared successfully")
+                return True
 
-        except Exception as e:
-            self.logger.error(f"Failed to clear cache: {e}")
-            return False
+            except (IOError, OSError) as e:
+                self.logger.error(f"Failed to clear cache: {e}")
+                return False
+            except Exception as e:
+                self.logger.error(f"Unexpected error clearing cache: {e}")
+                return False
 
     def refresh_needed(self) -> bool:
         """Check if cache refresh is needed (cache is invalid or expired).
