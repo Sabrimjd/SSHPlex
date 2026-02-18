@@ -1,9 +1,10 @@
 """Pytest fixtures for SSHplex tests."""
 
-import pytest
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 @pytest.fixture

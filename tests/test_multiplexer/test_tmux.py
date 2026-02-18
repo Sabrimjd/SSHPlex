@@ -1,9 +1,10 @@
 """Tests for SSHplex tmux multiplexer manager."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from sshplex.lib.multiplexer.tmux import TmuxManager, TmuxError
+import pytest
+
+from sshplex.lib.multiplexer.tmux import TmuxError, TmuxManager
 
 
 class TestTmuxManager:
@@ -273,28 +274,26 @@ class TestTmuxManagerAttach:
         manager.config.tmux.control_with_iterm2 = True
         manager.system = 'darwin'
         
-        with patch('subprocess.run') as mock_run:
-            with patch('subprocess.Popen') as mock_popen:
-                mock_run.return_value = MagicMock(returncode=0, stdout='true')
-                
-                manager._attach_iterm2()
-                
-                mock_popen.assert_called_once()
-                args = mock_popen.call_args[0][0]
-                assert 'osascript' in args
+        with patch('subprocess.run') as mock_run, patch('subprocess.Popen') as mock_popen:
+            mock_run.return_value = MagicMock(returncode=0, stdout='true')
+
+            manager._attach_iterm2()
+
+            mock_popen.assert_called_once()
+            args = mock_popen.call_args[0][0]
+            assert 'osascript' in args
 
     def test_attach_iterm2_not_running(self, manager):
         """Test iTerm2 attach when iTerm2 is not running."""
         manager.config.tmux.control_with_iterm2 = True
         manager.system = 'darwin'
-        
-        with patch('subprocess.run') as mock_run:
-            with patch('subprocess.Popen') as mock_popen:
-                mock_run.return_value = MagicMock(returncode=1, stdout='')
-                
-                manager._attach_iterm2()
-                
-                mock_popen.assert_called_once()
+
+        with patch('subprocess.run') as mock_run, patch('subprocess.Popen') as mock_popen:
+            mock_run.return_value = MagicMock(returncode=1, stdout='')
+
+            manager._attach_iterm2()
+
+            mock_popen.assert_called_once()
 
 
 class TestTmuxError:
