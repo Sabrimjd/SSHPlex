@@ -18,6 +18,9 @@ SSHplex is a Python-based SSH connection multiplexer that provides a modern Term
 - **Intelligent Caching**: Local host caching for fast startup (configurable TTL)
 - **Broadcasting**: Sync input across multiple SSH connections
 - **Session Manager**: Browse, connect to, or kill existing tmux sessions from the TUI
+- **SSH Security**: Configurable host key checking with secure defaults
+- **Connection Retry**: Automatic retry with exponential backoff for reliability
+- **Enhanced CLI**: Debug mode, cache management, and configuration utilities
 
 ## Prerequisites
 
@@ -70,6 +73,12 @@ sshplex
 
 # Debug mode - test provider connectivity
 sshplex --debug
+
+# Show configuration paths
+sshplex --show-config
+
+# Clear host cache
+sshplex --clear-cache
 ```
 
 On first run, SSHplex creates a config at `~/.config/sshplex/sshplex.yaml`. Edit it with your provider details, then run `sshplex` again.
@@ -111,6 +120,18 @@ Ctrl+b + n/p           # Next/Previous window
 Ctrl+b + b             # Toggle broadcast (custom SSHplex binding)
 Ctrl+b + d             # Detach from session
 Ctrl+b + z             # Zoom/unzoom current pane
+```
+
+## CLI Reference
+
+```bash
+sshplex                        # Launch TUI
+sshplex --debug                # Test provider connectivity
+sshplex --clear-cache          # Clear host cache
+sshplex --show-config          # Show configuration paths
+sshplex --config /path/to.yml  # Use custom config file
+sshplex --verbose              # Enable verbose logging
+sshplex --version              # Show version
 ```
 
 ## Configuration
@@ -202,6 +223,27 @@ ssh:
       username: "admin"
       key_path: "~/.ssh/jump_key"
 ```
+
+### SSH Security Options
+
+Configure SSH host key checking and retry behavior:
+
+```yaml
+ssh:
+  username: "admin"
+  key_path: "~/.ssh/id_ed25519"
+  # Security options
+  strict_host_key_checking: false  # Options: true (strict), false (accept-new)
+  user_known_hosts_file: ""  # Empty = default ~/.ssh/known_hosts
+  # Connection retry
+  retry:
+    enabled: true
+    max_attempts: 3
+    delay_seconds: 2
+    exponential_backoff: true  # Double delay on each retry
+```
+
+**Security Note**: By default, SSHplex uses `StrictHostKeyChecking=accept-new` which automatically accepts new host keys but warns on key changes. For production environments, set `strict_host_key_checking: true` for maximum security.
 
 ### iTerm2 Integration (macOS)
 

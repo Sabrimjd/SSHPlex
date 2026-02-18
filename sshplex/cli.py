@@ -2,7 +2,7 @@
 
 import sys
 import argparse
-from typing import Any, Optional
+from typing import Any
 
 from . import __version__
 from .lib.config import load_config, get_config_info
