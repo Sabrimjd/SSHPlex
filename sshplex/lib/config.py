@@ -233,13 +233,24 @@ def load_config(config_path: Optional[str] = None) -> Config:
         with open(config_file, 'r') as f:
             config_data = yaml.safe_load(f)
 
+        if not config_data:
+            raise ValueError("SSHplex: Configuration file is empty or invalid")
+
         config = Config(**config_data)
         logger.info("SSHplex: Configuration loaded and validated successfully")
         return config
 
     except yaml.YAMLError as e:
         raise ValueError(f"SSHplex: Invalid YAML in config file: {e}")
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"SSHplex: Configuration file not found: {e}")
+    except PermissionError as e:
+        raise ValueError(f"SSHplex: Permission denied reading config file: {e}")
     except Exception as e:
+        # Provide more context for pydantic validation errors
+        error_msg = str(e)
+        if "validation" in error_msg.lower() or "field" in error_msg.lower():
+            raise ValueError(f"SSHplex: Configuration validation failed: {error_msg}")
         raise ValueError(f"SSHplex: Configuration validation failed: {e}")
 
 

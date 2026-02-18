@@ -42,10 +42,19 @@ class SSHplexConnector:
             port: SSH port (default: 22)
             use_panes: If True, create panes; if False, create windows/tabs
             use_broadcast: If True, enable synchronize-panes for broadcast input
+
+        Raises:
+            ValueError: If username is empty or hosts list is invalid
         """
         if not hosts:
             self.logger.warning("SSHplex: No hosts provided for connection")
             return False
+
+        if not username or not username.strip():
+            raise ValueError("SSH username cannot be empty")
+
+        if port < 1 or port > 65535:
+            raise ValueError(f"SSH port must be between 1 and 65535, got {port}")
 
         # Get retry configuration
         retry_config = self.config.ssh.retry
@@ -147,25 +156,45 @@ class SSHplexConnector:
             return False
 
     def _build_ssh_command(self, host: Any, username: str, key_path: Optional[str] = None, port: int = 22) -> str:
-        """Build SSH command string with configurable security options."""
+        """Build SSH command string with configurable security options.
+
+        Args:
+            host: Host object with name, ip, and metadata attributes
+            username: SSH username
+            key_path: Path to SSH private key (optional)
+            port: SSH port (default: 22)
+
+        Returns:
+            SSH command string
+
+        Raises:
+            ValueError: If host is missing required attributes
+        """
+        if not host:
+            raise ValueError("Host object cannot be None")
+
+        # Validate host has required attributes
+        hostname = host.ip if host.ip else host.name
+        if not hostname:
+            raise ValueError(f"Host missing both ip and name: {host}")
+
         cmd_parts = ["TERM=xterm-256color", "ssh"]
 
         # Try to configure proxy if available
         try:
-            key = host.metadata['provider']
-            proxy = next(
-                (item for item in self.config.ssh.proxy if key in item.imports),
-                None
-            )
-            if proxy:
-                cmd_parts.extend([
-                    "-o", f"ProxyCommand=ssh -i {proxy.key_path} -W %h:%p {proxy.username}@{proxy.host}"
-                ])
+            provider_name = host.metadata.get('provider', '')
+            if provider_name:
+                proxy = next(
+                    (item for item in self.config.ssh.proxy if provider_name in item.imports),
+                    None
+                )
+                if proxy:
+                    cmd_parts.extend([
+                        "-o", f"ProxyCommand=ssh -i {proxy.key_path} -W %h:%p {proxy.username}@{proxy.host}"
+                    ])
         except Exception:
             # Proxy not configured for this host, continue without it
             pass
-
-        hostname = host.ip if host.ip else host.name
 
         # Configure host key checking based on config
         strict_mode = self.config.ssh.strict_host_key_checking

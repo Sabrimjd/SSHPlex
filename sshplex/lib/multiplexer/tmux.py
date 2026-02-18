@@ -328,17 +328,23 @@ class TmuxManager(MultiplexerBase):
                     try:
                         if "darwin" in self.system and self.config and self.config.tmux.control_with_iterm2:
                             # macOS with iTerm2 integration
+                            print("\n🖥️  Using iTerm2 tmux integration (-CC mode)...")
                             self._attach_iterm2()
                         else:
                             # Standard tmux attach
                             self._attach_standard()
 
+                    except RuntimeError as e:
+                        self.logger.error(f"SSHplex: Failed to launch tmux session: {e}")
+                        print(f"\n⚠️  Failed to auto-attach: {e}")
+                        print(f"\n💡 To attach manually, run: tmux attach-session -t {self.session_name}")
                     except Exception as e:
                         self.logger.error(f"SSHplex: Failed to launch tmux session: {e}")
-                        print(f"\n⚠️  Failed to auto-attach. Run manually: tmux attach -t {self.session_name}")
+                        print(f"\n⚠️  Failed to auto-attach: {e}")
+                        print(f"\n💡 To attach manually, run: tmux attach-session -t {self.session_name}")
                 else:
                     self.logger.info(f"SSHplex: Tmux session '{self.session_name}' is ready for attachment")
-                    print(f"\nTo attach to the session, run: tmux attach-session -t {self.session_name}")
+                    print(f"\n💡 To attach to the session, run: tmux attach-session -t {self.session_name}")
             else:
                 self.logger.error("SSHplex: No session to attach to")
 
@@ -353,46 +359,68 @@ class TmuxManager(MultiplexerBase):
 
     def _attach_iterm2(self) -> None:
         """Attach using iTerm2 tmux integration (macOS only)."""
-        # Check if iTerm2 is running
-        check_running = subprocess.run(
-            ["osascript", "-e", 'application "iTerm2" is running'],
-            capture_output=True,
-            text=True
-        )
-        
-        iterm_running = check_running.returncode == 0 and "true" in check_running.stdout.lower()
-        
-        if iterm_running:
-            # iTerm2 is running - create new window with tmux session
-            apple_script = f'''
-            tell application "iTerm2"
-                create window with default profile
-                tell current session of current window
-                    set name to "{self.session_name}"
-                    write text "tmux -CC attach-session -t {self.session_name}; exit"
+        try:
+            # Check if iTerm2 is installed
+            check_installed = subprocess.run(
+                ["osascript", "-e", 'exists application "iTerm2"'],
+                capture_output=True,
+                text=True
+            )
+
+            if check_installed.returncode != 0 or "false" in check_installed.stdout.lower():
+                raise RuntimeError("iTerm2 is not installed on this system")
+
+            # Check if iTerm2 is running
+            check_running = subprocess.run(
+                ["osascript", "-e", 'application "iTerm2" is running'],
+                capture_output=True,
+                text=True
+            )
+
+            iterm_running = check_running.returncode == 0 and "true" in check_running.stdout.lower()
+
+            if iterm_running:
+                # iTerm2 is running - create new window with tmux session
+                apple_script = f'''
+                tell application "iTerm2"
+                    create window with default profile
+                    tell current session of current window
+                        set name to "{self.session_name}"
+                        write text "tmux -CC attach-session -t {self.session_name}; exit"
+                    end tell
                 end tell
-            end tell
-            '''
-        else:
-            # iTerm2 not running - launch it first
-            apple_script = f'''
-            tell application "iTerm2"
-                activate
-                delay 1
-                tell current session of current window
-                    set name to "{self.session_name}"
-                    write text "tmux -CC attach-session -t {self.session_name}; exit"
+                '''
+            else:
+                # iTerm2 not running - launch it first
+                apple_script = f'''
+                tell application "iTerm2"
+                    activate
+                    delay 1
+                    tell current session of current window
+                        set name to "{self.session_name}"
+                        write text "tmux -CC attach-session -t {self.session_name}; exit"
+                    end tell
                 end tell
-            end tell
-            '''
-        
-        # Launch osascript in the background
-        subprocess.Popen(
-            ["osascript", "-e", apple_script],
-            start_new_session=True  # ensures no signal ties to main TUI
-        )
-        
-        self.logger.info(f"SSHplex: Launched iTerm2 with tmux session '{self.session_name}'")
+                '''
+
+            # Launch osascript in the background
+            process = subprocess.Popen(
+                ["osascript", "-e", apple_script],
+                start_new_session=True  # ensures no signal ties to main TUI
+            )
+
+            # Check if osascript launched successfully
+            if process.poll() is not None and process.returncode != 0:
+                raise RuntimeError("Failed to launch iTerm2 via AppleScript")
+
+            self.logger.info(f"SSHplex: Launched iTerm2 with tmux session '{self.session_name}'")
+            print(f"🚀 iTerm2 launched with tmux session: {self.session_name}")
+
+        except FileNotFoundError:
+            raise RuntimeError("osascript not found - iTerm2 integration only works on macOS")
+        except Exception as e:
+            # Re-raise with more context
+            raise RuntimeError(f"Failed to launch iTerm2: {e}")
 
     def setup_broadcast_keybinding(self) -> bool:
         """Set up custom keybinding for broadcast toggle."""

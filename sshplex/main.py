@@ -97,12 +97,20 @@ Examples:
         return 1
     except ValueError as e:
         print(f"Configuration Error: {e}")
+        print("Run 'sshplex --show-config' for configuration details")
         return 1
     except KeyboardInterrupt:
         print("\nSSHplex interrupted by user")
+        return 130  # Standard exit code for SIGINT
+    except RuntimeError as e:
+        print(f"Runtime Error: {e}")
         return 1
     except Exception as e:
         print(f"Unexpected error: {e}")
+        # In debug mode, show full traceback
+        if '--debug' in sys.argv or '-v' in sys.argv:
+            import traceback
+            traceback.print_exc()
         return 1
 
 

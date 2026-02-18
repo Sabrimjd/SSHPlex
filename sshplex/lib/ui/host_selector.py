@@ -633,7 +633,6 @@ class HostSelector(App):
             else:
                 self.log_message("Table focused")
 
-            self.log_message("Search cleared - showing all hosts")
             self.update_status_selection()
 
     def action_toggle_panes(self) -> None:
@@ -719,11 +718,8 @@ class HostSelector(App):
 
     def on_key(self, event: Any) -> None:
         """Handle key presses - specifically check for Enter on DataTable."""
-        self.log_message(f"DEBUG: Key pressed: {event.key}", level="info")
-
         # Check if Enter was pressed while DataTable has focus
         if event.key == "enter" and hasattr(self, 'table') and self.table and self.table.has_focus:
-            self.log_message("DEBUG: Enter key pressed on focused DataTable - calling connect action", level="info")
             self.action_connect_selected()
             event.prevent_default()
             event.stop()
