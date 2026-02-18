@@ -10,24 +10,32 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13']
         include:
           # Python 3.14 is still in development as of early 2026
-          # Test it but allow failures
+          # Test it but allow failures (non-blocking)
           - python-version: '3.14'
-            allow-failure: true
+            continue-on-error: true
+
+    continue-on-error: ${{ matrix.continue-on-error || false }}
 
     steps:
     - uses: actions/checkout@v4
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
-      continue-on-error: ${{ matrix.allow-failure || false }}
+      env:
+        # Workaround for pydantic-core/PyO3 compatibility on Python 3.14
+        PYO3_USE_ABI3_FORWARD_COMPATIBILITY: ${{ matrix.python-version == '3.14' && '1' || '' }}
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: Install dependencies
+      env:
+        # Propagate PyO3 workaround to install step
+        PYO3_USE_ABI3_FORWARD_COMPATIBILITY: ${{ matrix.python-version == '3.14' && '1' || '' }}
       run: |
         python -m pip install --upgrade pip
         pip install -e .[dev]
