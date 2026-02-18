@@ -77,6 +77,43 @@ class LoadingScreen(Screen):
             pass
 
 
+class HelpScreen(Screen):
+    """Modal screen showing keyboard shortcuts help."""
+
+    CSS = """
+    HelpScreen {
+        align: center middle;
+    }
+
+    #help-dialog {
+        layout: vertical;
+        padding: 3;
+        width: 80;
+        height: 40;
+        border: thick $primary;
+        background: $surface;
+        overflow-y: auto;
+    }
+
+    Markdown {
+        height: 1fr;
+    }
+    """
+
+    def __init__(self, help_text: str) -> None:
+        super().__init__()
+        self.help_text = help_text
+
+    def compose(self) -> ComposeResult:
+        from textual.widgets import Markdown
+        with Vertical(id="help-dialog"):
+            yield Markdown(self.help_text)
+
+    def on_key(self, event) -> None:
+        """Close help screen on any key press."""
+        self.pop_screen()
+
+
 class HostSelector(App):
     """SSHplex TUI for selecting hosts to connect to."""
 
@@ -172,12 +209,14 @@ class HostSelector(App):
         Binding("enter", "connect_selected", "Connect", show=True),
         Binding("/", "start_search", "Search", show=True),
         Binding("s", "show_sessions", "Sessions", show=True),
-        Binding("p", "toggle_panes", "Toggle Panes/Tabs", show=True),
-        Binding("b", "toggle_broadcast", "Toggle Broadcast", show=True),
-        Binding("r", "refresh_hosts", "Refresh Sources", show=True),
+        Binding("p", "toggle_panes", "Panes/Tabs", show=True),
+        Binding("b", "toggle_broadcast", "Broadcast", show=True),
+        Binding("r", "refresh_hosts", "Refresh", show=True),
         Binding("escape", "focus_table", "Focus Table", show=False),
+        Binding("h", "show_help", "Help", show=True),
         Binding("q", "quit", "Quit", show=True),
         Binding("c", "copy_select", "Copy", show=True),
+        Binding("f", "filter_hosts", "Quick Filter", show=True),
     ]
 
     selected_hosts: reactive[Set[str]] = reactive(set())
@@ -451,14 +490,18 @@ class HostSelector(App):
 
         for host in hosts_to_display:
             # Build row data based on configured columns
-            row_data = ["[ ]"]  # Checkbox column
+            # Use colors for better visual feedback
+            is_selected = host.name in self.selected_hosts
+            row_data = ["[green]✓[/green]" if is_selected else "[dim] [/dim]"]  # Checkbox column
 
-            # Check if this host is selected and update checkbox
-            if host.name in self.selected_hosts:
-                row_data[0] = "[x]"
-
+            # Highlight selected hosts with color
             for column in self.config.ui.table_columns:
-                row_data.append(getattr(host, column, 'N/A'))
+                value = str(getattr(host, column, 'N/A'))
+                if is_selected:
+                    # Highlight selected hosts
+                    row_data.append(f"[bold]{value}[/bold]")
+                else:
+                    row_data.append(value)
 
             self.table.add_row(*row_data, key=host.name)
 
@@ -585,8 +628,18 @@ class HostSelector(App):
         if not self.table:
             return
 
-        checkbox = "[X]" if selected else "[ ]"
+        checkbox = "[green]✓[/green]" if selected else "[dim] [/dim]"
         self.table.update_cell(row_key, "checkbox", checkbox)
+
+        # Also update the row style for all columns
+        for column in self.config.ui.table_columns:
+            value = self.table.get_cell(row_key, column)
+            if value:
+                if selected:
+                    self.table.update_cell(row_key, column, f"[bold]{value}[/bold]")
+                else:
+                    # Remove bold tags
+                    self.table.update_cell(row_key, column, value.replace("[bold]", "").replace("[/bold]", ""))
 
     def update_status_selection(self) -> None:
         """Update status bar with selection count and mode."""
@@ -612,6 +665,106 @@ class HostSelector(App):
             timestamp = datetime.now().strftime("%H:%M:%S")
             level_prefix = level.upper() if level != "info" else "INFO"
             self.log_widget.write_line(f"[{timestamp}] {level_prefix}: {message}")
+
+    def action_show_help(self) -> None:
+        """Show keyboard shortcuts help screen."""
+        from textual.widgets import Markdown
+
+        help_text = f"""
+# SSHplex Keyboard Shortcuts
+
+## Navigation & Selection
+| Key | Action |
+|-----|--------|
+| `Space` | Toggle selection of current host |
+| `a` | Select all hosts (or filtered) |
+| `d` | Deselect all hosts (or filtered) |
+| `Enter` | Connect to selected hosts |
+| `q` | Quit SSHplex |
+
+## Search & Filter
+| Key | Action |
+|-----|--------|
+| `/` | Open search input |
+| `f` | Quick filter by name |
+| `r` | Refresh from sources (bypass cache) |
+| `Escape` | Focus table / clear search |
+
+## Connection Modes
+| Key | Action |
+|-----|--------|
+| `p` | Toggle panes vs tabs mode |
+| `b` | Toggle broadcast mode |
+
+## Other
+| Key | Action |
+|-----|--------|
+| `s` | Session manager |
+| `c` | Copy table to clipboard |
+| `h` | Show this help |
+
+## Current Settings
+- **Mode**: {"Panes" if self.use_panes else "Tabs"}
+- **Broadcast**: {"ON" if self.use_broadcast else "OFF"}
+- **Hosts**: {len(self.hosts)} total
+
+*Press any key to close this help*
+        """
+
+        help_screen = HelpScreen(help_text)
+        self.push_screen(help_screen)
+
+    def action_filter_hosts(self) -> None:
+        """Quick filter by host name (prompts for pattern)."""
+        if not self.hosts:
+            return
+
+        from textual.containers import Center, Vertical
+        from textual.widgets import Input, Button
+        from textual.screen import ModalScreen
+
+        class QuickFilterScreen(ModalScreen):
+            def __init__(self, parent_app):
+                super().__init__()
+                self.parent = parent_app
+
+            def compose(self):
+                with Center():
+                    with Vertical():
+                        yield Label("Filter hosts by name pattern:", id="filter-label")
+                        yield Input(placeholder="e.g., web-* or *prod*", id="filter-input")
+                        yield Button("Apply", id="filter-apply", variant="primary")
+                        yield Button("Cancel", id="filter-cancel", variant="default")
+
+            def on_button_pressed(self, event: Button.Pressed) -> None:
+                if event.button.id == "filter-apply":
+                    input_widget = self.query_one("#filter-input", Input)
+                    pattern = input_widget.value.strip()
+                    if pattern:
+                        self.parent.apply_quick_filter(pattern)
+                self.parent.pop_screen()
+
+        filter_screen = QuickFilterScreen(self)
+        self.push_screen(filter_screen)
+
+    def apply_quick_filter(self, pattern: str) -> None:
+        """Apply quick filter pattern to hosts."""
+        import fnmatch
+
+        self.search_filter = pattern
+        self.filtered_hosts = [
+            host for host in self.hosts
+            if fnmatch.fnmatchcase(host.name.lower(), pattern.lower()) or
+               fnmatch.fnmatchcase(host.ip, pattern.lower())
+        ]
+
+        self.populate_table(self.get_hosts_to_display())
+        self.update_status_selection()
+
+        if self.filtered_hosts:
+            self.log_message(f"Quick filter '{pattern}' matched {len(self.filtered_hosts)} hosts")
+        else:
+            self.log_message(f"Quick filter '{pattern}' matched no hosts", level="warning")
 
     def action_start_search(self) -> None:
         """Start search mode by showing and focusing the search input."""
