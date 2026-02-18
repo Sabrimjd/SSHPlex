@@ -5,10 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [1.3.0] - 2026-02-18
 
 ### Added
-- TUI quick filter modal (`f`) with wildcard matching for host name/IP.
+- TUI configuration editor (`e`) with 7 tabbed panes for editing sshplex.yaml directly from the app, including Pydantic validation and dynamic proxy/import lists.
 - TUI keyboard shortcuts help modal (`h`) with contextual state hints.
 - Parallel source-of-truth host loading path for faster multi-provider fetches.
 - Detailed quality-upgrade summary document: `QUALITY_UPGRADE_SUMMARY.md`.
+
+### Removed
+- Quick filter modal (`f`) - use the search (`/`) instead for host filtering.
 
 ### Changed
 - iTerm2 integration behavior and messaging improved for clearer install/running-state detection and fallback guidance.
