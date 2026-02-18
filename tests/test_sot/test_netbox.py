@@ -1,7 +1,8 @@
 """Tests for SSHplex NetBox provider."""
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from sshplex.lib.sot.netbox import NetBoxProvider
 
@@ -238,7 +239,7 @@ class TestNetBoxProvider:
 
     def test_provider_name_attribute(self, provider, mock_pynetbox, mock_vm):
         """Test that provider_name is used in host metadata."""
-        setattr(provider, 'provider_name', 'custom-netbox')
+        provider.provider_name = 'custom-netbox'
         
         mock_api = MagicMock()
         mock_api.status.return_value = {'version': '3.5.0'}

@@ -1,10 +1,11 @@
 """Tests for SSHplex host cache management."""
 
-import pytest
 import tempfile
-import yaml
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
+
+import pytest
+import yaml
 
 from sshplex.lib.cache import HostCache
 from sshplex.lib.sot.base import Host
@@ -88,7 +89,7 @@ class TestHostCache:
         
         # Manually expire the cache
         old_time = (datetime.now() - timedelta(hours=2)).isoformat()
-        with open(cache.metadata_file, 'r') as f:
+        with open(cache.metadata_file) as f:
             metadata = yaml.safe_load(f)
         metadata['timestamp'] = old_time
         with open(cache.metadata_file, 'w') as f:
@@ -113,7 +114,7 @@ class TestHostCache:
         
         # Manually expire
         old_time = (datetime.now() - timedelta(hours=2)).isoformat()
-        with open(cache.metadata_file, 'r') as f:
+        with open(cache.metadata_file) as f:
             metadata = yaml.safe_load(f)
         metadata['timestamp'] = old_time
         with open(cache.metadata_file, 'w') as f:
@@ -230,7 +231,7 @@ class TestHostCache:
         cache.save_hosts(sample_hosts, {'provider_count': 1})
         
         # Remove timestamp from metadata
-        with open(cache.metadata_file, 'r') as f:
+        with open(cache.metadata_file) as f:
             metadata = yaml.safe_load(f)
         del metadata['timestamp']
         with open(cache.metadata_file, 'w') as f:

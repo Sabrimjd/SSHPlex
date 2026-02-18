@@ -2,8 +2,8 @@
 
 import pytest
 
-from sshplex.lib.sot.static import StaticProvider
 from sshplex.lib.sot.base import Host
+from sshplex.lib.sot.static import StaticProvider
 
 
 class TestStaticProvider:

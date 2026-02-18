@@ -1,9 +1,10 @@
 """Tests for SSHplex Ansible inventory provider."""
 
-import pytest
 import tempfile
-import yaml
 from pathlib import Path
+
+import pytest
+import yaml
 
 from sshplex.lib.sot.ansible import AnsibleProvider
 

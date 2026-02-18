@@ -1,22 +1,23 @@
 """Tests for SSHplex configuration management."""
 
-import pytest
-import yaml
 from unittest.mock import patch
 
+import pytest
+import yaml
+
 from sshplex.lib.config import (
+    CacheConfig,
     Config,
+    Proxy,
+    SoTImportConfig,
     SSHConfig,
     SSHRetryConfig,
     TmuxConfig,
     UIConfig,
-    CacheConfig,
-    SoTImportConfig,
-    Proxy,
-    load_config,
+    ensure_config_directory,
     get_default_config_path,
     get_template_config_path,
-    ensure_config_directory,
+    load_config,
 )
 
 
@@ -46,16 +47,16 @@ class TestSSHRetryConfig:
 
     def test_validation_max_attempts(self):
         """Test max_attempts validation."""
-        with pytest.raises(Exception):  # ValidationError
+        with pytest.raises(ValueError):  # ValidationError
             SSHRetryConfig(max_attempts=0)
-        with pytest.raises(Exception):  # ValidationError
+        with pytest.raises(ValueError):  # ValidationError
             SSHRetryConfig(max_attempts=11)
 
     def test_validation_delay(self):
         """Test delay_seconds validation."""
-        with pytest.raises(Exception):  # ValidationError
+        with pytest.raises(ValueError):  # ValidationError
             SSHRetryConfig(delay_seconds=0.1)
-        with pytest.raises(Exception):  # ValidationError
+        with pytest.raises(ValueError):  # ValidationError
             SSHRetryConfig(delay_seconds=61.0)
 
 
