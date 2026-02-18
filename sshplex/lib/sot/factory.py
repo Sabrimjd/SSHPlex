@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 from ..logger import get_logger
 from ..cache import HostCache
 from .base import SoTProvider, Host
 from .netbox import NetBoxProvider
 from .ansible import AnsibleProvider
 from .static import StaticProvider
+
+if TYPE_CHECKING:
+    from .consul import ConsulProvider
 
 
 class SoTFactory:
