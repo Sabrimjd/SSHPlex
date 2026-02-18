@@ -3,7 +3,6 @@
 import sys
 import argparse
 import shutil
-from pathlib import Path
 from datetime import datetime
 from typing import Any
 

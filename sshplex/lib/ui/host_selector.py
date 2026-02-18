@@ -3,12 +3,11 @@
 from typing import List, Optional, Set, Any
 from datetime import datetime
 from textual.app import App, ComposeResult
-from textual.containers import Container, Vertical, Horizontal, Grid
+from textual.containers import Container, Vertical
 from textual.widgets import DataTable, Log, Static, Footer, Input, LoadingIndicator, Label
 from textual.binding import Binding
 from textual.reactive import reactive
 from textual.screen import Screen
-from textual import events
 import asyncio
 import pyperclip
 
@@ -311,7 +310,11 @@ class HostSelector(App):
                 cache_text = "Cache: None"
 
             self.cache_widget.update(cache_text)
-        except Exception:
+        except (KeyError, AttributeError, TypeError) as e:
+            self.logger.debug(f"Could not update cache display: {e}")
+            self.cache_widget.update("Cache: --")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error updating cache display: {e}")
             self.cache_widget.update("Cache: --")
 
     def update_loading_status(self, status: str) -> None:
@@ -323,8 +326,8 @@ class HostSelector(App):
         if self.loading_screen:
             try:
                 self.loading_screen.update_status(status)
-            except Exception as e:
-                # Log the error but don't crash the app
+            except (AttributeError, RuntimeError) as e:
+                # Widget may not be mounted yet - log but don't crash
                 self.log_message(f"Warning: Could not update loading status: {e}", level="warning")
 
     async def load_hosts(self, force_refresh: bool = False) -> None:
@@ -677,21 +680,27 @@ class HostSelector(App):
             self.filter_hosts()
 
     def filter_hosts(self) -> None:
-        term = (self.search_filter or "").lower()
+        """Filter hosts based on search term with explicit wildcard support."""
         import fnmatch
 
-        term = (term or "").strip().lower()
+        term = (self.search_filter or "").strip()
 
-        # Automatically add wildcards around the search term
-        if not term.startswith("*"):
-            term = "*" + term
-        if not term.endswith("*"):
-            term = term + "*"
+        # Only add wildcards if user hasn't explicitly added them
+        # This gives users control over exact vs fuzzy matching
+        if term and not term.startswith("*") and not term.endswith("*"):
+            # Implicit fuzzy match - match anywhere in the value
+            term = f"*{term}*"
+        elif not term:
+            # Empty search - show all hosts
+            self.filtered_hosts = self.hosts
+            self.populate_table(self.get_hosts_to_display())
+            self.update_status_selection()
+            return
 
         self.filtered_hosts = [
             host for host in self.hosts
             if any(
-                fnmatch.fnmatchcase(str(getattr(host, attr, "") or "").lower(), term)
+                fnmatch.fnmatchcase(str(getattr(host, attr, "") or "").lower(), term.lower())
                 for attr in self.config.ui.table_columns
             )
         ]
