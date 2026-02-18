@@ -84,38 +84,6 @@ class SoTFactory:
         self.logger.info(f"Initialized {success_count}/{len(self.config.sot.import_)} SoT providers")
         return success_count > 0
 
-    def _create_netbox_provider(self) -> Optional[NetBoxProvider]:
-        """Create NetBox provider instance.
-
-        Returns:
-            NetBoxProvider instance or None if configuration missing
-        """
-        if not self.config.netbox:
-            self.logger.error("NetBox provider requested but configuration missing")
-            return None
-
-        return NetBoxProvider(
-            url=self.config.netbox.url,
-            token=self.config.netbox.token,
-            verify_ssl=self.config.netbox.verify_ssl,
-            timeout=self.config.netbox.timeout
-        )
-
-    def _create_ansible_provider(self) -> Optional[AnsibleProvider]:
-        """Create Ansible provider instance.
-
-        Returns:
-            AnsibleProvider instance or None if configuration missing
-        """
-        if not self.config.ansible_inventory:
-            self.logger.error("Ansible provider requested but configuration missing")
-            return None
-
-        return AnsibleProvider(
-            inventory_paths=self.config.ansible_inventory.inventory_paths,
-            filters=self.config.ansible_inventory.default_filters
-        )
-
     def _create_static_provider(self, import_config: Any) -> Optional[StaticProvider]:
         """Create Static provider instance from import configuration.
 

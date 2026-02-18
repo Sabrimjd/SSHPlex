@@ -327,6 +327,11 @@ pip install -e ".[dev]"
 # Run tests
 python3 -m pytest tests/
 
+# Lint & quality checks
+ruff check sshplex tests
+mypy sshplex
+vulture sshplex tests --min-confidence 80
+
 # Local Consul for testing
 docker-compose -f docker-compose.consul.yml up -d
 ```
