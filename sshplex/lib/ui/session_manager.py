@@ -325,8 +325,11 @@ class TmuxSessionManager(ModalScreen):
                 system = platform.system().lower()
                 try:
                     if "darwin" in system and self.config.tmux.control_with_iterm2:  # macOS
+                        if self.tmux_server is None:
+                            raise RuntimeError("tmux server not available")
                         tmux_session = self.tmux_server.find_where({"session_name": session.name})
-                        tmux_session.switch_client()
+                        if tmux_session:
+                            tmux_session.switch_client()
                     else:
                         # Auto-attach to the session by replacing current process
                         import os
@@ -354,7 +357,7 @@ class TmuxSessionManager(ModalScreen):
                 session = self.sessions[cursor_row]
 
                 # Show confirmation dialog
-                def on_confirm(confirmed: bool) -> None:
+                def on_confirm(confirmed: bool | None) -> None:
                     if confirmed:
                         self._do_kill_session(session)
                     else:

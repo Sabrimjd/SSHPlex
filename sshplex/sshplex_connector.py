@@ -230,7 +230,7 @@ class SSHplexConnector:
             cmd_parts.extend(["-p", str(port)])
 
         # Add connection timeout
-        timeout = getattr(self.config.ssh, 'timeout', 10)
+        timeout = getattr(self.config.ssh, 'timeout', 10) if self.config else 10
         cmd_parts.extend(["-o", f"ConnectTimeout={timeout}"])
 
         # Add user@hostname

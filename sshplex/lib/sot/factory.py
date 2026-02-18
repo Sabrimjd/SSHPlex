@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ..cache import HostCache
 from ..logger import get_logger
@@ -11,9 +11,6 @@ from .ansible import AnsibleProvider
 from .base import Host, SoTProvider
 from .netbox import NetBoxProvider
 from .static import StaticProvider
-
-if TYPE_CHECKING:
-    from .consul import ConsulProvider
 
 
 class SoTFactory:
@@ -103,7 +100,7 @@ class SoTFactory:
             hosts=import_config.hosts
         )
 
-    def _create_consul_provider(self, import_config: Any) -> ConsulProvider | None:
+    def _create_consul_provider(self, import_config: Any) -> SoTProvider | None:
         """Create Consul provider instance from import configuration.
 
         Args:

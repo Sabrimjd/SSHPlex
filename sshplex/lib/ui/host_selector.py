@@ -118,9 +118,9 @@ class HelpScreen(Screen):
         with Vertical(id="help-dialog"):
             yield Markdown(self.help_text)
 
-    def on_key(self, event) -> None:
+    def on_key(self, event: Any) -> None:
         """Close help screen on any key press."""
-        self.pop_screen()
+        self.dismiss()
 
 
 class HostSelector(App):
@@ -312,8 +312,10 @@ class HostSelector(App):
         for column in self.config.ui.table_columns:
             self.table.add_column(column, width=None, key=column)
 
-    def on_data_table_header_selected(self, event: DataTable.HeaderSelected):
+    def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
         col = event.column_key.value
+        if col is None:
+            return
         self.sort_reverse = not self.sort_reverse
         hosts_to_display = self.get_hosts_to_display()
         hosts_to_display.sort(
@@ -486,7 +488,7 @@ class HostSelector(App):
         """Return filtered hosts if search is active, otherwise all hosts."""
         return self.filtered_hosts if self.search_filter else self.hosts
 
-    def populate_table(self, hosts_to_display) -> None:
+    def populate_table(self, hosts_to_display: List[Host]) -> None:
         """Populate the table with host data."""
         if not self.table:
             return
@@ -731,12 +733,12 @@ class HostSelector(App):
         from textual.screen import ModalScreen
         from textual.widgets import Button, Input
 
-        class QuickFilterScreen(ModalScreen):
-            def __init__(self, parent_app):
+        class QuickFilterScreen(ModalScreen[None]):
+            def __init__(self, parent_app: "HostSelector") -> None:
                 super().__init__()
-                self.parent = parent_app
+                self.host_selector_app = parent_app
 
-            def compose(self):
+            def compose(self) -> ComposeResult:
                 with Center(), Vertical():
                     yield Label("Filter hosts by name pattern:", id="filter-label")
                     yield Input(placeholder="e.g., web-* or *prod*", id="filter-input")
@@ -748,8 +750,8 @@ class HostSelector(App):
                     input_widget = self.query_one("#filter-input", Input)
                     pattern = input_widget.value.strip()
                     if pattern:
-                        self.parent.apply_quick_filter(pattern)
-                self.parent.pop_screen()
+                        self.host_selector_app.apply_quick_filter(pattern)
+                self.dismiss()
 
         filter_screen = QuickFilterScreen(self)
         self.push_screen(filter_screen)
