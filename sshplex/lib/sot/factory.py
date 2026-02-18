@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import List, Dict, Any, Optional, TYPE_CHECKING
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from ..logger import get_logger
 from ..cache import HostCache
 from .base import SoTProvider, Host
@@ -289,6 +290,129 @@ class SoTFactory:
         self._cached_hosts = final_hosts
 
         return final_hosts
+
+    def get_all_hosts_parallel(self, additional_filters: Optional[Dict[str, Any]] = None, force_refresh: bool = False, max_workers: int = 4) -> List[Host]:
+        """Get hosts from all configured providers in parallel with caching support.
+
+        This method improves performance when multiple providers are configured
+        by fetching hosts concurrently instead of sequentially.
+
+        Args:
+            additional_filters: Additional filters to apply to all providers
+            force_refresh: If True, bypass cache and fetch fresh data from providers
+            max_workers: Maximum number of parallel provider queries (default: 4)
+
+        Returns:
+            Combined list of hosts from all providers
+        """
+        # If we have cached hosts and not forcing refresh, return them
+        if not force_refresh and self._cached_hosts is not None:
+            self.logger.debug("Returning already loaded hosts from memory")
+            return self._cached_hosts
+
+        # Try to load from cache first (unless forcing refresh)
+        if not force_refresh:
+            cached_hosts = self.cache.load_hosts()
+            if cached_hosts is not None:
+                self.logger.info(f"Loaded {len(cached_hosts)} hosts from cache")
+                self._cached_hosts = cached_hosts
+                return cached_hosts
+
+        # Cache miss or force refresh - fetch from providers in parallel
+        self.logger.info("Cache miss or refresh requested - fetching hosts from providers in parallel")
+
+        if not self.providers:
+            self.logger.error("No SoT providers initialized")
+            return []
+
+        all_hosts = []
+
+        # Use ThreadPoolExecutor for parallel fetching
+        # Note: IO-bound operations benefit more from threads than processes
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='provider-') as executor:
+            # Submit tasks for each provider
+            future_to_provider = {}
+            for provider in self.providers:
+                future = executor.submit(
+                    self._fetch_provider_hosts,
+                    provider,
+                    additional_filters
+                )
+                future_to_provider[future] = provider
+
+            # Collect results as they complete
+            for future in as_completed(future_to_provider):
+                provider = future_to_provider[future]
+                try:
+                    hosts = future.result()
+                    provider_name = type(provider).__name__
+                    self.logger.info(f"Retrieved {len(hosts)} hosts from {provider_name}")
+                    all_hosts.extend(hosts)
+                except Exception as e:
+                    provider_name = type(provider).__name__
+                    self.logger.error(f"Error retrieving hosts from {provider_name}: {e}")
+
+        # Remove duplicates based on name + ip combination
+        unique_hosts = {}
+        for host in all_hosts:
+            key = f"{host.name}:{host.ip}"
+            if key not in unique_hosts:
+                unique_hosts[key] = host
+            else:
+                # If duplicate, merge metadata and note the source conflict
+                existing = unique_hosts[key]
+                existing.metadata.update(host.metadata)
+
+                # Add source information
+                existing_sources = existing.metadata.get('sources', [])
+                if isinstance(existing_sources, list):
+                    new_sources = host.metadata.get('sources', [])
+                    if isinstance(new_sources, list):
+                        existing_sources.extend(new_sources)
+
+        final_hosts = list(unique_hosts.values())
+
+        self.logger.info(f"Retrieved {len(final_hosts)} unique hosts from {len(self.providers)} providers")
+
+        # Apply additional filters if specified
+        if additional_filters:
+            final_hosts = self._apply_additional_filters(final_hosts, additional_filters)
+            self.logger.info(f"After applying additional filters: {len(final_hosts)} hosts")
+
+        # Save to cache
+        provider_info = {
+            'provider_count': len(self.providers),
+            'provider_names': self.get_provider_names(),
+            'filters_applied': additional_filters or {},
+            'fetch_mode': 'parallel'
+        }
+        self.cache.save_hosts(final_hosts, provider_info)
+
+        # Store in memory for quick access
+        self._cached_hosts = final_hosts
+
+        return final_hosts
+
+    def _fetch_provider_hosts(self, provider: SoTProvider,
+                              additional_filters: Optional[Dict[str, Any]]) -> List[Host]:
+        """Fetch hosts from a single provider with error handling.
+
+        Args:
+            provider: SoT provider instance
+            additional_filters: Additional filters to apply
+
+        Returns:
+            List of hosts from the provider (empty list on error)
+        """
+        try:
+            # Get provider-specific filters
+            provider_filters = self._get_provider_filters(provider, additional_filters)
+
+            return provider.get_hosts(filters=provider_filters)
+        except Exception as e:
+            provider_name = type(provider).__name__
+            self.logger.error(f"Error in {provider_name}: {e}")
+            return []
 
     def _get_provider_filters(self, provider: SoTProvider,
                               additional_filters: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

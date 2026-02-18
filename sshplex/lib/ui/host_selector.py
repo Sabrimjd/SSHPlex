@@ -393,15 +393,16 @@ class HostSelector(App):
             provider_names = ', '.join(self.sot_factory.get_provider_names())
             self.log_message(f"Successfully initialized {self.sot_factory.get_provider_count()} provider(s): {provider_names}")
 
-            # Get hosts (with caching support)
+            # Get hosts (with caching support) - use parallel fetching for better performance
             if show_loading:
                 if force_refresh:
-                    self.update_loading_status("Fetching fresh host data...")
+                    self.update_loading_status("Fetching fresh host data (parallel)...")
                 else:
-                    self.update_loading_status("Loading host data...")
+                    self.update_loading_status("Loading host data (parallel)...")
                 await asyncio.sleep(0.1)  # Allow UI to update
 
-            self.hosts = self.sot_factory.get_all_hosts(force_refresh=force_refresh)
+            # Use parallel fetching for better performance with multiple providers
+            self.hosts = self.sot_factory.get_all_hosts_parallel(force_refresh=force_refresh)
             self.filtered_hosts = self.hosts.copy()  # Initialize filtered hosts
 
             if not self.hosts:

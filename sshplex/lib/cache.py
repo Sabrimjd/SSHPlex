@@ -46,10 +46,25 @@ class HostCache:
             True if cache exists and is not expired, False otherwise
         """
         with self._lock:
+            # Quick check: do files exist?
             if not self.cache_file.exists() or not self.metadata_file.exists():
                 return False
 
+            # Quick check: file ages (faster than parsing YAML)
             try:
+                cache_mtime = self.cache_file.stat().st_mtime
+                metadata_mtime = self.metadata_file.stat().st_mtime
+                now = datetime.now().timestamp()
+
+                # If cache is older than TTL, it's invalid
+                if now - cache_mtime > self.cache_ttl.total_seconds():
+                    return False
+
+                # If metadata is older than cache, it's stale
+                if metadata_mtime < cache_mtime:
+                    return False
+
+                # Full validation (parse YAML to be sure)
                 with open(self.metadata_file, 'r') as f:
                     metadata = yaml.safe_load(f)
 
