@@ -229,35 +229,6 @@ class SSHplexConnector:
 
         return " ".join(cmd_parts)
 
-    def _test_ssh_connectivity(self, hostname: str, username: str, key_path: Optional[str], port: int) -> bool:
-        """Test SSH connectivity to a host before creating pane/window.
-        
-        Returns True if connection is possible, False otherwise.
-        """
-        # Build a minimal test command
-        cmd_parts = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5"]
-        
-        if key_path:
-            cmd_parts.extend(["-i", key_path])
-        if port != 22:
-            cmd_parts.extend(["-p", str(port)])
-            
-        cmd_parts.append(f"{username}@{hostname}")
-        cmd_parts.append("exit")  # Just test connection, then exit
-        
-        try:
-            result = subprocess.run(
-                " ".join(cmd_parts),
-                shell=True,
-                capture_output=True,
-                timeout=10
-            )
-            return result.returncode == 0
-        except subprocess.TimeoutExpired:
-            return False
-        except Exception:
-            return False
-
     def get_session_name(self) -> str:
         """Get the tmux session name."""
         return self.session_name
