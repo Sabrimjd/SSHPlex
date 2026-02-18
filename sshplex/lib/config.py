@@ -1,11 +1,11 @@
 """SSHplex configuration management with pydantic validation"""
 
-from pathlib import Path
-from typing import Dict, Any, Optional, List
-import yaml
 import shutil
-import os
-from pydantic import BaseModel, Field, model_validator
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import yaml
+from pydantic import BaseModel, Field
 
 from .. import __version__
 
@@ -47,12 +47,25 @@ class Proxy(BaseModel):
     key_path: str = Field("", description="Proxy key")
 
 
+class SSHRetryConfig(BaseModel):
+    """SSH connection retry configuration."""
+    enabled: bool = Field(default=True, description="Enable connection retry on failure")
+    max_attempts: int = Field(default=3, ge=1, le=10, description="Maximum retry attempts")
+    delay_seconds: float = Field(default=2.0, ge=0.5, le=60.0, description="Initial delay between retries")
+    exponential_backoff: bool = Field(default=True, description="Double delay on each retry")
+
+
 class SSHConfig(BaseModel):
     """SSH connection configuration."""
     username: str = Field(default="admin", description="Default SSH username")
     key_path: str = Field(default="~/.ssh/id_rsa", description="Path to SSH private key")
     timeout: int = 10
     port: int = 22
+    # SSH security options
+    strict_host_key_checking: bool = Field(default=False, description="Enable strict host key checking")
+    user_known_hosts_file: str = Field(default="", description="Custom known_hosts file path (empty = default)")
+    # Retry configuration
+    retry: SSHRetryConfig = Field(default_factory=SSHRetryConfig, description="Connection retry settings")
     proxy: List[Proxy] = Field(alias='proxy', default_factory=list, description="List of proxies")
 
 class TmuxConfig(BaseModel):
@@ -197,17 +210,17 @@ def load_config(config_path: Optional[str] = None) -> Config:
                 config_file = initialize_default_config()
                 print(f"✅ SSHplex: First run detected - created configuration at {config_file}")
                 print(f"📝 Please edit {config_file} with your NetBox details before running SSHplex again")
-                print(f"🔧 Key settings to configure:")
-                print(f"   - netbox.url: Your NetBox instance URL")
-                print(f"   - netbox.token: Your NetBox API token")
-                print(f"   - ssh.username: Your SSH username")
-                print(f"   - ssh.key_path: Path to your SSH private key")
-                print(f"\n🚀 Run 'sshplex' again after configuration is complete!")
+                print("🔧 Key settings to configure:")
+                print("   - netbox.url: Your NetBox instance URL")
+                print("   - netbox.token: Your NetBox API token")
+                print("   - ssh.username: Your SSH username")
+                print("   - ssh.key_path: Path to your SSH private key")
+                print("\n🚀 Run 'sshplex' again after configuration is complete!")
                 # Exit gracefully to let user configure
                 import sys
                 sys.exit(0)
             except Exception as e:
-                raise FileNotFoundError(f"SSHplex: Could not initialize default config: {e}")
+                raise FileNotFoundError(f"SSHplex: Could not initialize default config: {e}") from e
     else:
         config_file = Path(config_path)
 
@@ -218,17 +231,28 @@ def load_config(config_path: Optional[str] = None) -> Config:
         logger = get_logger()
         logger.info(f"SSHplex: Loading configuration from {config_file}")
 
-        with open(config_file, 'r') as f:
+        with open(config_file) as f:
             config_data = yaml.safe_load(f)
+
+        if not config_data:
+            raise ValueError("SSHplex: Configuration file is empty or invalid")
 
         config = Config(**config_data)
         logger.info("SSHplex: Configuration loaded and validated successfully")
         return config
 
     except yaml.YAMLError as e:
-        raise ValueError(f"SSHplex: Invalid YAML in config file: {e}")
+        raise ValueError(f"SSHplex: Invalid YAML in config file: {e}") from e
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"SSHplex: Configuration file not found: {e}") from e
+    except PermissionError as e:
+        raise ValueError(f"SSHplex: Permission denied reading config file: {e}") from e
     except Exception as e:
-        raise ValueError(f"SSHplex: Configuration validation failed: {e}")
+        # Provide more context for pydantic validation errors
+        error_msg = str(e)
+        if "validation" in error_msg.lower() or "field" in error_msg.lower():
+            raise ValueError(f"SSHplex: Configuration validation failed: {error_msg}") from e
+        raise ValueError(f"SSHplex: Configuration validation failed: {e}") from e
 
 
 def get_config_info() -> Dict[str, Any]:

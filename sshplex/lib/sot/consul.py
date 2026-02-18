@@ -1,8 +1,9 @@
 """Consul host list Source of Truth provider for SSHplex."""
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from ..logger import get_logger
-from .base import SoTProvider, Host
+from .base import Host, SoTProvider
 
 
 class ConsulProvider(SoTProvider):
@@ -79,7 +80,7 @@ class ConsulProvider(SoTProvider):
         Returns:
             List of Host objects from Consul catalog
         """
-        hosts = []
+        hosts: list[Host] = []
 
         if self.api is None:
             self.logger.error("Consul API not initialized - call connect() first")

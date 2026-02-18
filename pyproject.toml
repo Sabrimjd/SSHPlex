@@ -50,6 +50,8 @@ dev = [
     "black>=22.0.0",
     "flake8>=5.0.0",
     "mypy>=1.0.0",
+    "ruff>=0.8.0",
+    "vulture>=2.11",
     "types-PyYAML>=6.0.0",
 ]
 
@@ -84,3 +86,30 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.vulture]
+paths = ["sshplex", "tests"]
+exclude = [".venv/", "build/", "dist/", "sshplex/lib/multiplexer/base.py"]
+min_confidence = 80
+
+
+[[tool.mypy.overrides]]
+module = ["consul"]
+ignore_missing_imports = true
+
+
+[[tool.mypy.overrides]]
+module = ["sshplex.lib.sot.consul"]
+ignore_errors = true

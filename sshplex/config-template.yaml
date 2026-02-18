@@ -77,6 +77,16 @@ ssh:
   key_path: "~/.ssh/id_ed25519"
   timeout: 10
   port: 22
+  # SSH security options
+  strict_host_key_checking: false  # Set to true for production (more secure)
+  # Options: "accept-new" (first connection auto-accepts), "no" (insecure), "yes" (strict)
+  user_known_hosts_file: ""  # Empty = default ~/.ssh/known_hosts, or specify custom path
+  # Connection retry settings
+  retry:
+    enabled: true
+    max_attempts: 3
+    delay_seconds: 2
+    exponential_backoff: true  # Double delay on each retry
   proxy:
     - name: "consul-nonprod-proxy"
       imports: ['consul-nonprod']

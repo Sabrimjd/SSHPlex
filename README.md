@@ -10,14 +10,19 @@ SSHplex is a Python-based SSH connection multiplexer that provides a modern Term
 - **Multiple Sources of Truth**: NetBox, Ansible inventories, HashiCorp Consul, and static host lists - use them together or separately
 - **Multi-Provider Support**: Configure multiple instances of the same provider type (e.g., multiple NetBox instances, multiple Consul datacenters)
 - **tmux Integration**: Creates organized sessions with panes or windows for each host
-- **iTerm2 Integration**: Native tmux `-CC` mode on macOS for iTerm2 tabs/splits
+- **iTerm2 Integration**: Native tmux `-CC` mode on macOS for iTerm2 tabs/splits, with improved detection and fallback guidance
 - **Proxy Support**: Per-provider SSH proxy/jump host configuration
 - **Wildcard Search**: Filter hosts across all columns with glob patterns
+- **Config Editor**: Edit `sshplex.yaml` directly from the TUI (`e`) with tabbed form and validation
+- **Built-in Help**: Keyboard shortcuts help modal (`h`) with live mode/state hints
 - **Sortable Columns**: Click column headers to sort the host table
 - **Copy to Clipboard**: Copy the host table to clipboard for sharing
 - **Intelligent Caching**: Local host caching for fast startup (configurable TTL)
 - **Broadcasting**: Sync input across multiple SSH connections
 - **Session Manager**: Browse, connect to, or kill existing tmux sessions from the TUI
+- **SSH Security**: Configurable host key checking with secure defaults
+- **Connection Retry**: Automatic retry with exponential backoff for reliability
+- **Enhanced CLI**: Debug mode, cache management, and configuration utilities
 
 ## Prerequisites
 
@@ -70,9 +75,27 @@ sshplex
 
 # Debug mode - test provider connectivity
 sshplex --debug
+
+# Show configuration paths
+sshplex --show-config
+
+# Clear host cache
+sshplex --clear-cache
 ```
 
 On first run, SSHplex creates a config at `~/.config/sshplex/sshplex.yaml`. Edit it with your provider details, then run `sshplex` again.
+
+## What's New (Quality Upgrade)
+
+Recent quality and UX improvements include:
+
+- Stronger config/runtime error handling and input validation
+- iTerm2 integration reliability improvements (installation/running detection + better fallback messaging)
+- Parallel provider fetching support for faster multi-provider discovery
+- Faster cache validity checks before deep metadata parsing
+- TUI polish: config editor (`e`), help modal (`h`), and improved visual selection cues
+
+See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Usage
 
@@ -81,10 +104,11 @@ On first run, SSHplex creates a config at `~/.config/sshplex/sshplex.yaml`. Edit
 3. **Search**: Press `/` to filter hosts (supports wildcards)
 4. **Select**: `Space` to toggle, `a` to select all, `d` to deselect all
 5. **Configure**: `p` to toggle panes/tabs, `b` to toggle broadcast
-6. **Connect**: `Enter` to create tmux session and connect
-7. **Sessions**: `s` to manage existing tmux sessions
-8. **Copy**: `c` to copy the host table to clipboard
-9. **Refresh**: `r` to refresh hosts from providers (bypasses cache)
+6. **Edit Config**: `e` to open the built-in configuration editor
+7. **Connect**: `Enter` to create tmux session and connect
+8. **Sessions**: `s` to manage existing tmux sessions
+9. **Copy**: `c` to copy the host table to clipboard
+10. **Refresh**: `r` to refresh hosts from providers (bypasses cache)
 
 ### TUI Keybindings
 
@@ -98,6 +122,8 @@ On first run, SSHplex creates a config at `~/.config/sshplex/sshplex.yaml`. Edit
 | `p` | Toggle panes/tabs mode |
 | `b` | Toggle broadcast mode |
 | `s` | Open session manager |
+| `e` | Open configuration editor |
+| `h` | Open keyboard shortcuts help |
 | `c` | Copy table to clipboard |
 | `r` | Refresh from providers |
 | `Escape` | Focus table / clear search |
@@ -111,6 +137,18 @@ Ctrl+b + n/p           # Next/Previous window
 Ctrl+b + b             # Toggle broadcast (custom SSHplex binding)
 Ctrl+b + d             # Detach from session
 Ctrl+b + z             # Zoom/unzoom current pane
+```
+
+## CLI Reference
+
+```bash
+sshplex                        # Launch TUI
+sshplex --debug                # Test provider connectivity
+sshplex --clear-cache          # Clear host cache
+sshplex --show-config          # Show configuration paths
+sshplex --config /path/to.yml  # Use custom config file
+sshplex --verbose              # Enable verbose logging
+sshplex --version              # Show version
 ```
 
 ## Configuration
@@ -203,6 +241,27 @@ ssh:
       key_path: "~/.ssh/jump_key"
 ```
 
+### SSH Security Options
+
+Configure SSH host key checking and retry behavior:
+
+```yaml
+ssh:
+  username: "admin"
+  key_path: "~/.ssh/id_ed25519"
+  # Security options
+  strict_host_key_checking: false  # Options: true (strict), false (accept-new)
+  user_known_hosts_file: ""  # Empty = default ~/.ssh/known_hosts
+  # Connection retry
+  retry:
+    enabled: true
+    max_attempts: 3
+    delay_seconds: 2
+    exponential_backoff: true  # Double delay on each retry
+```
+
+**Security Note**: By default, SSHplex uses `StrictHostKeyChecking=accept-new` which automatically accepts new host keys but warns on key changes. For production environments, set `strict_host_key_checking: true` for maximum security.
+
 ### iTerm2 Integration (macOS)
 
 Enable native iTerm2 tmux integration with `-CC` mode:
@@ -268,6 +327,11 @@ pip install -e ".[dev]"
 
 # Run tests
 python3 -m pytest tests/
+
+# Lint & quality checks
+ruff check sshplex tests
+mypy sshplex
+vulture sshplex tests --min-confidence 80
 
 # Local Consul for testing
 docker-compose -f docker-compose.consul.yml up -d

@@ -1,8 +1,9 @@
 """Static host list Source of Truth provider for SSHplex."""
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from ..logger import get_logger
-from .base import SoTProvider, Host
+from .base import Host, SoTProvider
 
 
 class StaticProvider(SoTProvider):
