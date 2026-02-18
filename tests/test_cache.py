@@ -3,10 +3,8 @@
 import pytest
 import tempfile
 import yaml
-import time
 from pathlib import Path
 from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock
 
 from sshplex.lib.cache import HostCache
 from sshplex.lib.sot.base import Host
@@ -40,6 +38,7 @@ class TestHostCache:
         new_dir = cache_dir / "new_cache"
         cache = HostCache(cache_dir=str(new_dir))
         assert new_dir.exists()
+        assert cache.cache_dir == new_dir
 
     def test_default_values(self, cache_dir):
         """Test default cache configuration."""
