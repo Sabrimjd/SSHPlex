@@ -24,6 +24,7 @@ from ... import __version__
 from ..logger import get_logger
 from ..sot.base import Host
 from ..sot.factory import SoTFactory
+from .config_editor import ConfigEditorScreen
 from .session_manager import TmuxSessionManager
 
 
@@ -225,7 +226,7 @@ class HostSelector(App):
         Binding("h", "show_help", "Help", show=True),
         Binding("q", "quit", "Quit", show=True),
         Binding("c", "copy_select", "Copy", show=True),
-        Binding("f", "filter_hosts", "Quick Filter", show=True),
+        Binding("e", "edit_config", "Config", show=True),
     ]
 
     selected_hosts: reactive[Set[str]] = reactive(set())
@@ -629,6 +630,17 @@ class HostSelector(App):
         session_manager = TmuxSessionManager(self.config)
         self.push_screen(session_manager)
 
+    def action_edit_config(self) -> None:
+        """Open the configuration editor modal."""
+        self.log_message("Opening configuration editor...")
+
+        def _on_editor_close(saved: Optional[bool]) -> None:
+            if saved:
+                self.log_message("Configuration saved - restart SSHplex for changes to take effect")
+
+        editor = ConfigEditorScreen(self.config)
+        self.push_screen(editor, callback=_on_editor_close)
+
     def action_refresh_hosts(self) -> None:
         """Refresh hosts by fetching fresh data from all SoT providers."""
         self.log_message("Refreshing hosts from SoT providers...")
@@ -696,7 +708,6 @@ class HostSelector(App):
 | Key | Action |
 |-----|--------|
 | `/` | Open search input |
-| `f` | Quick filter by name |
 | `r` | Refresh from sources (bypass cache) |
 | `Escape` | Focus table / clear search |
 
@@ -711,6 +722,7 @@ class HostSelector(App):
 |-----|--------|
 | `s` | Session manager |
 | `c` | Copy table to clipboard |
+| `e` | Edit configuration |
 | `h` | Show this help |
 
 ## Current Settings
@@ -723,57 +735,6 @@ class HostSelector(App):
 
         help_screen = HelpScreen(help_text)
         self.push_screen(help_screen)
-
-    def action_filter_hosts(self) -> None:
-        """Quick filter by host name (prompts for pattern)."""
-        if not self.hosts:
-            return
-
-        from textual.containers import Center, Vertical
-        from textual.screen import ModalScreen
-        from textual.widgets import Button, Input
-
-        class QuickFilterScreen(ModalScreen[None]):
-            def __init__(self, parent_app: "HostSelector") -> None:
-                super().__init__()
-                self.host_selector_app = parent_app
-
-            def compose(self) -> ComposeResult:
-                with Center(), Vertical():
-                    yield Label("Filter hosts by name pattern:", id="filter-label")
-                    yield Input(placeholder="e.g., web-* or *prod*", id="filter-input")
-                    yield Button("Apply", id="filter-apply", variant="primary")
-                    yield Button("Cancel", id="filter-cancel", variant="default")
-
-            def on_button_pressed(self, event: Button.Pressed) -> None:
-                if event.button.id == "filter-apply":
-                    input_widget = self.query_one("#filter-input", Input)
-                    pattern = input_widget.value.strip()
-                    if pattern:
-                        self.host_selector_app.apply_quick_filter(pattern)
-                self.dismiss()
-
-        filter_screen = QuickFilterScreen(self)
-        self.push_screen(filter_screen)
-
-    def apply_quick_filter(self, pattern: str) -> None:
-        """Apply quick filter pattern to hosts."""
-        import fnmatch
-
-        self.search_filter = pattern
-        self.filtered_hosts = [
-            host for host in self.hosts
-            if fnmatch.fnmatchcase(host.name.lower(), pattern.lower()) or
-               fnmatch.fnmatchcase(host.ip, pattern.lower())
-        ]
-
-        self.populate_table(self.get_hosts_to_display())
-        self.update_status_selection()
-
-        if self.filtered_hosts:
-            self.log_message(f"Quick filter '{pattern}' matched {len(self.filtered_hosts)} hosts")
-        else:
-            self.log_message(f"Quick filter '{pattern}' matched no hosts", level="warning")
 
     def action_start_search(self) -> None:
         """Start search mode by showing and focusing the search input."""

@@ -13,7 +13,7 @@ SSHplex is a Python-based SSH connection multiplexer that provides a modern Term
 - **iTerm2 Integration**: Native tmux `-CC` mode on macOS for iTerm2 tabs/splits, with improved detection and fallback guidance
 - **Proxy Support**: Per-provider SSH proxy/jump host configuration
 - **Wildcard Search**: Filter hosts across all columns with glob patterns
-- **Quick Filter**: Fast name/IP wildcard filter (`f`) for rapid narrowing
+- **Config Editor**: Edit `sshplex.yaml` directly from the TUI (`e`) with tabbed form and validation
 - **Built-in Help**: Keyboard shortcuts help modal (`h`) with live mode/state hints
 - **Sortable Columns**: Click column headers to sort the host table
 - **Copy to Clipboard**: Copy the host table to clipboard for sharing
@@ -93,7 +93,7 @@ Recent quality and UX improvements include:
 - iTerm2 integration reliability improvements (installation/running detection + better fallback messaging)
 - Parallel provider fetching support for faster multi-provider discovery
 - Faster cache validity checks before deep metadata parsing
-- TUI polish: quick filter (`f`), help modal (`h`), and improved visual selection cues
+- TUI polish: config editor (`e`), help modal (`h`), and improved visual selection cues
 
 See [CHANGELOG.md](CHANGELOG.md) for full details.
 
@@ -104,10 +104,11 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 3. **Search**: Press `/` to filter hosts (supports wildcards)
 4. **Select**: `Space` to toggle, `a` to select all, `d` to deselect all
 5. **Configure**: `p` to toggle panes/tabs, `b` to toggle broadcast
-6. **Connect**: `Enter` to create tmux session and connect
-7. **Sessions**: `s` to manage existing tmux sessions
-8. **Copy**: `c` to copy the host table to clipboard
-9. **Refresh**: `r` to refresh hosts from providers (bypasses cache)
+6. **Edit Config**: `e` to open the built-in configuration editor
+7. **Connect**: `Enter` to create tmux session and connect
+8. **Sessions**: `s` to manage existing tmux sessions
+9. **Copy**: `c` to copy the host table to clipboard
+10. **Refresh**: `r` to refresh hosts from providers (bypasses cache)
 
 ### TUI Keybindings
 
@@ -121,7 +122,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 | `p` | Toggle panes/tabs mode |
 | `b` | Toggle broadcast mode |
 | `s` | Open session manager |
-| `f` | Quick wildcard filter by host name/IP |
+| `e` | Open configuration editor |
 | `h` | Open keyboard shortcuts help |
 | `c` | Copy table to clipboard |
 | `r` | Refresh from providers |
