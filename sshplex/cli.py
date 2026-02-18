@@ -1,12 +1,12 @@
 """CLI debug interface for SSHplex (for pip-installed package)"""
 
-import sys
 import argparse
+import sys
 from typing import Any
 
 from . import __version__
-from .lib.config import load_config, get_config_info
-from .lib.logger import setup_logging, get_logger
+from .lib.config import get_config_info, load_config
+from .lib.logger import get_logger, setup_logging
 from .lib.sot.factory import SoTFactory
 
 

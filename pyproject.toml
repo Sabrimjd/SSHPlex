@@ -101,5 +101,5 @@ ignore = ["E501"]
 
 [tool.vulture]
 paths = ["sshplex", "tests"]
-exclude = [".venv/", "build/", "dist/"]
+exclude = [".venv/", "build/", "dist/", "sshplex/lib/multiplexer/base.py"]
 min_confidence = 80

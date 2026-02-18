@@ -1,15 +1,13 @@
 """SSHplex Connector - SSH connections and tmux session management."""
 
-from typing import Any, List, Optional
-from datetime import datetime
+import platform
 import time
-import subprocess
+from datetime import datetime
+from typing import Any, List, Optional
 
 from .lib.logger import get_logger
 from .lib.multiplexer.tmux import TmuxManager
 from .lib.sot.base import Host
-
-import platform
 
 
 class SSHConnectionError(Exception):
@@ -57,9 +55,13 @@ class SSHplexConnector:
             raise ValueError(f"SSH port must be between 1 and 65535, got {port}")
 
         # Get retry configuration
-        retry_config = self.config.ssh.retry
-        max_attempts = retry_config.max_attempts if retry_config.enabled else 1
-        base_delay = retry_config.delay_seconds
+        if self.config is None:
+            max_attempts = 1
+            base_delay = 1
+        else:
+            retry_config = self.config.ssh.retry
+            max_attempts = retry_config.max_attempts if retry_config.enabled else 1
+            base_delay = retry_config.delay_seconds
 
         try:
             # Create tmux session
@@ -70,7 +72,7 @@ class SSHplexConnector:
             success_count = 0
             failed_hosts = []
 
-            for i, host in enumerate(hosts):
+            for _i, host in enumerate(hosts):
                 hostname = host.ip if host.ip else host.name
 
                 # Build SSH command
@@ -86,14 +88,16 @@ class SSHplexConnector:
                     try:
                         if use_panes:
                             # Create pane with SSH command
-                            if self.tmux_manager.create_pane(hostname, ssh_command, self.config.tmux.max_panes_per_window):
+                            max_panes = self.config.tmux.max_panes_per_window if self.config else 5
+                            if self.tmux_manager.create_pane(hostname, ssh_command, max_panes):
                                 connection_success = True
                                 self.logger.info(f"SSHplex: Successfully created pane for {hostname}")
                             else:
                                 last_error = "Failed to create tmux pane"
                         else:
                             # Create window (tab) with SSH command
-                            if "darwin" in self.system and self.config.tmux.control_with_iterm2:
+                            use_iterm2 = "darwin" in self.system and (self.config.tmux.control_with_iterm2 if self.config else False)
+                            if use_iterm2:
                                 # iTerm2 mode: use single-pane windows for tmux -CC integration
                                 if self.tmux_manager.create_pane(hostname, ssh_command, 1):
                                     connection_success = True
@@ -182,33 +186,38 @@ class SSHplexConnector:
 
         # Try to configure proxy if available
         try:
-            provider_name = host.metadata.get('provider', '')
-            if provider_name:
-                proxy = next(
-                    (item for item in self.config.ssh.proxy if provider_name in item.imports),
-                    None
-                )
-                if proxy:
-                    cmd_parts.extend([
-                        "-o", f"ProxyCommand=ssh -i {proxy.key_path} -W %h:%p {proxy.username}@{proxy.host}"
-                    ])
+            if self.config is not None:
+                provider_name = host.metadata.get('provider', '')
+                if provider_name:
+                    proxy = next(
+                        (item for item in self.config.ssh.proxy if provider_name in item.imports),
+                        None
+                    )
+                    if proxy:
+                        cmd_parts.extend([
+                            "-o", f"ProxyCommand=ssh -i {proxy.key_path} -W %h:%p {proxy.username}@{proxy.host}"
+                        ])
         except Exception:
             # Proxy not configured for this host, continue without it
             pass
 
         # Configure host key checking based on config
-        strict_mode = self.config.ssh.strict_host_key_checking
-        if strict_mode:
-            cmd_parts.extend(["-o", "StrictHostKeyChecking=yes"])
-        else:
-            # Less strict but still reasonable
-            cmd_parts.extend(["-o", "StrictHostKeyChecking=accept-new"])
+        if self.config is not None:
+            strict_mode = self.config.ssh.strict_host_key_checking
+            if strict_mode:
+                cmd_parts.extend(["-o", "StrictHostKeyChecking=yes"])
+            else:
+                # Less strict but still reasonable
+                cmd_parts.extend(["-o", "StrictHostKeyChecking=accept-new"])
 
-        # Configure known_hosts file
-        known_hosts = self.config.ssh.user_known_hosts_file
-        if known_hosts:
-            cmd_parts.extend(["-o", f"UserKnownHostsFile={known_hosts}"])
-        # If empty, SSH uses default ~/.ssh/known_hosts
+            # Configure known_hosts file
+            known_hosts = self.config.ssh.user_known_hosts_file
+            if known_hosts:
+                cmd_parts.extend(["-o", f"UserKnownHostsFile={known_hosts}"])
+            # If empty, SSH uses default ~/.ssh/known_hosts
+        else:
+            # Use reasonable defaults when config is None
+            cmd_parts.extend(["-o", "StrictHostKeyChecking=accept-new"])
 
         cmd_parts.extend(["-o", "LogLevel=ERROR"])
 

@@ -1,9 +1,11 @@
 """NetBox Source of Truth provider for SSHplex."""
 
+from typing import Any, Dict, List, Optional
+
 import pynetbox  # type: ignore
-from typing import List, Dict, Any, Optional
+
 from ..logger import get_logger
-from .base import SoTProvider, Host
+from .base import Host, SoTProvider
 
 
 class NetBoxProvider(SoTProvider):
@@ -24,6 +26,8 @@ class NetBoxProvider(SoTProvider):
         self.timeout = timeout
         self.api: Optional[Any] = None
         self.logger = get_logger()
+        self.provider_name: str = "netbox"
+        self.import_filters: Dict[str, Any] = {}
 
     def connect(self) -> bool:
         """Establish connection to NetBox API.

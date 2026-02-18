@@ -1,7 +1,7 @@
 """Base classes for Source of Truth providers."""
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 
 class Host:

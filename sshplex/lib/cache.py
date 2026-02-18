@@ -1,11 +1,13 @@
 """SSHplex host cache management for optimized startup performance."""
 
 import os
-import yaml
 import threading
-from pathlib import Path
-from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import yaml
+
 from .logger import get_logger
 from .sot.base import Host
 
@@ -65,7 +67,7 @@ class HostCache:
                     return False
 
                 # Full validation (parse YAML to be sure)
-                with open(self.metadata_file, 'r') as f:
+                with open(self.metadata_file) as f:
                     metadata = yaml.safe_load(f)
 
                 if not metadata or 'timestamp' not in metadata:
@@ -121,7 +123,7 @@ class HostCache:
                 self.logger.info(f"Successfully cached {len(hosts)} hosts to {self.cache_file}")
                 return True
 
-            except (yaml.YAMLError, IOError, OSError) as e:
+            except (yaml.YAMLError, OSError) as e:
                 self.logger.error(f"Failed to save hosts to cache: {e}")
                 return False
             except Exception as e:
@@ -139,7 +141,7 @@ class HostCache:
                 return None
 
             try:
-                with open(self.cache_file, 'r') as f:
+                with open(self.cache_file) as f:
                     hosts_data = yaml.safe_load(f)
 
                 if not hosts_data:
@@ -182,7 +184,7 @@ class HostCache:
                 return None
 
             try:
-                with open(self.metadata_file, 'r') as f:
+                with open(self.metadata_file) as f:
                     raw_metadata = yaml.safe_load(f)
 
                 # Validate that metadata is a dictionary
@@ -222,7 +224,7 @@ class HostCache:
                 self.logger.info("Cache cleared successfully")
                 return True
 
-            except (IOError, OSError) as e:
+            except OSError as e:
                 self.logger.error(f"Failed to clear cache: {e}")
                 return False
             except Exception as e:

@@ -1,10 +1,12 @@
 """Ansible YAML Inventory Source of Truth provider for SSHplex."""
 
-import yaml
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Union, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import yaml
+
 from ..logger import get_logger
-from .base import SoTProvider, Host
+from .base import Host, SoTProvider
 
 
 class AnsibleProvider(SoTProvider):
@@ -21,6 +23,8 @@ class AnsibleProvider(SoTProvider):
         self.filters = filters or {}
         self.inventories: List[Dict[str, Any]] = []
         self.logger = get_logger()
+        self.provider_name: str = "ansible"
+        self.import_filters: Dict[str, Any] = {}
 
     def connect(self) -> bool:
         """Load and parse Ansible inventory files.
@@ -43,7 +47,7 @@ class AnsibleProvider(SoTProvider):
 
                     self.logger.info(f"Loading inventory from: {inventory_path}")
 
-                    with open(inventory_path, 'r') as f:
+                    with open(inventory_path) as f:
                         inventory_data = yaml.safe_load(f)
 
                     if not inventory_data:

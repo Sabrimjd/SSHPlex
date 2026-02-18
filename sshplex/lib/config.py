@@ -1,9 +1,10 @@
 """SSHplex configuration management with pydantic validation"""
 
-from pathlib import Path
-from typing import Dict, Any, Optional, List
-import yaml
 import shutil
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import yaml
 from pydantic import BaseModel, Field
 
 from .. import __version__
@@ -219,7 +220,7 @@ def load_config(config_path: Optional[str] = None) -> Config:
                 import sys
                 sys.exit(0)
             except Exception as e:
-                raise FileNotFoundError(f"SSHplex: Could not initialize default config: {e}")
+                raise FileNotFoundError(f"SSHplex: Could not initialize default config: {e}") from e
     else:
         config_file = Path(config_path)
 
@@ -230,7 +231,7 @@ def load_config(config_path: Optional[str] = None) -> Config:
         logger = get_logger()
         logger.info(f"SSHplex: Loading configuration from {config_file}")
 
-        with open(config_file, 'r') as f:
+        with open(config_file) as f:
             config_data = yaml.safe_load(f)
 
         if not config_data:
@@ -241,17 +242,17 @@ def load_config(config_path: Optional[str] = None) -> Config:
         return config
 
     except yaml.YAMLError as e:
-        raise ValueError(f"SSHplex: Invalid YAML in config file: {e}")
+        raise ValueError(f"SSHplex: Invalid YAML in config file: {e}") from e
     except FileNotFoundError as e:
-        raise FileNotFoundError(f"SSHplex: Configuration file not found: {e}")
+        raise FileNotFoundError(f"SSHplex: Configuration file not found: {e}") from e
     except PermissionError as e:
-        raise ValueError(f"SSHplex: Permission denied reading config file: {e}")
+        raise ValueError(f"SSHplex: Permission denied reading config file: {e}") from e
     except Exception as e:
         # Provide more context for pydantic validation errors
         error_msg = str(e)
         if "validation" in error_msg.lower() or "field" in error_msg.lower():
-            raise ValueError(f"SSHplex: Configuration validation failed: {error_msg}")
-        raise ValueError(f"SSHplex: Configuration validation failed: {e}")
+            raise ValueError(f"SSHplex: Configuration validation failed: {error_msg}") from e
+        raise ValueError(f"SSHplex: Configuration validation failed: {e}") from e
 
 
 def get_config_info() -> Dict[str, Any]:
