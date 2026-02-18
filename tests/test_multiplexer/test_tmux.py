@@ -273,8 +273,12 @@ class TestTmuxManagerAttach:
         """Test iTerm2 attach when iTerm2 is running."""
         manager.config.tmux.control_with_iterm2 = True
         manager.system = 'darwin'
-        
-        with patch('subprocess.run') as mock_run, patch('subprocess.Popen') as mock_popen:
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None  # process still running
+
+        with patch('sshplex.lib.multiplexer.tmux.subprocess.run') as mock_run, \
+                patch('sshplex.lib.multiplexer.tmux.subprocess.Popen', return_value=mock_proc) as mock_popen:
             mock_run.return_value = MagicMock(returncode=0, stdout='true')
 
             manager._attach_iterm2()
@@ -288,8 +292,16 @@ class TestTmuxManagerAttach:
         manager.config.tmux.control_with_iterm2 = True
         manager.system = 'darwin'
 
-        with patch('subprocess.run') as mock_run, patch('subprocess.Popen') as mock_popen:
-            mock_run.return_value = MagicMock(returncode=1, stdout='')
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None  # process still running
+
+        with patch('sshplex.lib.multiplexer.tmux.subprocess.run') as mock_run, \
+                patch('sshplex.lib.multiplexer.tmux.subprocess.Popen', return_value=mock_proc) as mock_popen:
+            # First call: check installed (ok), second call: check running (not running)
+            mock_run.side_effect = [
+                MagicMock(returncode=0, stdout='true'),
+                MagicMock(returncode=0, stdout='false'),
+            ]
 
             manager._attach_iterm2()
 
