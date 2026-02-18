@@ -1,7 +1,6 @@
 """Tests for SSHplex static host provider."""
 
 import pytest
-from unittest.mock import MagicMock
 
 from sshplex.lib.sot.static import StaticProvider
 from sshplex.lib.sot.base import Host
