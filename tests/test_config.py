@@ -1,10 +1,8 @@
 """Tests for SSHplex configuration management."""
 
 import pytest
-import tempfile
 import yaml
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from sshplex.lib.config import (
     Config,
@@ -13,7 +11,6 @@ from sshplex.lib.config import (
     TmuxConfig,
     UIConfig,
     CacheConfig,
-    SoTConfig,
     SoTImportConfig,
     Proxy,
     load_config,

@@ -1,10 +1,9 @@
 """Tests for SSHplex NetBox provider."""
 
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 from sshplex.lib.sot.netbox import NetBoxProvider
-from sshplex.lib.sot.base import Host
 
 
 class TestNetBoxProvider:
@@ -160,8 +159,9 @@ class TestNetBoxProvider:
         provider.connect()
         hosts = provider.get_hosts(filters={'status': 'active', 'role': 'server'})
         
-        # Verify filter was passed
+        # Verify filter was passed and hosts returned
         mock_api.virtualization.virtual_machines.filter.assert_called()
+        assert len(hosts) == 1
 
     def test_vm_without_ip_skipped(self, provider, mock_pynetbox):
         """Test that VMs without IP are skipped."""

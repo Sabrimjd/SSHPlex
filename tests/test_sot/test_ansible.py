@@ -4,10 +4,8 @@ import pytest
 import tempfile
 import yaml
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 from sshplex.lib.sot.ansible import AnsibleProvider
-from sshplex.lib.sot.base import Host
 
 
 class TestAnsibleProvider:

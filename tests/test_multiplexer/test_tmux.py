@@ -1,8 +1,7 @@
 """Tests for SSHplex tmux multiplexer manager."""
 
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
-from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 from sshplex.lib.multiplexer.tmux import TmuxManager, TmuxError
 
