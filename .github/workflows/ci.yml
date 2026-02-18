@@ -11,13 +11,19 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+        include:
+          # Python 3.14 is still in development as of early 2026
+          # Test it but allow failures
+          - python-version: '3.14'
+            allow-failure: true
 
     steps:
     - uses: actions/checkout@v4
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
+      continue-on-error: ${{ matrix.allow-failure || false }}
       with:
         python-version: ${{ matrix.python-version }}
 

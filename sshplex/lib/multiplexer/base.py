@@ -1,7 +1,7 @@
 """Base class for terminal multiplexers in SSHplex."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 
 class MultiplexerBase(ABC):

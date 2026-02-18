@@ -1,12 +1,13 @@
 """SSHplex TUI tmux session manager widget."""
 
-from typing import List, Optional, Any
-from textual.containers import Container, Horizontal
-from textual.widgets import DataTable, Static, Button
-from textual.binding import Binding
-from textual.screen import ModalScreen
-from textual.app import ComposeResult
+from typing import Any, List, Optional
+
 import libtmux
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Container, Horizontal
+from textual.screen import ModalScreen
+from textual.widgets import Button, DataTable, Static
 
 from ..logger import get_logger
 
@@ -245,7 +246,7 @@ class TmuxSessionManager(ModalScreen):
 
             self.logger.info(f"SSHplex: Loaded {len(self.sessions)} tmux sessions")
 
-        except libtmux.common.LibTmuxException as e:
+        except libtmux.exc.LibTmuxException as e:
             self.logger.error(f"SSHplex: tmux error loading sessions: {e}")
             # Show error in table
             if self.table is not None:

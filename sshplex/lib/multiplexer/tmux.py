@@ -1,15 +1,15 @@
 """SSHplex tmux multiplexer implementation."""
 
-import libtmux
-from typing import Any, Optional, Dict
-from datetime import datetime
-import uuid
-
-from .base import MultiplexerBase
-from ..logger import get_logger
-
 import platform
 import subprocess
+import uuid
+from datetime import datetime
+from typing import Any, Dict, Optional
+
+import libtmux
+
+from ..logger import get_logger
+from .base import MultiplexerBase
 
 
 class TmuxError(Exception):
@@ -91,6 +91,7 @@ class TmuxManager(MultiplexerBase):
             if not self._init_server():
                 return False
 
+            assert self.server is not None, "Server should be initialized after _init_server() returns True"
             self.logger.info(f"SSHplex: Creating tmux session '{self.session_name}'")
 
             # Generate unique session name if needed
@@ -128,7 +129,7 @@ class TmuxManager(MultiplexerBase):
                 self.logger.error("SSHplex: Failed to get session after creation")
                 return False
 
-        except libtmux.common.LibTmuxException as e:
+        except libtmux.exc.LibTmuxException as e:
             self.logger.error(f"SSHplex: tmux error creating session: {e}")
             return False
         except Exception as e:
@@ -139,14 +140,13 @@ class TmuxManager(MultiplexerBase):
         """Create a new pane for the given hostname, maximizing the number of panes per window."""
         try:
             # Ensure session and current window exist
-            if self.session is None or self.current_window is None:
-                if not self.create_session():
-                    return False
+            if (self.session is None or self.current_window is None) and not self.create_session():
+                return False
 
             self.logger.info(f"SSHplex: Creating pane for host '{hostname}'")
 
             # Helper: create new window if needed
-            def ensure_window_available():
+            def ensure_window_available() -> None:
                 if self.current_window_pane_count >= max_panes_per_window:
                     self.logger.info(f"SSHplex: Reached max panes per window ({max_panes_per_window}), creating new window")
                     window_index = len(self.windows)
@@ -184,7 +184,7 @@ class TmuxManager(MultiplexerBase):
                     self.logger.warning(f"Pane split failed ({e}), attempting layout adjustment")
                     try:
                         # Resize window to fit more panes
-                        self.current_window.resize_window(height=80, width=200)
+                        self.current_window.resize(height=80, width=200)
                         pane = self.current_window.split_window(vertical=vertical_split)
                     except Exception:
                         # If still fails, create a new window
@@ -417,10 +417,10 @@ class TmuxManager(MultiplexerBase):
             print(f"🚀 iTerm2 launched with tmux session: {self.session_name}")
 
         except FileNotFoundError:
-            raise RuntimeError("osascript not found - iTerm2 integration only works on macOS")
+            raise RuntimeError("osascript not found - iTerm2 integration only works on macOS") from None
         except Exception as e:
             # Re-raise with more context
-            raise RuntimeError(f"Failed to launch iTerm2: {e}")
+            raise RuntimeError(f"Failed to launch iTerm2: {e}") from e
 
     def setup_broadcast_keybinding(self) -> bool:
         """Set up custom keybinding for broadcast toggle."""

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import List, Dict, Any, Optional, TYPE_CHECKING
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from ..logger import get_logger
+from typing import TYPE_CHECKING, Any
+
 from ..cache import HostCache
-from .base import SoTProvider, Host
-from .netbox import NetBoxProvider
+from ..logger import get_logger
 from .ansible import AnsibleProvider
+from .base import Host, SoTProvider
+from .netbox import NetBoxProvider
 from .static import StaticProvider
 
 if TYPE_CHECKING:
@@ -26,7 +27,7 @@ class SoTFactory:
         """
         self.config = config
         self.logger = get_logger()
-        self.providers: List[SoTProvider] = []
+        self.providers: list[SoTProvider] = []
 
         # Initialize cache with configuration
         cache_config = getattr(config, 'cache', None)
@@ -39,7 +40,7 @@ class SoTFactory:
             # Use default cache settings if not configured
             self.cache = HostCache()
 
-        self._cached_hosts: Optional[List[Host]] = None
+        self._cached_hosts: list[Host] | None = None
 
     def initialize_providers(self) -> bool:
         """Initialize all configured SoT providers from import configurations.
@@ -57,7 +58,7 @@ class SoTFactory:
 
         for import_config in self.config.sot.import_:
             try:
-                provider: Optional[SoTProvider] = None
+                provider: SoTProvider | None = None
 
                 if import_config.type == "static":
                     provider = self._create_static_provider(import_config)
@@ -84,7 +85,7 @@ class SoTFactory:
         self.logger.info(f"Initialized {success_count}/{len(self.config.sot.import_)} SoT providers")
         return success_count > 0
 
-    def _create_static_provider(self, import_config: Any) -> Optional[StaticProvider]:
+    def _create_static_provider(self, import_config: Any) -> StaticProvider | None:
         """Create Static provider instance from import configuration.
 
         Args:
@@ -102,7 +103,7 @@ class SoTFactory:
             hosts=import_config.hosts
         )
 
-    def _create_consul_provider(self, import_config: Any) -> Optional["ConsulProvider"]:
+    def _create_consul_provider(self, import_config: Any) -> ConsulProvider | None:
         """Create Consul provider instance from import configuration.
 
         Args:
@@ -120,7 +121,7 @@ class SoTFactory:
             import_config=import_config
         )
 
-    def _create_netbox_provider_from_import(self, import_config: Any) -> Optional[NetBoxProvider]:
+    def _create_netbox_provider_from_import(self, import_config: Any) -> NetBoxProvider | None:
         """Create NetBox provider instance from import configuration.
 
         Args:
@@ -141,12 +142,12 @@ class SoTFactory:
         )
 
         # Store additional attributes
-        setattr(provider, 'provider_name', import_config.name)
-        setattr(provider, 'import_filters', import_config.default_filters or {})
+        provider.provider_name = import_config.name
+        provider.import_filters = import_config.default_filters or {}
 
         return provider
 
-    def _create_ansible_provider_from_import(self, import_config: Any) -> Optional[AnsibleProvider]:
+    def _create_ansible_provider_from_import(self, import_config: Any) -> AnsibleProvider | None:
         """Create Ansible provider instance from import configuration.
 
         Args:
@@ -165,11 +166,11 @@ class SoTFactory:
         )
 
         # Store additional attributes
-        setattr(provider, 'provider_name', import_config.name)
+        provider.provider_name = import_config.name
 
         return provider
 
-    def get_all_hosts(self, additional_filters: Optional[Dict[str, Any]] = None, force_refresh: bool = False) -> List[Host]:
+    def get_all_hosts(self, additional_filters: dict[str, Any] | None = None, force_refresh: bool = False) -> list[Host]:
         """Get hosts from all configured providers with caching support.
 
         Args:
@@ -238,7 +239,7 @@ class SoTFactory:
                 new_source = self._get_host_source(host)
 
                 all_sources = existing_sources + new_sources + [existing_source, new_source]
-                unique_sources: List[str] = list(set(filter(None, all_sources)))
+                unique_sources: list[str] = list(set(filter(None, all_sources)))
                 existing.metadata['sources'] = unique_sources
 
                 self.logger.debug(f"Merged duplicate host {host.name} from sources: {unique_sources}")
@@ -259,7 +260,7 @@ class SoTFactory:
 
         return final_hosts
 
-    def get_all_hosts_parallel(self, additional_filters: Optional[Dict[str, Any]] = None, force_refresh: bool = False, max_workers: int = 4) -> List[Host]:
+    def get_all_hosts_parallel(self, additional_filters: dict[str, Any] | None = None, force_refresh: bool = False, max_workers: int = 4) -> list[Host]:
         """Get hosts from all configured providers in parallel with caching support.
 
         This method improves performance when multiple providers are configured
@@ -342,11 +343,6 @@ class SoTFactory:
 
         self.logger.info(f"Retrieved {len(final_hosts)} unique hosts from {len(self.providers)} providers")
 
-        # Apply additional filters if specified
-        if additional_filters:
-            final_hosts = self._apply_additional_filters(final_hosts, additional_filters)
-            self.logger.info(f"After applying additional filters: {len(final_hosts)} hosts")
-
         # Save to cache
         provider_info = {
             'provider_count': len(self.providers),
@@ -362,7 +358,7 @@ class SoTFactory:
         return final_hosts
 
     def _fetch_provider_hosts(self, provider: SoTProvider,
-                              additional_filters: Optional[Dict[str, Any]]) -> List[Host]:
+                              additional_filters: dict[str, Any] | None) -> list[Host]:
         """Fetch hosts from a single provider with error handling.
 
         Args:
@@ -383,7 +379,7 @@ class SoTFactory:
             return []
 
     def _get_provider_filters(self, provider: SoTProvider,
-                              additional_filters: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+                              additional_filters: dict[str, Any] | None) -> dict[str, Any] | None:
         """Get filters specific to a provider.
 
         Args:
@@ -443,7 +439,7 @@ class SoTFactory:
 
         return "unknown"
 
-    def test_all_connections(self) -> Dict[str, bool]:
+    def test_all_connections(self) -> dict[str, bool]:
         """Test connections to all providers.
 
         Returns:
@@ -469,7 +465,7 @@ class SoTFactory:
         """
         return len(self.providers)
 
-    def get_provider_names(self) -> List[str]:
+    def get_provider_names(self) -> list[str]:
         """Get names of all initialized providers.
 
         Returns:
@@ -477,7 +473,7 @@ class SoTFactory:
         """
         return [type(provider).__name__ for provider in self.providers]
 
-    def refresh_cache(self, additional_filters: Optional[Dict[str, Any]] = None) -> List[Host]:
+    def refresh_cache(self, additional_filters: dict[str, Any] | None = None) -> list[Host]:
         """Force refresh of the host cache from all providers.
 
         Args:
@@ -489,7 +485,7 @@ class SoTFactory:
         self.logger.info("Forcing cache refresh from all providers")
         return self.get_all_hosts(additional_filters=additional_filters, force_refresh=True)
 
-    def get_cache_info(self) -> Optional[Dict[str, Any]]:
+    def get_cache_info(self) -> dict[str, Any] | None:
         """Get cache information.
 
         Returns:

@@ -1,20 +1,29 @@
 """SSHplex TUI Host Selector with Textual."""
 
-from typing import List, Optional, Set, Any
+import asyncio
 from datetime import datetime
+from typing import Any, List, Optional, Set
+
+import pyperclip
 from textual.app import App, ComposeResult
-from textual.containers import Container, Vertical
-from textual.widgets import DataTable, Log, Static, Footer, Input, LoadingIndicator, Label
 from textual.binding import Binding
+from textual.containers import Container, Vertical
 from textual.reactive import reactive
 from textual.screen import Screen
-import asyncio
-import pyperclip
+from textual.widgets import (
+    DataTable,
+    Footer,
+    Input,
+    Label,
+    LoadingIndicator,
+    Log,
+    Static,
+)
 
 from ... import __version__
 from ..logger import get_logger
-from ..sot.factory import SoTFactory
 from ..sot.base import Host
+from ..sot.factory import SoTFactory
 from .session_manager import TmuxSessionManager
 
 
@@ -668,7 +677,6 @@ class HostSelector(App):
 
     def action_show_help(self) -> None:
         """Show keyboard shortcuts help screen."""
-        from textual.widgets import Markdown
 
         help_text = f"""
 # SSHplex Keyboard Shortcuts
@@ -720,8 +728,8 @@ class HostSelector(App):
             return
 
         from textual.containers import Center, Vertical
-        from textual.widgets import Input, Button
         from textual.screen import ModalScreen
+        from textual.widgets import Button, Input
 
         class QuickFilterScreen(ModalScreen):
             def __init__(self, parent_app):
@@ -729,12 +737,11 @@ class HostSelector(App):
                 self.parent = parent_app
 
             def compose(self):
-                with Center():
-                    with Vertical():
-                        yield Label("Filter hosts by name pattern:", id="filter-label")
-                        yield Input(placeholder="e.g., web-* or *prod*", id="filter-input")
-                        yield Button("Apply", id="filter-apply", variant="primary")
-                        yield Button("Cancel", id="filter-cancel", variant="default")
+                with Center(), Vertical():
+                    yield Label("Filter hosts by name pattern:", id="filter-label")
+                    yield Input(placeholder="e.g., web-* or *prod*", id="filter-input")
+                    yield Button("Apply", id="filter-apply", variant="primary")
+                    yield Button("Cancel", id="filter-cancel", variant="default")
 
             def on_button_pressed(self, event: Button.Pressed) -> None:
                 if event.button.id == "filter-apply":
@@ -884,11 +891,10 @@ class HostSelector(App):
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle Enter key pressed in search input."""
-        if event.input == self.search_input:
+        if event.input == self.search_input and self.table:
             # Focus back on the table when Enter is pressed in search
-            if self.table:
-                self.table.focus()
-                if self.search_filter:
-                    self.log_message(f"Search complete - table focused with filter '{self.search_filter}'")
-                else:
-                    self.log_message("Search complete - table focused")
+            self.table.focus()
+            if self.search_filter:
+                self.log_message(f"Search complete - table focused with filter '{self.search_filter}'")
+            else:
+                self.log_message("Search complete - table focused")

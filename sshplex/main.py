@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """Main entry point for SSHplex TUI Application (pip-installed package)"""
 
-import sys
 import argparse
 import shutil
+import sys
 from datetime import datetime
 from typing import Any
 
 from . import __version__
-from .lib.config import load_config, get_config_info
-from .lib.logger import setup_logging, get_logger
+from .lib.config import get_config_info, load_config
+from .lib.logger import get_logger, setup_logging
 from .lib.sot.factory import SoTFactory
 from .lib.ui.host_selector import HostSelector
-
 
 
 def check_system_dependencies() -> bool:
@@ -60,9 +59,8 @@ Examples:
             return show_config_info()
 
         # Check system dependencies (skip for debug/cache operations)
-        if not args.debug and not args.clear_cache:
-            if not check_system_dependencies():
-                return 1
+        if not args.debug and not args.clear_cache and not check_system_dependencies():
+            return 1
 
         # Load configuration (will use default path if none specified)
         print("SSHplex - Loading configuration...")
