@@ -10,9 +10,11 @@ SSHplex is a Python-based SSH connection multiplexer that provides a modern Term
 - **Multiple Sources of Truth**: NetBox, Ansible inventories, HashiCorp Consul, and static host lists - use them together or separately
 - **Multi-Provider Support**: Configure multiple instances of the same provider type (e.g., multiple NetBox instances, multiple Consul datacenters)
 - **tmux Integration**: Creates organized sessions with panes or windows for each host
-- **iTerm2 Integration**: Native tmux `-CC` mode on macOS for iTerm2 tabs/splits
+- **iTerm2 Integration**: Native tmux `-CC` mode on macOS for iTerm2 tabs/splits, with improved detection and fallback guidance
 - **Proxy Support**: Per-provider SSH proxy/jump host configuration
 - **Wildcard Search**: Filter hosts across all columns with glob patterns
+- **Quick Filter**: Fast name/IP wildcard filter (`f`) for rapid narrowing
+- **Built-in Help**: Keyboard shortcuts help modal (`h`) with live mode/state hints
 - **Sortable Columns**: Click column headers to sort the host table
 - **Copy to Clipboard**: Copy the host table to clipboard for sharing
 - **Intelligent Caching**: Local host caching for fast startup (configurable TTL)
@@ -83,6 +85,18 @@ sshplex --clear-cache
 
 On first run, SSHplex creates a config at `~/.config/sshplex/sshplex.yaml`. Edit it with your provider details, then run `sshplex` again.
 
+## What's New (Quality Upgrade)
+
+Recent quality and UX improvements include:
+
+- Stronger config/runtime error handling and input validation
+- iTerm2 integration reliability improvements (installation/running detection + better fallback messaging)
+- Parallel provider fetching support for faster multi-provider discovery
+- Faster cache validity checks before deep metadata parsing
+- TUI polish: quick filter (`f`), help modal (`h`), and improved visual selection cues
+
+See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 ## Usage
 
 1. **Start**: Run `sshplex`
@@ -107,6 +121,8 @@ On first run, SSHplex creates a config at `~/.config/sshplex/sshplex.yaml`. Edit
 | `p` | Toggle panes/tabs mode |
 | `b` | Toggle broadcast mode |
 | `s` | Open session manager |
+| `f` | Quick wildcard filter by host name/IP |
+| `h` | Open keyboard shortcuts help |
 | `c` | Copy table to clipboard |
 | `r` | Refresh from providers |
 | `Escape` | Focus table / clear search |
