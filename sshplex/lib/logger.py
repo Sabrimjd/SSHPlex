@@ -1,8 +1,8 @@
 """SSHplex logging configuration using loguru."""
 
-import os
 from pathlib import Path
 from typing import Any
+
 from loguru import logger
 
 

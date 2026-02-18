@@ -1,21 +1,30 @@
 """SSHplex TUI Host Selector with Textual."""
 
-from typing import List, Optional, Set, Any
+import asyncio
 from datetime import datetime
+from typing import Any, List, Optional, Set
+
+import pyperclip
 from textual.app import App, ComposeResult
-from textual.containers import Container, Vertical, Horizontal, Grid
-from textual.widgets import DataTable, Log, Static, Footer, Input, LoadingIndicator, Label
 from textual.binding import Binding
+from textual.containers import Container, Vertical
 from textual.reactive import reactive
 from textual.screen import Screen
-from textual import events
-import asyncio
-import pyperclip
+from textual.widgets import (
+    DataTable,
+    Footer,
+    Input,
+    Label,
+    LoadingIndicator,
+    Log,
+    Static,
+)
 
 from ... import __version__
 from ..logger import get_logger
-from ..sot.factory import SoTFactory
 from ..sot.base import Host
+from ..sot.factory import SoTFactory
+from .config_editor import ConfigEditorScreen
 from .session_manager import TmuxSessionManager
 
 
@@ -76,6 +85,43 @@ class LoadingScreen(Screen):
         except Exception:
             # If the widget isn't mounted yet, just ignore the update
             pass
+
+
+class HelpScreen(Screen):
+    """Modal screen showing keyboard shortcuts help."""
+
+    CSS = """
+    HelpScreen {
+        align: center middle;
+    }
+
+    #help-dialog {
+        layout: vertical;
+        padding: 3;
+        width: 80;
+        height: 40;
+        border: thick $primary;
+        background: $surface;
+        overflow-y: auto;
+    }
+
+    Markdown {
+        height: 1fr;
+    }
+    """
+
+    def __init__(self, help_text: str) -> None:
+        super().__init__()
+        self.help_text = help_text
+
+    def compose(self) -> ComposeResult:
+        from textual.widgets import Markdown
+        with Vertical(id="help-dialog"):
+            yield Markdown(self.help_text)
+
+    def on_key(self, event: Any) -> None:
+        """Close help screen on any key press."""
+        self.dismiss()
 
 
 class HostSelector(App):
@@ -173,12 +219,14 @@ class HostSelector(App):
         Binding("enter", "connect_selected", "Connect", show=True),
         Binding("/", "start_search", "Search", show=True),
         Binding("s", "show_sessions", "Sessions", show=True),
-        Binding("p", "toggle_panes", "Toggle Panes/Tabs", show=True),
-        Binding("b", "toggle_broadcast", "Toggle Broadcast", show=True),
-        Binding("r", "refresh_hosts", "Refresh Sources", show=True),
+        Binding("p", "toggle_panes", "Panes/Tabs", show=True),
+        Binding("b", "toggle_broadcast", "Broadcast", show=True),
+        Binding("r", "refresh_hosts", "Refresh", show=True),
         Binding("escape", "focus_table", "Focus Table", show=False),
+        Binding("h", "show_help", "Help", show=True),
         Binding("q", "quit", "Quit", show=True),
         Binding("c", "copy_select", "Copy", show=True),
+        Binding("e", "edit_config", "Config", show=True),
     ]
 
     selected_hosts: reactive[Set[str]] = reactive(set())
@@ -265,8 +313,10 @@ class HostSelector(App):
         for column in self.config.ui.table_columns:
             self.table.add_column(column, width=None, key=column)
 
-    def on_data_table_header_selected(self, event: DataTable.HeaderSelected):
+    def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
         col = event.column_key.value
+        if col is None:
+            return
         self.sort_reverse = not self.sort_reverse
         hosts_to_display = self.get_hosts_to_display()
         hosts_to_display.sort(
@@ -311,7 +361,11 @@ class HostSelector(App):
                 cache_text = "Cache: None"
 
             self.cache_widget.update(cache_text)
-        except Exception:
+        except (KeyError, AttributeError, TypeError) as e:
+            self.logger.debug(f"Could not update cache display: {e}")
+            self.cache_widget.update("Cache: --")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error updating cache display: {e}")
             self.cache_widget.update("Cache: --")
 
     def update_loading_status(self, status: str) -> None:
@@ -323,8 +377,8 @@ class HostSelector(App):
         if self.loading_screen:
             try:
                 self.loading_screen.update_status(status)
-            except Exception as e:
-                # Log the error but don't crash the app
+            except (AttributeError, RuntimeError) as e:
+                # Widget may not be mounted yet - log but don't crash
                 self.log_message(f"Warning: Could not update loading status: {e}", level="warning")
 
     async def load_hosts(self, force_refresh: bool = False) -> None:
@@ -390,15 +444,16 @@ class HostSelector(App):
             provider_names = ', '.join(self.sot_factory.get_provider_names())
             self.log_message(f"Successfully initialized {self.sot_factory.get_provider_count()} provider(s): {provider_names}")
 
-            # Get hosts (with caching support)
+            # Get hosts (with caching support) - use parallel fetching for better performance
             if show_loading:
                 if force_refresh:
-                    self.update_loading_status("Fetching fresh host data...")
+                    self.update_loading_status("Fetching fresh host data (parallel)...")
                 else:
-                    self.update_loading_status("Loading host data...")
+                    self.update_loading_status("Loading host data (parallel)...")
                 await asyncio.sleep(0.1)  # Allow UI to update
 
-            self.hosts = self.sot_factory.get_all_hosts(force_refresh=force_refresh)
+            # Use parallel fetching for better performance with multiple providers
+            self.hosts = self.sot_factory.get_all_hosts_parallel(force_refresh=force_refresh)
             self.filtered_hosts = self.hosts.copy()  # Initialize filtered hosts
 
             if not self.hosts:
@@ -434,7 +489,7 @@ class HostSelector(App):
         """Return filtered hosts if search is active, otherwise all hosts."""
         return self.filtered_hosts if self.search_filter else self.hosts
 
-    def populate_table(self, hosts_to_display) -> None:
+    def populate_table(self, hosts_to_display: List[Host]) -> None:
         """Populate the table with host data."""
         if not self.table:
             return
@@ -447,14 +502,18 @@ class HostSelector(App):
 
         for host in hosts_to_display:
             # Build row data based on configured columns
-            row_data = ["[ ]"]  # Checkbox column
+            # Use colors for better visual feedback
+            is_selected = host.name in self.selected_hosts
+            row_data = ["[green]✓[/green]" if is_selected else "[dim] [/dim]"]  # Checkbox column
 
-            # Check if this host is selected and update checkbox
-            if host.name in self.selected_hosts:
-                row_data[0] = "[x]"
-
+            # Highlight selected hosts with color
             for column in self.config.ui.table_columns:
-                row_data.append(getattr(host, column, 'N/A'))
+                value = str(getattr(host, column, 'N/A'))
+                if is_selected:
+                    # Highlight selected hosts
+                    row_data.append(f"[bold]{value}[/bold]")
+                else:
+                    row_data.append(value)
 
             self.table.add_row(*row_data, key=host.name)
 
@@ -571,6 +630,17 @@ class HostSelector(App):
         session_manager = TmuxSessionManager(self.config)
         self.push_screen(session_manager)
 
+    def action_edit_config(self) -> None:
+        """Open the configuration editor modal."""
+        self.log_message("Opening configuration editor...")
+
+        def _on_editor_close(saved: Optional[bool]) -> None:
+            if saved:
+                self.log_message("Configuration saved - restart SSHplex for changes to take effect")
+
+        editor = ConfigEditorScreen(self.config)
+        self.push_screen(editor, callback=_on_editor_close)
+
     def action_refresh_hosts(self) -> None:
         """Refresh hosts by fetching fresh data from all SoT providers."""
         self.log_message("Refreshing hosts from SoT providers...")
@@ -581,8 +651,18 @@ class HostSelector(App):
         if not self.table:
             return
 
-        checkbox = "[X]" if selected else "[ ]"
+        checkbox = "[green]✓[/green]" if selected else "[dim] [/dim]"
         self.table.update_cell(row_key, "checkbox", checkbox)
+
+        # Also update the row style for all columns
+        for column in self.config.ui.table_columns:
+            value = self.table.get_cell(row_key, column)
+            if value:
+                if selected:
+                    self.table.update_cell(row_key, column, f"[bold]{value}[/bold]")
+                else:
+                    # Remove bold tags
+                    self.table.update_cell(row_key, column, value.replace("[bold]", "").replace("[/bold]", ""))
 
     def update_status_selection(self) -> None:
         """Update status bar with selection count and mode."""
@@ -609,6 +689,53 @@ class HostSelector(App):
             level_prefix = level.upper() if level != "info" else "INFO"
             self.log_widget.write_line(f"[{timestamp}] {level_prefix}: {message}")
 
+    def action_show_help(self) -> None:
+        """Show keyboard shortcuts help screen."""
+
+        help_text = f"""
+# SSHplex Keyboard Shortcuts
+
+## Navigation & Selection
+| Key | Action |
+|-----|--------|
+| `Space` | Toggle selection of current host |
+| `a` | Select all hosts (or filtered) |
+| `d` | Deselect all hosts (or filtered) |
+| `Enter` | Connect to selected hosts |
+| `q` | Quit SSHplex |
+
+## Search & Filter
+| Key | Action |
+|-----|--------|
+| `/` | Open search input |
+| `r` | Refresh from sources (bypass cache) |
+| `Escape` | Focus table / clear search |
+
+## Connection Modes
+| Key | Action |
+|-----|--------|
+| `p` | Toggle panes vs tabs mode |
+| `b` | Toggle broadcast mode |
+
+## Other
+| Key | Action |
+|-----|--------|
+| `s` | Session manager |
+| `c` | Copy table to clipboard |
+| `e` | Edit configuration |
+| `h` | Show this help |
+
+## Current Settings
+- **Mode**: {"Panes" if self.use_panes else "Tabs"}
+- **Broadcast**: {"ON" if self.use_broadcast else "OFF"}
+- **Hosts**: {len(self.hosts)} total
+
+*Press any key to close this help*
+        """
+
+        help_screen = HelpScreen(help_text)
+        self.push_screen(help_screen)
+
     def action_start_search(self) -> None:
         """Start search mode by showing and focusing the search input."""
         if self.search_input:
@@ -630,7 +757,6 @@ class HostSelector(App):
             else:
                 self.log_message("Table focused")
 
-            self.log_message("Search cleared - showing all hosts")
             self.update_status_selection()
 
     def action_toggle_panes(self) -> None:
@@ -677,21 +803,27 @@ class HostSelector(App):
             self.filter_hosts()
 
     def filter_hosts(self) -> None:
-        term = (self.search_filter or "").lower()
+        """Filter hosts based on search term with explicit wildcard support."""
         import fnmatch
 
-        term = (term or "").strip().lower()
+        term = (self.search_filter or "").strip()
 
-        # Automatically add wildcards around the search term
-        if not term.startswith("*"):
-            term = "*" + term
-        if not term.endswith("*"):
-            term = term + "*"
+        # Only add wildcards if user hasn't explicitly added them
+        # This gives users control over exact vs fuzzy matching
+        if term and not term.startswith("*") and not term.endswith("*"):
+            # Implicit fuzzy match - match anywhere in the value
+            term = f"*{term}*"
+        elif not term:
+            # Empty search - show all hosts
+            self.filtered_hosts = self.hosts
+            self.populate_table(self.get_hosts_to_display())
+            self.update_status_selection()
+            return
 
         self.filtered_hosts = [
             host for host in self.hosts
             if any(
-                fnmatch.fnmatchcase(str(getattr(host, attr, "") or "").lower(), term)
+                fnmatch.fnmatchcase(str(getattr(host, attr, "") or "").lower(), term.lower())
                 for attr in self.config.ui.table_columns
             )
         ]
@@ -710,11 +842,8 @@ class HostSelector(App):
 
     def on_key(self, event: Any) -> None:
         """Handle key presses - specifically check for Enter on DataTable."""
-        self.log_message(f"DEBUG: Key pressed: {event.key}", level="info")
-
         # Check if Enter was pressed while DataTable has focus
         if event.key == "enter" and hasattr(self, 'table') and self.table and self.table.has_focus:
-            self.log_message("DEBUG: Enter key pressed on focused DataTable - calling connect action", level="info")
             self.action_connect_selected()
             event.prevent_default()
             event.stop()
@@ -725,11 +854,10 @@ class HostSelector(App):
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle Enter key pressed in search input."""
-        if event.input == self.search_input:
+        if event.input == self.search_input and self.table:
             # Focus back on the table when Enter is pressed in search
-            if self.table:
-                self.table.focus()
-                if self.search_filter:
-                    self.log_message(f"Search complete - table focused with filter '{self.search_filter}'")
-                else:
-                    self.log_message("Search complete - table focused")
+            self.table.focus()
+            if self.search_filter:
+                self.log_message(f"Search complete - table focused with filter '{self.search_filter}'")
+            else:
+                self.log_message("Search complete - table focused")
