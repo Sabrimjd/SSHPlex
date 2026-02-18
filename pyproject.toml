@@ -103,3 +103,13 @@ ignore = ["E501"]
 paths = ["sshplex", "tests"]
 exclude = [".venv/", "build/", "dist/", "sshplex/lib/multiplexer/base.py"]
 min_confidence = 80
+
+
+[[tool.mypy.overrides]]
+module = ["consul"]
+ignore_missing_imports = true
+
+
+[[tool.mypy.overrides]]
+module = ["sshplex.lib.sot.consul"]
+ignore_errors = true
