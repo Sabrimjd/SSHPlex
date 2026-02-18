@@ -1,14 +1,83 @@
 """SSHplex TUI tmux session manager widget."""
 
 from typing import List, Optional, Any
-from textual.containers import Container, Vertical
-from textual.widgets import DataTable, Static
+from textual.containers import Container, Horizontal
+from textual.widgets import DataTable, Static, Button
 from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual.app import ComposeResult
+from textual import on
 import libtmux
 
 from ..logger import get_logger
+
+
+class ConfirmDialog(ModalScreen[bool]):
+    """Modal confirmation dialog for destructive actions."""
+
+    CSS = """
+    ConfirmDialog {
+        align: center middle;
+    }
+
+    #confirm-dialog {
+        width: 50;
+        height: 10;
+        border: thick $error;
+        background: $surface;
+        padding: 1;
+    }
+
+    #confirm-message {
+        text-align: center;
+        color: $text;
+        margin-bottom: 1;
+    }
+
+    #confirm-buttons {
+        align: center middle;
+        height: 3;
+    }
+
+    #confirm-yes {
+        margin-right: 2;
+    }
+
+    #confirm-no {
+        margin-left: 2;
+    }
+    """
+
+    BINDINGS = [
+        Binding("y", "confirm_yes", "Yes", show=True),
+        Binding("n", "confirm_no", "No", show=True),
+        Binding("escape", "confirm_no", "Cancel", show=False),
+    ]
+
+    def __init__(self, message: str, title: str = "Confirm") -> None:
+        super().__init__()
+        self.message = message
+        self.title = title
+
+    def compose(self) -> ComposeResult:
+        with Container(id="confirm-dialog"):
+            yield Static(f"⚠️  {self.title}", id="confirm-message")
+            yield Static(self.message, id="confirm-message")
+            with Horizontal(id="confirm-buttons"):
+                yield Button("Yes", id="confirm-yes", variant="error")
+                yield Button("No", id="confirm-no", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "confirm-yes":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
+
+    def action_confirm_yes(self) -> None:
+        self.dismiss(True)
+
+    def action_confirm_no(self) -> None:
+        self.dismiss(False)
 
 
 class TmuxSession:
@@ -140,13 +209,13 @@ class TmuxSessionManager(ModalScreen):
                     if not hasattr(session, 'attached'):
                         # Fallback: check if session has active windows/panes
                         attached = len(session.windows) > 0 and any(len(w.panes) > 0 for w in session.windows)
-                except:
+                except (AttributeError, RuntimeError):
                     attached = False
 
                 # Get window count safely
                 try:
                     window_count = len(session.windows) if hasattr(session, 'windows') else 0
-                except:
+                except (AttributeError, RuntimeError):
                     window_count = 0
 
                 # Get creation time - libtmux doesn't provide session.created directly
@@ -160,7 +229,7 @@ class TmuxSessionManager(ModalScreen):
                         created = created_dt.strftime("%Y-%m-%d %H:%M:%S")
                     else:
                         created = "Unknown"
-                except Exception:
+                except (ValueError, AttributeError, IndexError, OSError):
                     created = "Unknown"
 
                 tmux_session = TmuxSession(
@@ -177,6 +246,12 @@ class TmuxSessionManager(ModalScreen):
 
             self.logger.info(f"SSHplex: Loaded {len(self.sessions)} tmux sessions")
 
+        except libtmux.common.LibTmuxException as e:
+            self.logger.error(f"SSHplex: tmux error loading sessions: {e}")
+            # Show error in table
+            if self.table is not None:
+                self.table.clear()
+                self.table.add_row("❌", "tmux error", str(e), "0")
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to load tmux sessions: {e}")
             # Show error in table
@@ -266,7 +341,7 @@ class TmuxSessionManager(ModalScreen):
             self.logger.error(f"SSHplex: Failed to connect to session: {e}")
 
     def action_kill_session(self) -> None:
-        """Kill the selected tmux session."""
+        """Kill the selected tmux session after confirmation."""
         if not self.table or not self.sessions:
             self.logger.warning("SSHplex: No table or sessions available for killing")
             return
@@ -278,23 +353,44 @@ class TmuxSessionManager(ModalScreen):
             if cursor_row >= 0 and cursor_row < len(self.sessions):
                 session = self.sessions[cursor_row]
 
-                self.logger.info(f"SSHplex: Attempting to kill tmux session '{session.name}'")
-
-                # Find and kill the session
-                if self.tmux_server:
-                    tmux_session = self.tmux_server.find_where({"session_name": session.name})
-                    if tmux_session:
-                        tmux_session.kill_session()
-                        self.logger.info(f"SSHplex: Successfully killed tmux session '{session.name}'")
-
-                        # Refresh the session list
-                        self.load_sessions()
+                # Show confirmation dialog
+                def on_confirm(confirmed: bool) -> None:
+                    if confirmed:
+                        self._do_kill_session(session)
                     else:
-                        self.logger.error(f"SSHplex: Session '{session.name}' not found for killing")
-                else:
-                    self.logger.error("SSHplex: No tmux server connection available")
+                        self.logger.info(f"SSHplex: Kill session '{session.name}' cancelled by user")
+
+                self.app.push_screen(
+                    ConfirmDialog(
+                        message=f"Kill session '{session.name}'?",
+                        title="Kill Session"
+                    ),
+                    on_confirm
+                )
             else:
                 self.logger.warning(f"SSHplex: Invalid cursor row {cursor_row} for killing session")
+
+        except Exception as e:
+            self.logger.error(f"SSHplex: Failed to initiate session kill: {e}")
+
+    def _do_kill_session(self, session: TmuxSession) -> None:
+        """Actually kill the tmux session after confirmation."""
+        try:
+            self.logger.info(f"SSHplex: Attempting to kill tmux session '{session.name}'")
+
+            # Find and kill the session
+            if self.tmux_server:
+                tmux_session = self.tmux_server.find_where({"session_name": session.name})
+                if tmux_session:
+                    tmux_session.kill_session()
+                    self.logger.info(f"SSHplex: Successfully killed tmux session '{session.name}'")
+
+                    # Refresh the session list
+                    self.load_sessions()
+                else:
+                    self.logger.error(f"SSHplex: Session '{session.name}' not found for killing")
+            else:
+                self.logger.error("SSHplex: No tmux server connection available")
 
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to kill session: {e}")
