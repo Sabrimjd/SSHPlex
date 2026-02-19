@@ -30,13 +30,13 @@ classifiers = [
 keywords = ["ssh", "tmux", "multiplexer", "netbox", "tui", "terminal"]
 requires-python = ">=3.8"
 dependencies = [
-    "pynetbox==7.5.0",
-    "textual==3.3.0",
-    "pyyaml==6.0.2",
-    "pydantic==2.11.0",
+    "pynetbox==7.6.1",
+    "textual==8.0.0",
+    "pyyaml==6.0.3",
+    "pydantic==2.12.5",
     "loguru==0.7.3",
-    "rich==13.9.4",
-    "libtmux==0.46.1",
+    "rich==14.3.2",
+    "libtmux==0.53.1",
     "pyperclip==1.11.0"
 ]
 
