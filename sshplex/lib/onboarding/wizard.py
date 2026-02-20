@@ -56,7 +56,9 @@ class OnboardingWizard:
         self._collect_providers()
         
         if not self.providers:
-            self.console.print("\n[yellow]No providers configured. Creating minimal config...[/yellow]")
+            self.console.print("\n[red]❌ At least one inventory source is required to use SSHplex.[/red]")
+            self.console.print("[yellow]Please run the wizard again and configure at least one provider.[/yellow]")
+            return False
         
         # Generate configuration
         config = self._generate_config()
@@ -387,11 +389,23 @@ class OnboardingWizard:
         # Use detected SSH key as default, fallback to common default if none found
         default_key = self.detected_info.get('default_ssh_key') or '~/.ssh/id_ed25519'
         
+        # Validate SSH port input
+        while True:
+            port_input = Prompt.ask("Default SSH port", default="22")
+            try:
+                ssh_port = int(port_input)
+                if 1 <= ssh_port <= 65535:
+                    break
+                else:
+                    self.console.print("[red]Port must be between 1 and 65535[/red]")
+            except ValueError:
+                self.console.print(f"[red]Invalid port number: {port_input}[/red]")
+        
         config = {
             "ssh": {
                 "username": Prompt.ask("\nDefault SSH username", default=os.environ.get('USER', 'admin')),
                 "key_path": Prompt.ask("Default SSH key path", default=default_key),
-                "port": int(Prompt.ask("Default SSH port", default="22")),
+                "port": ssh_port,
             },
             "sot": {
                 "import": self.providers
