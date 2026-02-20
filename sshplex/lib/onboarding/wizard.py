@@ -12,7 +12,7 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich.text import Text
 
-from ..config import SSHplexConfig
+from ..config import Config
 from ..logger import get_logger
 
 
@@ -353,6 +353,12 @@ class OnboardingWizard:
             provider = AnsibleProvider(
                 inventory_paths=config['inventory_paths']
             )
+            
+            # Connect to load the inventory files
+            if not provider.connect():
+                self.logger.error("Ansible provider failed to connect/load inventory")
+                return False
+            
             hosts = provider.get_hosts()
             self.logger.info(f"Ansible inventory loaded, found {len(hosts)} hosts")
             return True
@@ -418,8 +424,8 @@ class OnboardingWizard:
             # Ensure directory exists
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Validate configuration
-            SSHplexConfig(**config)  # Validates and raises ValidationError if invalid
+            # Validate configuration against full Config model
+            Config(**config)  # Validates and raises ValidationError if invalid
             
             # Save to YAML
             import yaml

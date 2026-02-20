@@ -5,7 +5,7 @@ import argparse
 import shutil
 import sys
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from . import __version__
 from .lib.config import get_config_info, load_config
@@ -31,10 +31,12 @@ def check_system_dependencies() -> bool:
     return True
 
 
-def run_onboarding() -> int:
+def run_onboarding(config_path: Optional[str] = None) -> int:
     """Run the interactive onboarding wizard."""
     try:
-        wizard = OnboardingWizard()
+        from pathlib import Path
+        path = Path(config_path) if config_path else None
+        wizard = OnboardingWizard(config_path=path)
         success = wizard.run()
         return 0 if success else 1
     except KeyboardInterrupt:
@@ -76,7 +78,7 @@ Examples:
 
         # Handle onboarding wizard
         if args.onboarding:
-            return run_onboarding()
+            return run_onboarding(args.config)
 
         # Check system dependencies (skip for debug/cache operations)
         if not args.debug and not args.clear_cache and not check_system_dependencies():
