@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-02-20
+
+### Added
+- **Interactive onboarding wizard** (`sshplex --onboarding`) for first-time setup
+  - Auto-detects SSH keys and system dependencies (tmux, etc.)
+  - Guides through configuring inventory sources (NetBox, Ansible, Consul, static hosts)
+  - Connection testing for each provider type before saving
+  - Validates configuration with Pydantic and saves to `~/.config/sshplex/sshplex.yaml`
+  - Intelligent fallback defaults when SSH keys not found
+- Enhanced inventory connection logging with timing information
+- Development runner script (`run.sh`) for quick local testing with venv setup
+
+### Changed
+- Improved error messages and validation in onboarding flow
+- Better handling of missing python3-venv with helpful installation hints
+
+---
+
 ## [1.3.0] - 2026-02-18
 
 ### Added

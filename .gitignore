@@ -54,6 +54,7 @@ logs/
 config.local.yaml
 *.log
 .env
+run.sh
 
 # OS specific files
 .DS_Store

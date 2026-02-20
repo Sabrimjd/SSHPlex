@@ -70,7 +70,10 @@ pip install -e ".[dev]"
 ## Quick Start
 
 ```bash
-# Launch TUI (creates default config on first run)
+# First-time setup - interactive onboarding wizard
+sshplex --onboarding
+
+# Launch TUI
 sshplex
 
 # Debug mode - test provider connectivity
@@ -83,7 +86,15 @@ sshplex --show-config
 sshplex --clear-cache
 ```
 
-On first run, SSHplex creates a config at `~/.config/sshplex/sshplex.yaml`. Edit it with your provider details, then run `sshplex` again.
+### First-Time Setup
+
+Run `sshplex --onboarding` for an interactive setup wizard that will:
+- Auto-detect your SSH keys and system dependencies
+- Guide you through configuring inventory sources (NetBox, Ansible, Consul, or static hosts)
+- Test connections before saving
+- Generate a working configuration file
+
+On first run without `--onboarding`, SSHplex creates a default config at `~/.config/sshplex/sshplex.yaml`. Edit it with your provider details, or use the built-in config editor (`e` key in TUI).
 
 ## What's New (Quality Upgrade)
 
