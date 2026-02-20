@@ -379,8 +379,8 @@ class OnboardingWizard:
     
     def _generate_config(self) -> Dict[str, Any]:
         """Generate configuration dictionary."""
-        # Use detected SSH key as default
-        default_key = self.detected_info.get('default_ssh_key', '~/.ssh/id_ed25519')
+        # Use detected SSH key as default, fallback to common default if none found
+        default_key = self.detected_info.get('default_ssh_key') or '~/.ssh/id_ed25519'
         
         config = {
             "ssh": {
