@@ -299,10 +299,9 @@ class OnboardingWizard:
             "host": host,
             "port": port,
             "scheme": scheme,
+            "token": token,  # Always include token, even if empty
         }
         
-        if token:
-            consul_config["token"] = token
         if dc:
             consul_config["dc"] = dc
         
