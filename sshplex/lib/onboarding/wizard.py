@@ -292,7 +292,17 @@ class OnboardingWizard:
         
         name = Prompt.ask("Provider name", default="consul")
         host = Prompt.ask("Consul host", default="localhost")
-        port = int(Prompt.ask("Consul port", default="8500"))
+        # Validate Consul port input
+        while True:
+            port_input = Prompt.ask("Consul port", default="8500")
+            try:
+                port = int(port_input)
+                if 1 <= port <= 65535:
+                    break
+                else:
+                    self.console.print("[red]Port must be between 1 and 65535[/red]")
+            except ValueError:
+                self.console.print(f"[red]Invalid port number: {port_input}[/red]")
         scheme = Prompt.ask("Scheme (http/https)", default="http")
         token = Prompt.ask("ACL Token (optional)", password=True, default="")
         dc = Prompt.ask("Datacenter (optional)", default="")
