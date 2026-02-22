@@ -75,6 +75,12 @@ class SSHplexConnector:
             for _i, host in enumerate(hosts):
                 hostname = host.ip if host.ip else host.name
 
+                # Validate hostname to prevent injection
+                if any(c in hostname for c in [';', '|', '&', '$', '`', '\n', '\r']):
+                    self.logger.warning(f"Invalid hostname detected (potential injection): {hostname}")
+                    self.logger.warning("Skipping potentially malicious host")
+                    continue
+
                 # Build SSH command
                 ssh_command = self._build_ssh_command(host, username, key_path, port)
 
@@ -194,9 +200,20 @@ class SSHplexConnector:
                         None
                     )
                     if proxy:
-                        cmd_parts.extend([
-                            "-o", f"ProxyCommand=ssh -i {proxy.key_path} -W %h:%p {proxy.username}@{proxy.host}"
-                        ])
+                        # Sanitize proxy credentials to prevent injection
+                        proxy_host = proxy.host or ''
+                        proxy_user = proxy.username or ''
+                        proxy_key = proxy.key_path or ''
+                        
+                        # Basic validation - no shell metacharacters
+                        if not any(c in proxy_host for c in [';', '|', '&', '$', '`', '\n', '\r']) and \
+                           not any(c in proxy_user for c in [';', '|', '&', '$', '`', '\n', '\r']) and \
+                           not any(c in proxy_key for c in [';', '|', '&', '$', '`', '\n', '\r']):
+                            cmd_parts.extend([
+                                "-o", f"ProxyCommand=ssh -i {proxy_key} -W %h:%p {proxy_user}@{proxy_host}"
+                            ])
+                        else:
+                            self.logger.warning("Proxy configuration contains invalid characters, skipping proxy")
         except Exception:
             # Proxy not configured for this host, continue without it
             pass
