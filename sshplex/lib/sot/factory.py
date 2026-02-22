@@ -446,10 +446,31 @@ class SoTFactory:
 
         for provider in self.providers:
             provider_name = type(provider).__name__
+            provider_config_name = getattr(provider, 'provider_name', provider_name)
             try:
-                results[provider_name] = provider.test_connection()
+                self.logger.info(f"Testing connection to {provider_config_name} ({provider_name})...")
+                start_time = None
+                try:
+                    import time
+                    start_time = time.time()
+                except ImportError:
+                    pass
+                
+                success = provider.test_connection()
+                
+                if start_time:
+                    elapsed = time.time() - start_time
+                    self.logger.info(f"Connection test to {provider_config_name} completed in {elapsed:.2f}s")
+                
+                if success:
+                    self.logger.info(f"✅ {provider_config_name}: Connection successful")
+                else:
+                    self.logger.error(f"❌ {provider_config_name}: Connection failed")
+                
+                results[provider_name] = success
             except Exception as e:
-                self.logger.error(f"Connection test failed for {provider_name}: {e}")
+                self.logger.error(f"❌ Connection test failed for {provider_config_name}: {e}")
+                self.logger.exception(f"Full exception details for {provider_config_name}:")
                 results[provider_name] = False
 
         return results

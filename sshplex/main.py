@@ -5,11 +5,12 @@ import argparse
 import shutil
 import sys
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from . import __version__
 from .lib.config import get_config_info, load_config
 from .lib.logger import get_logger, setup_logging
+from .lib.onboarding import OnboardingWizard
 from .lib.sot.factory import SoTFactory
 from .lib.ui.host_selector import HostSelector
 
@@ -28,6 +29,22 @@ def check_system_dependencies() -> bool:
         return False
 
     return True
+
+
+def run_onboarding(config_path: Optional[str] = None) -> int:
+    """Run the interactive onboarding wizard."""
+    try:
+        from pathlib import Path
+        path = Path(config_path) if config_path else None
+        wizard = OnboardingWizard(config_path=path)
+        success = wizard.run()
+        return 0 if success else 1
+    except KeyboardInterrupt:
+        print("\n\nOnboarding cancelled by user")
+        return 130
+    except Exception as e:
+        print(f"❌ Onboarding failed: {e}")
+        return 1
 
 
 def main() -> int:
@@ -49,6 +66,7 @@ Examples:
         parser.add_argument('--config', type=str, default=None, help='Path to the configuration file (default: ~/.config/sshplex/sshplex.yaml)')
         parser.add_argument('--version', action='version', version=f'SSHplex {__version__}')
         parser.add_argument('--debug', action='store_true', help='Run in debug mode (CLI only, no TUI)')
+        parser.add_argument('--onboarding', action='store_true', help='Run the interactive setup wizard')
         parser.add_argument('--clear-cache', action='store_true', help='Clear the host cache before starting')
         parser.add_argument('--show-config', action='store_true', help='Show configuration paths and exit')
         parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose output')
@@ -57,6 +75,10 @@ Examples:
         # Handle show-config without loading config
         if args.show_config:
             return show_config_info()
+
+        # Handle onboarding wizard
+        if args.onboarding:
+            return run_onboarding(args.config)
 
         # Check system dependencies (skip for debug/cache operations)
         if not args.debug and not args.clear_cache and not check_system_dependencies():
