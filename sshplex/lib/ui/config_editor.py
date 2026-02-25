@@ -258,12 +258,16 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         Switch(value=self.config.tmux.control_with_iterm2),
                         "Use iTerm2 tmux -CC mode on macOS",
                     )
+                    # Get iTerm2 attach target with validation for existing configs
+                    iterm2_target = getattr(self.config.tmux, 'iterm2_attach_target', 'new-window')
+                    if iterm2_target not in ('new-window', 'new-tab'):
+                        iterm2_target = 'new-window'
                     yield _form_field(
                         "cfg-tmux-iterm2_attach_target",
                         "Attach Target",
                         Select(
-                            [("new-window", "New Window"), ("new-tab", "New Tab")],
-                            value=getattr(self.config.tmux, 'iterm2_attach_target', 'new-window'),
+                            [("New Window", "new-window"), ("New Tab", "new-tab")],
+                            value=iterm2_target,
                         ),
                         "Where to open tmux session in iTerm2",
                     )
