@@ -113,9 +113,10 @@ def generate_iterm2_applescript(
     safe_profile = escape_applescript_string(profile)
 
     if target == "new-window":
-        # Create new iTerm2 window
+        # Create new iTerm2 window (activates iTerm2 if not running)
         apple_script = f'''
 tell application "{ITERM2_APP_NAME}"
+    activate
     create window with profile "{safe_profile}"
     tell current session of current window
         set name to "{safe_session}"
@@ -124,15 +125,23 @@ tell application "{ITERM2_APP_NAME}"
 end tell
 '''
     else:  # new-tab
-        # Create new tab in current window
+        # Create new tab in current window, or new window if no windows exist
+        # This handles both cases: iTerm2 running with windows, or not running/no windows
         apple_script = f'''
 tell application "{ITERM2_APP_NAME}"
-    tell current window
-        create tab with profile "{safe_profile}"
-        tell current session
-            set name to "{safe_session}"
-            write text "tmux {TMUX_CONTROL_MODE_FLAG} attach-session -t {safe_session}; exit"
+    activate
+    if (count of windows) = 0 then
+        -- No windows exist, create a new one
+        create window with profile "{safe_profile}"
+    else
+        -- Window exists, create new tab
+        tell current window
+            create tab with profile "{safe_profile}"
         end tell
+    end if
+    tell current session of current window
+        set name to "{safe_session}"
+        write text "tmux {TMUX_CONTROL_MODE_FLAG} attach-session -t {safe_session}; exit"
     end tell
 end tell
 '''
