@@ -1,6 +1,9 @@
 """SSHplex Connector - SSH connections and tmux session management."""
 
+import os
 import platform
+import re
+import shlex
 import time
 from datetime import datetime
 from typing import Any, List, Optional
@@ -50,6 +53,10 @@ class SSHplexConnector:
 
         if not username or not username.strip():
             raise ValueError("SSH username cannot be empty")
+        
+        # Validate username format to prevent injection
+        if not re.match(r'^[a-zA-Z0-9._-]+$', username):
+            raise ValueError(f"Invalid username format: {username}")
 
         if port < 1 or port > 65535:
             raise ValueError(f"SSH port must be between 1 and 65535, got {port}")
@@ -74,6 +81,12 @@ class SSHplexConnector:
 
             for _i, host in enumerate(hosts):
                 hostname = host.ip if host.ip else host.name
+
+                # Validate hostname format to prevent injection
+                if not re.match(r'^[a-zA-Z0-9.-]+$', hostname):
+                    self.logger.warning(f"Invalid hostname format (potential injection): {hostname}")
+                    self.logger.warning("Skipping potentially malicious host")
+                    continue
 
                 # Build SSH command
                 ssh_command = self._build_ssh_command(host, username, key_path, port)
@@ -194,9 +207,21 @@ class SSHplexConnector:
                         None
                     )
                     if proxy:
-                        cmd_parts.extend([
-                            "-o", f"ProxyCommand=ssh -i {proxy.key_path} -W %h:%p {proxy.username}@{proxy.host}"
-                        ])
+                        # Sanitize proxy credentials to prevent injection
+                        proxy_host = proxy.host or ''
+                        proxy_user = proxy.username or ''
+                        proxy_key = proxy.key_path or ''
+                        
+                        # Validate proxy values format
+                        if (re.match(r'^[a-zA-Z0-9.-]+$', proxy_host) and
+                            re.match(r'^[a-zA-Z0-9._-]+$', proxy_user) and
+                            os.path.isabs(proxy_key) and '..' not in proxy_key):
+                            # Use shlex.quote for safe shell escaping
+                            cmd_parts.extend([
+                                "-o", f"ProxyCommand=ssh -i {shlex.quote(proxy_key)} -W %h:%p {shlex.quote(proxy_user)}@{shlex.quote(proxy_host)}"
+                            ])
+                        else:
+                            self.logger.warning("Proxy configuration contains invalid values, skipping proxy")
         except Exception:
             # Proxy not configured for this host, continue without it
             pass
@@ -233,8 +258,8 @@ class SSHplexConnector:
         timeout = getattr(self.config.ssh, 'timeout', 10) if self.config else 10
         cmd_parts.extend(["-o", f"ConnectTimeout={timeout}"])
 
-        # Add user@hostname
-        cmd_parts.append(f"{username}@{hostname}")
+        # Add user@hostname with proper escaping
+        cmd_parts.append(f"{shlex.quote(username)}@{shlex.quote(hostname)}")
 
         return " ".join(cmd_parts)
 

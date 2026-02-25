@@ -88,7 +88,7 @@ class ConsulConfig(BaseModel):
     port: int = Field(443, description="Consul port number")
     token: str = Field("default_token", description="Consul token for authentication")
     scheme: str = Field("https", description="URL scheme (e.g., 'https')")
-    verify: bool = Field(False, description="Whether to verify SSL certificates")
+    verify: bool = Field(True, description="Whether to verify SSL certificates (default: True for security)")
     dc: str = Field("dc1", description="Datacenter name")
     cert: str = Field("", description="Path to SSL certificate")
 

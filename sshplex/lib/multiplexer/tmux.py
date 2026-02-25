@@ -1,6 +1,7 @@
 """SSHplex tmux multiplexer implementation."""
 
 import platform
+import re
 import subprocess
 import uuid
 from datetime import datetime
@@ -261,8 +262,10 @@ class TmuxManager(MultiplexerBase):
                 return False
 
             pane = self.panes[hostname]
+            # Sanitize title to prevent injection - only allow safe characters
+            safe_title = re.sub(r'[^\w\s.-]', '', title)[:50]  # Remove dangerous chars, limit length
             # Set pane title using printf escape sequence
-            pane.send_keys(f'printf "\\033]2;{title}\\033\\\\"', enter=True)
+            pane.send_keys(f'printf "\\033]2;{safe_title}\\033\\\\"', enter=True)
             return True
 
         except Exception as e:
