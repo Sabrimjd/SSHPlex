@@ -136,6 +136,41 @@ class TestTmuxConfig:
         assert config.window_name == "sshplex"
         assert config.max_panes_per_window == 5
         assert config.control_with_iterm2 is False
+        assert config.iterm2_attach_target == "new-window"
+        assert config.iterm2_profile == "Default"
+
+    def test_iterm2_custom_values(self):
+        """Test custom iTerm2 configuration."""
+        config = TmuxConfig(
+            control_with_iterm2=True,
+            iterm2_attach_target="new-tab",
+            iterm2_profile="Custom"
+        )
+        assert config.control_with_iterm2 is True
+        assert config.iterm2_attach_target == "new-tab"
+        assert config.iterm2_profile == "Custom"
+
+    @patch('platform.system')
+    def test_validate_iterm2_config_on_macos(self, mock_system):
+        """Test iTerm2 config validation on macOS."""
+        mock_system.return_value = "Darwin"
+        config = TmuxConfig(control_with_iterm2=True)
+        assert config.validate_iterm2_config() is True
+
+    @patch('platform.system')
+    def test_validate_iterm2_config_on_linux_raises(self, mock_system):
+        """Test iTerm2 config validation raises on Linux."""
+        mock_system.return_value = "Linux"
+        config = TmuxConfig(control_with_iterm2=True)
+        with pytest.raises(ValueError, match="only supported on macOS"):
+            config.validate_iterm2_config()
+
+    @patch('platform.system')
+    def test_validate_iterm2_disabled_on_linux_ok(self, mock_system):
+        """Test iTerm2 disabled on Linux is valid."""
+        mock_system.return_value = "Linux"
+        config = TmuxConfig(control_with_iterm2=False)
+        assert config.validate_iterm2_config() is True
 
 
 class TestUIConfig:

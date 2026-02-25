@@ -324,12 +324,31 @@ class TmuxSessionManager(ModalScreen):
                 import platform
                 system = platform.system().lower()
                 try:
-                    if "darwin" in system and self.config.tmux.control_with_iterm2:  # macOS
-                        if self.tmux_server is None:
-                            raise RuntimeError("tmux server not available")
-                        tmux_session = self.tmux_server.find_where({"session_name": session.name})
-                        if tmux_session:
-                            tmux_session.switch_client()
+                    # Check if iTerm2 integration should be used
+                    use_iterm2 = (
+                        "darwin" in system and
+                        self.config and
+                        getattr(self.config.tmux, 'control_with_iterm2', False)
+                    )
+
+                    if use_iterm2:
+                        # Use shared iTerm2 utility for consistent behavior
+                        from ..utils.iterm2 import launch_iterm2_session
+                        target = getattr(self.config.tmux, 'iterm2_attach_target', 'new-window')
+                        profile = getattr(self.config.tmux, 'iterm2_profile', 'Default')
+
+                        success = launch_iterm2_session(
+                            session_name=session.name,
+                            target=target,
+                            profile=profile,
+                            fallback_to_standard=True
+                        )
+
+                        if not success:
+                            # Fallback to standard tmux attach
+                            import os
+                            self.logger.info("Falling back to standard tmux attach")
+                            os.execlp("tmux", "tmux", "attach-session", "-t", session.name)
                     else:
                         # Auto-attach to the session by replacing current process
                         import os

@@ -74,7 +74,27 @@ class TmuxConfig(BaseModel):
     broadcast: bool = False  # Start with broadcast off
     window_name: str = "sshplex"
     max_panes_per_window: int = Field(default=5, description="Maximum panes per window before creating a new window")
-    control_with_iterm2: bool = False  # Use iTerm2 tmux integration on macOS
+    # iTerm2 integration (macOS only)
+    control_with_iterm2: bool = Field(default=False, description="Use iTerm2 tmux -CC mode (macOS only)")
+    iterm2_attach_target: str = Field(
+        default="new-window",
+        description="Where to open tmux session in iTerm2: new-window or new-tab"
+    )
+    iterm2_profile: str = Field(default="Default", description="iTerm2 profile to use for new windows/tabs")
+
+    def validate_iterm2_config(self) -> bool:
+        """Validate iTerm2 config is only enabled on macOS.
+
+        Returns:
+            True if config is valid, raises ValueError otherwise
+        """
+        import platform
+        if self.control_with_iterm2 and platform.system().lower() != "darwin":
+            raise ValueError(
+                "tmux.control_with_iterm2 is only supported on macOS. "
+                "Set this to false on Linux/other systems."
+            )
+        return True
 
 
 class AnsibleConfig(BaseModel):
