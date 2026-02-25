@@ -96,16 +96,6 @@ Run `sshplex --onboarding` for an interactive setup wizard that will:
 
 On first run without `--onboarding`, SSHplex creates a default config at `~/.config/sshplex/sshplex.yaml`. Edit it with your provider details, or use the built-in config editor (`e` key in TUI).
 
-## What's New (Quality Upgrade)
-
-Recent quality and UX improvements include:
-
-- Stronger config/runtime error handling and input validation
-- iTerm2 integration reliability improvements (installation/running detection + better fallback messaging)
-- Parallel provider fetching support for faster multi-provider discovery
-- Faster cache validity checks before deep metadata parsing
-- TUI polish: config editor (`e`), help modal (`h`), and improved visual selection cues
-
 See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Usage
