@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-02-25
+
+### Security
+- **SSH command injection prevention** with `shlex.quote()` for all user-controlled values
+- Input validation for usernames, hostnames, and proxy credentials (regex-based)
+- Absolute path requirement for SSH keys to prevent directory traversal
+- Pane title sanitization in tmux to prevent escape sequence injection
+- **Consul SSL verification now enabled by default** (breaking change: `verify: False` → `True`)
+
+### Changed
+- Refactored SoTFactory to remove ~50 lines of code duplication
+- Improved proxy credential validation before use in SSH commands
+
+---
+
 ## [1.4.0] - 2026-02-20
 
 ### Added
