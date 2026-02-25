@@ -150,7 +150,7 @@ def mock_libtmux_server():
         # Mock session
         mock_session = MagicMock()
         mock_session.session_name = 'test-session'
-        mock_session.attached_window = MagicMock()
+        mock_session.active_window = MagicMock()
         mock_instance.new_session.return_value = mock_session
         mock_instance.has_session.return_value = False
         

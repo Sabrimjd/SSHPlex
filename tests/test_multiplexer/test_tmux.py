@@ -91,7 +91,7 @@ class TestTmuxManager:
         mock_server.has_session.return_value = False
         mock_session = MagicMock()
         mock_window = MagicMock()
-        mock_session.attached_window = mock_window
+        mock_session.active_window = mock_window
         mock_server.new_session.return_value = mock_session
         mock_libtmux.Server.return_value = mock_server
         
@@ -107,7 +107,7 @@ class TestTmuxManager:
         mock_server.has_session.return_value = True
         mock_session = MagicMock()
         mock_window = MagicMock()
-        mock_session.attached_window = mock_window
+        mock_session.active_window = mock_window
         mock_server.sessions.get.return_value = mock_session
         mock_libtmux.Server.return_value = mock_server
         

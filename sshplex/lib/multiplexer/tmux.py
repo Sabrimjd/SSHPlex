@@ -118,7 +118,7 @@ class TmuxManager(MultiplexerBase):
 
             # Get the main window and initialize tracking
             if self.session:
-                self.current_window = self.session.attached_window
+                self.current_window = self.session.active_window
                 if self.current_window:
                     self.windows[0] = self.current_window
                     self.current_window_pane_count = 0
@@ -171,7 +171,7 @@ class TmuxManager(MultiplexerBase):
             # Create pane
             if self.current_window_pane_count == 0:
                 # First pane in this window: use attached pane
-                pane = self.current_window.attached_pane
+                pane = self.current_window.active_pane
                 if pane is None:
                     raise RuntimeError(f"No attached pane available for {hostname}")
             else:
