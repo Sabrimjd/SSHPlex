@@ -170,10 +170,11 @@ class TmuxManager(MultiplexerBase):
 
             # Create pane
             if self.current_window_pane_count == 0:
-                # First pane in this window: use attached pane
+                # First pane in this window: use existing pane
                 pane = self.current_window.active_pane
                 if pane is None:
-                    raise RuntimeError(f"No attached pane available for {hostname}")
+                    raise RuntimeError(f"No active pane available for {hostname}")
+                self.logger.debug(f"SSHplex: Reusing existing pane {pane.pane_id} for first host")
             else:
                 # Additional panes - attempt split with fallback
                 vertical_split = (self.current_window_pane_count % 2 == 0)
@@ -203,10 +204,7 @@ class TmuxManager(MultiplexerBase):
             self.panes[hostname] = pane
             self.current_window_pane_count += 1
 
-            # Set pane title
-            self.set_pane_title(hostname, hostname)
-
-            # Execute command if provided
+            # Execute command if provided (includes pane title via SSH command)
             if command:
                 self.send_command(hostname, command)
 
