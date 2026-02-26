@@ -149,6 +149,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
         self._proxy_counter = 0
         self._import_counter = 0
         self._import_types: Dict[str, str] = {}  # idx -> current type
+        self._mux_backend: str = "tmux"  # current mux backend
 
     def compose(self) -> ComposeResult:
         with Vertical(id="config-editor-dialog"):
@@ -225,9 +226,9 @@ class ConfigEditorScreen(ModalScreen[bool]):
                     yield Static("SSH Proxies", classes="section-header")
                     yield Vertical(id="proxy-list", classes="dynamic-list")
 
-                with TabPane("Tmux", id="tab-tmux"), VerticalScroll():
+                with TabPane("Mux", id="tab-mux"), VerticalScroll():
                     yield _form_field(
-                        "cfg-tmux-backend",
+                        "cfg-mux-backend",
                         "Backend",
                         Select(
                             [("tmux", "tmux"), ("iTerm2 Native", "iterm2-native")],
@@ -235,66 +236,34 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         ),
                         "Multiplexer backend (iTerm2 native is macOS only)",
                     )
+                    # Common fields for all backends
                     yield _form_field(
-                        "cfg-tmux-layout",
+                        "cfg-mux-layout",
                         "Layout",
                         Select(
                             [(v, v) for v in ["tiled", "even-horizontal", "even-vertical", "main-horizontal", "main-vertical"]],
                             value=self.config.tmux.layout,
                         ),
-                        "Tmux pane layout",
+                        "Pane layout",
                     )
                     yield _form_field(
-                        "cfg-tmux-broadcast",
+                        "cfg-mux-broadcast",
                         "Broadcast",
                         Switch(value=self.config.tmux.broadcast),
                         "Start with broadcast enabled",
                     )
                     yield _form_field(
-                        "cfg-tmux-window_name",
+                        "cfg-mux-window_name",
                         "Window Name",
                         Input(value=self.config.tmux.window_name),
                     )
                     yield _form_field(
-                        "cfg-tmux-max_panes_per_window",
+                        "cfg-mux-max_panes_per_window",
                         "Max Panes Per Window",
                         Input(value=str(self.config.tmux.max_panes_per_window)),
                     )
-                    yield Static("iTerm2 Integration (macOS)", classes="section-header")
-                    yield _form_field(
-                        "cfg-tmux-control_with_iterm2",
-                        "Enable iTerm2 -CC Mode",
-                        Switch(value=self.config.tmux.control_with_iterm2),
-                        "Use iTerm2 tmux -CC mode (requires backend=tmux)",
-                    )
-                    # Get iTerm2 attach target with validation for existing configs
-                    iterm2_target = getattr(self.config.tmux, 'iterm2_attach_target', 'new-window')
-                    if iterm2_target not in ('new-window', 'new-tab'):
-                        iterm2_target = 'new-window'
-                    yield _form_field(
-                        "cfg-tmux-iterm2_attach_target",
-                        "Attach Target",
-                        Select(
-                            [("New Window", "new-window"), ("New Tab", "new-tab")],
-                            value=iterm2_target,
-                        ),
-                        "Where to open tmux session in iTerm2",
-                    )
-                    yield _form_field(
-                        "cfg-tmux-iterm2_profile",
-                        "iTerm2 Profile",
-                        Input(value=getattr(self.config.tmux, 'iterm2_profile', 'Default')),
-                        "iTerm2 profile name to use",
-                    )
-                    yield _form_field(
-                        "cfg-tmux-iterm2_split_pattern",
-                        "Split Pattern (iTerm2 Native)",
-                        Select(
-                            [("Alternate", "alternate"), ("Vertical", "vertical"), ("Horizontal", "horizontal")],
-                            value=getattr(self.config.tmux, 'iterm2_split_pattern', 'alternate'),
-                        ),
-                        "Pane split pattern for iTerm2 native backend",
-                    )
+                    # Backend-specific fields container
+                    yield Vertical(id="mux-backend-fields")
 
                 with TabPane("Sources", id="tab-sources"), VerticalScroll():
                     yield _form_field(
@@ -371,6 +340,68 @@ class ConfigEditorScreen(ModalScreen[bool]):
         """Populate dynamic lists after mount."""
         self._populate_proxy_list()
         self._populate_import_list()
+        self._populate_mux_backend_fields()
+
+    # --- Mux backend fields ---
+
+    def _populate_mux_backend_fields(self) -> None:
+        """Populate backend-specific fields based on current backend."""
+        container = self.query_one("#mux-backend-fields", Vertical)
+        backend = getattr(self.config.tmux, 'backend', 'tmux')
+        self._mux_backend = backend
+        container.mount(self._make_mux_backend_fields(backend))
+
+    def _make_mux_backend_fields(self, backend: str) -> Vertical:
+        """Create backend-specific fields."""
+        children: List[Any] = []
+
+        if backend == "tmux":
+            # tmux + iTerm2 -CC mode options
+            children.append(Static("iTerm2 Integration (macOS)", classes="section-header"))
+            children.append(_form_field(
+                "cfg-mux-control_with_iterm2",
+                "Enable iTerm2 -CC Mode",
+                Switch(value=self.config.tmux.control_with_iterm2),
+                "Use iTerm2 tmux -CC mode on macOS",
+            ))
+            iterm2_target = getattr(self.config.tmux, 'iterm2_attach_target', 'new-window')
+            if iterm2_target not in ('new-window', 'new-tab'):
+                iterm2_target = 'new-window'
+            children.append(_form_field(
+                "cfg-mux-iterm2_attach_target",
+                "Attach Target",
+                Select(
+                    [("New Window", "new-window"), ("New Tab", "new-tab")],
+                    value=iterm2_target,
+                ),
+                "Where to open tmux session in iTerm2",
+            ))
+            children.append(_form_field(
+                "cfg-mux-iterm2_profile",
+                "iTerm2 Profile",
+                Input(value=getattr(self.config.tmux, 'iterm2_profile', 'Default')),
+                "iTerm2 profile name to use",
+            ))
+        elif backend == "iterm2-native":
+            # iTerm2 native options
+            children.append(Static("iTerm2 Native Options", classes="section-header"))
+            children.append(_form_field(
+                "cfg-mux-iterm2_profile",
+                "iTerm2 Profile",
+                Input(value=getattr(self.config.tmux, 'iterm2_profile', 'Default')),
+                "iTerm2 profile name to use",
+            ))
+            children.append(_form_field(
+                "cfg-mux-iterm2_split_pattern",
+                "Split Pattern",
+                Select(
+                    [("Alternate", "alternate"), ("Vertical", "vertical"), ("Horizontal", "horizontal")],
+                    value=getattr(self.config.tmux, 'iterm2_split_pattern', 'alternate'),
+                ),
+                "Pane split pattern",
+            ))
+
+        return Vertical(*children, id="mux-backend-fields-container")
 
     # --- Dynamic proxy list ---
 
@@ -507,8 +538,18 @@ class ConfigEditorScreen(ModalScreen[bool]):
             self._remove_import(idx)
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        """Handle import type changes to re-render type-specific fields."""
+        """Handle select changes to re-render dynamic fields."""
         select_id = event.select.id or ""
+
+        # Handle mux backend changes
+        if select_id == "cfg-mux-backend":
+            new_backend = str(event.value)
+            if self._mux_backend != new_backend:
+                self._mux_backend = new_backend
+                self.run_worker(self._rebuild_mux_backend_fields(new_backend))
+            return
+
+        # Handle import type changes
         if not select_id.startswith("import-") or not select_id.endswith("-type"):
             return
 
@@ -525,6 +566,17 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
         self._import_types[idx] = new_type
         self.run_worker(self._rebuild_import_type_fields(idx, new_type))
+
+    async def _rebuild_mux_backend_fields(self, new_backend: str) -> None:
+        """Rebuild backend-specific fields when mux backend changes."""
+        container = self.query_one("#mux-backend-fields", Vertical)
+
+        # Remove old fields
+        for child in list(container.children):
+            await child.remove()
+
+        # Mount new fields
+        container.mount(self._make_mux_backend_fields(new_backend))
 
     async def _rebuild_import_type_fields(self, idx: str, new_type: str) -> None:
         """Rebuild type-specific fields when import type changes."""
@@ -633,18 +685,28 @@ class ConfigEditorScreen(ModalScreen[bool]):
             "proxy": proxies,
         }
 
-        # Tmux
-        data["tmux"] = {
-            "backend": self._get_select_value("cfg-tmux-backend", "tmux"),
-            "layout": self._get_select_value("cfg-tmux-layout", "tiled"),
-            "broadcast": self._get_switch_value("cfg-tmux-broadcast"),
-            "window_name": self._get_input_value("cfg-tmux-window_name", "sshplex"),
-            "max_panes_per_window": int(self._get_input_value("cfg-tmux-max_panes_per_window", "5")),
-            "control_with_iterm2": self._get_switch_value("cfg-tmux-control_with_iterm2"),
-            "iterm2_attach_target": self._get_select_value("cfg-tmux-iterm2_attach_target", "new-window"),
-            "iterm2_profile": self._get_input_value("cfg-tmux-iterm2_profile", "Default"),
-            "iterm2_split_pattern": self._get_select_value("cfg-tmux-iterm2_split_pattern", "alternate"),
+        # Mux (tmux/iTerm2)
+        backend = self._get_select_value("cfg-mux-backend", "tmux")
+        mux_data: Dict[str, Any] = {
+            "backend": backend,
+            "layout": self._get_select_value("cfg-mux-layout", "tiled"),
+            "broadcast": self._get_switch_value("cfg-mux-broadcast"),
+            "window_name": self._get_input_value("cfg-mux-window_name", "sshplex"),
+            "max_panes_per_window": int(self._get_input_value("cfg-mux-max_panes_per_window", "5")),
         }
+
+        # Backend-specific fields
+        if backend == "tmux":
+            mux_data["control_with_iterm2"] = self._get_switch_value("cfg-mux-control_with_iterm2")
+            mux_data["iterm2_attach_target"] = self._get_select_value("cfg-mux-iterm2_attach_target", "new-window")
+            mux_data["iterm2_profile"] = self._get_input_value("cfg-mux-iterm2_profile", "Default")
+        elif backend == "iterm2-native":
+            mux_data["control_with_iterm2"] = False  # Not applicable
+            mux_data["iterm2_attach_target"] = "new-window"  # Default
+            mux_data["iterm2_profile"] = self._get_input_value("cfg-mux-iterm2_profile", "Default")
+            mux_data["iterm2_split_pattern"] = self._get_select_value("cfg-mux-iterm2_split_pattern", "alternate")
+
+        data["tmux"] = mux_data
 
         # Sources
         providers_str = self._get_input_value("cfg-sot-providers", "static")
