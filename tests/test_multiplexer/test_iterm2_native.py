@@ -66,8 +66,13 @@ class TestITerm2NativeManagerSession:
         """Test that create_pane queues a session."""
         result = manager.create_pane('host1', 'ssh user@host1')
         assert result is True
-        assert 'host1' in manager._pending_sessions
-        assert manager._pending_sessions['host1'] == 'ssh user@host1'
+        assert ('host1', 'ssh user@host1') in manager._pending_sessions
+
+    def test_create_pane_allows_duplicate_host_labels(self, manager):
+        """Test that queue preserves duplicate host labels."""
+        manager.create_pane('host1', 'ssh user@10.0.0.1')
+        manager.create_pane('host1', 'ssh user@10.0.0.2')
+        assert len(manager._pending_sessions) == 2
 
 
 class TestITerm2NativeManagerBroadcast:
@@ -107,7 +112,7 @@ class TestITerm2NativeManagerClose:
 
     def test_close_session_clears_pending(self, manager):
         """Test closing session clears pending sessions."""
-        manager._pending_sessions['host1'] = 'ssh user@host1'
+        manager._pending_sessions.append(('host1', 'ssh user@host1'))
         manager._broadcast_enabled = True
         manager.close_session()
         assert len(manager._pending_sessions) == 0

@@ -9,7 +9,7 @@ Backend options:
 
 import platform
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..logger import get_logger
 from .base import MultiplexerBase
@@ -66,7 +66,7 @@ class ITerm2NativeManager(MultiplexerBase):
         self._check_iterm2_api()
 
         # Session tracking: hostname -> SSH command
-        self._pending_sessions: Dict[str, str] = {}
+        self._pending_sessions: List[Tuple[str, str]] = []
 
         # Broadcast state
         self._broadcast_enabled = False
@@ -184,7 +184,7 @@ class ITerm2NativeManager(MultiplexerBase):
         if command is None:
             command = f"ssh {hostname}"
 
-        self._pending_sessions[hostname] = command
+        self._pending_sessions.append((hostname, command))
         self._max_panes_per_tab = max_panes_per_window
         self.logger.info(f"SSHplex: Queued iTerm2 pane for '{hostname}'")
         return True
@@ -293,7 +293,7 @@ class ITerm2NativeManager(MultiplexerBase):
             return
 
         # Build sessions list for the async function
-        sessions_data = list(self._pending_sessions.items())
+        sessions_data = list(self._pending_sessions)
         max_panes = self._max_panes_per_tab
         profile = self._profile
         split_pattern = self._split_pattern

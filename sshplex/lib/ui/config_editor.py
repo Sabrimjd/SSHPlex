@@ -161,6 +161,13 @@ class ConfigEditorScreen(ModalScreen[bool]):
         self._import_types: Dict[str, str] = {}  # idx -> current type
         self._mux_backend: str = "tmux"  # current mux backend
 
+    @staticmethod
+    def _safe_select_initial(value: str, allowed: List[str], default: str) -> str:
+        """Return a safe initial Select value to avoid InvalidSelectValueError."""
+        if value in allowed:
+            return value
+        return default
+
     def compose(self) -> ComposeResult:
         with Vertical(id="config-editor-dialog"):
             yield Static("SSHplex Configuration Editor", id="editor-title")
@@ -202,7 +209,11 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         "Level",
                         Select(
                             [(v, v) for v in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]],
-                            value=self.config.logging.level,
+                            value=self._safe_select_initial(
+                                str(getattr(self.config.logging, "level", "INFO")),
+                                ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                                "INFO",
+                            ),
                         ),
                     )
                     yield _form_field(
@@ -295,7 +306,11 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         "Backend",
                         Select(
                             [("tmux", "tmux"), ("iTerm2 Native", "iterm2-native")],
-                            value=getattr(self.config.tmux, 'backend', 'tmux'),
+                            value=self._safe_select_initial(
+                                str(getattr(self.config.tmux, "backend", "tmux")),
+                                ["tmux", "iterm2-native"],
+                                "tmux",
+                            ),
                         ),
                         "Multiplexer backend (iTerm2 native is macOS only)",
                     )
@@ -314,7 +329,11 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         "Layout",
                         Select(
                             [(v, v) for v in ["tiled", "even-horizontal", "even-vertical", "main-horizontal", "main-vertical"]],
-                            value=self.config.tmux.layout,
+                            value=self._safe_select_initial(
+                                str(getattr(self.config.tmux, "layout", "tiled")),
+                                ["tiled", "even-horizontal", "even-vertical", "main-horizontal", "main-vertical"],
+                                "tiled",
+                            ),
                         ),
                         "Pane layout",
                     )
@@ -373,7 +392,11 @@ class ConfigEditorScreen(ModalScreen[bool]):
     def _populate_mux_backend_fields(self) -> None:
         """Populate backend-specific fields based on current backend."""
         container = self.query_one("#mux-backend-fields", Vertical)
-        backend = getattr(self.config.tmux, 'backend', 'tmux')
+        backend = self._safe_select_initial(
+            str(getattr(self.config.tmux, "backend", "tmux")),
+            ["tmux", "iterm2-native"],
+            "tmux",
+        )
         self._mux_backend = backend
         container.mount(self._make_mux_backend_fields(backend))
 
@@ -419,7 +442,11 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         ("Current iTerm2 Window", "current-window"),
                         ("New iTerm2 Window", "new-window"),
                     ],
-                    value=getattr(self.config.tmux, 'iterm2_native_target', 'current-window'),
+                    value=self._safe_select_initial(
+                        str(getattr(self.config.tmux, "iterm2_native_target", "current-window")),
+                        ["current-window", "new-window"],
+                        "current-window",
+                    ),
                 ),
                 "Open sessions in current window (new tabs) or a new window",
             ))
@@ -434,7 +461,11 @@ class ConfigEditorScreen(ModalScreen[bool]):
                 "Split Pattern",
                 Select(
                     [("Alternate", "alternate"), ("Vertical", "vertical"), ("Horizontal", "horizontal")],
-                    value=getattr(self.config.tmux, 'iterm2_split_pattern', 'alternate'),
+                    value=self._safe_select_initial(
+                        str(getattr(self.config.tmux, "iterm2_split_pattern", "alternate")),
+                        ["alternate", "vertical", "horizontal"],
+                        "alternate",
+                    ),
                 ),
                 "Pane split pattern",
             ))
@@ -500,7 +531,11 @@ class ConfigEditorScreen(ModalScreen[bool]):
     def _make_import_item(self, idx: int, imp: Any = None) -> Vertical:
         """Create an import form item with type-specific fields."""
         name = imp.name if imp else ""
-        imp_type = imp.type if imp else "static"
+        imp_type = self._safe_select_initial(
+            str(getattr(imp, "type", "static")) if imp else "static",
+            ["static", "netbox", "ansible", "consul"],
+            "static",
+        )
         self._import_types[str(idx)] = imp_type
 
         children: List[Any] = [

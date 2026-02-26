@@ -276,11 +276,13 @@ def tui_mode(config: Any, logger: Any) -> int:
             use_broadcast=use_broadcast
         ):
             session_name = connector.get_session_name()
+            connected_count = connector.last_success_count
+            selected_count = len(selected_hosts)
             logger.info(f"Successfully created tmux session '{session_name}' with {mode_display}")
 
             print("\nSSHplex Session Created Successfully!")
             print(f"tmux session: {session_name}")
-            print(f"{len(selected_hosts)} SSH connections established in {mode_display}")
+            print(f"{connected_count}/{selected_count} SSH connections established in {mode_display}")
             broadcast_status = "ENABLED" if use_broadcast else "DISABLED"
             print(f"Broadcast mode: {broadcast_status}")
             print("\nAuto-attaching to session...")

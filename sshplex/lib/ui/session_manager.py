@@ -440,6 +440,37 @@ class TmuxSessionManager(ModalScreen):
         self.broadcast_enabled = False  # Track broadcast state
         self.config = config
 
+    @staticmethod
+    def _split_window(window: Any, vertical: bool = True) -> Any:
+        """Split tmux window with libtmux version compatibility."""
+        split = getattr(window, "split", None)
+        if callable(split):
+            return split(vertical=vertical)
+        return window.split_window(vertical=vertical)
+
+    def _find_tmux_session(self, session_name: str) -> Optional[Any]:
+        """Find tmux session with libtmux compatibility fallbacks."""
+        if self.tmux_server is None:
+            return None
+
+        try:
+            return self.tmux_server.sessions.get(session_name=session_name)
+        except Exception:
+            pass
+
+        try:
+            found = self.tmux_server.find_where({"session_name": session_name})
+            if found is not None:
+                return found
+        except Exception:
+            pass
+
+        for session in list(getattr(self.tmux_server, "sessions", [])):
+            if getattr(session, "session_name", "") == session_name:
+                return session
+
+        return None
+
     def compose(self) -> ComposeResult:
         """Create the session manager layout."""
         with Container(id="session-dialog"):
@@ -474,8 +505,8 @@ class TmuxSessionManager(ModalScreen):
             # Initialize tmux server
             self.tmux_server = libtmux.Server()
 
-            # Get all sessions
-            tmux_sessions = self.tmux_server.list_sessions()
+            # Get all sessions (list_sessions is removed in newer libtmux)
+            tmux_sessions = list(getattr(self.tmux_server, "sessions", []))
             self.sessions.clear()
 
             for session in tmux_sessions:
@@ -523,18 +554,12 @@ class TmuxSessionManager(ModalScreen):
 
             self.logger.info(f"SSHplex: Loaded {len(self.sessions)} tmux sessions")
 
-        except libtmux.exc.LibTmuxException as e:
-            self.logger.error(f"SSHplex: tmux error loading sessions: {e}")
-            # Show error in table
-            if self.table is not None:
-                self.table.clear()
-                self.table.add_row("❌", "tmux error", str(e), "0")
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to load tmux sessions: {e}")
             # Show error in table
             if self.table is not None:
                 self.table.clear()
-                self.table.add_row("❌", "Error loading sessions", str(e), "0")
+                self.table.add_row("❌", "tmux error", str(e), "0")
 
     def populate_table(self) -> None:
         """Populate the table with session data."""
@@ -663,27 +688,50 @@ class TmuxSessionManager(ModalScreen):
         try:
             self.logger.info(f"SSHplex: Attempting to kill tmux session '{session.name}'")
 
-            # Find and kill the session
-            if self.tmux_server:
-                tmux_session = self.tmux_server.find_where({"session_name": session.name})
+            self.tmux_server = libtmux.Server()
+            result = self.tmux_server.cmd("kill-session", "-t", session.name)
+            stderr = "\n".join(getattr(result, "stderr", []) or [])
+            if stderr.strip():
+                self.logger.warning(f"SSHplex: kill-session stderr for '{session.name}': {stderr}")
+
+            # Verify and fallback
+            if self._find_tmux_session(session.name) is not None:
+                tmux_session = self._find_tmux_session(session.name)
                 if tmux_session:
                     tmux_session.kill_session()
-                    self.logger.info(f"SSHplex: Successfully killed tmux session '{session.name}'")
 
-                    # Refresh the session list
-                    self.load_sessions()
-                else:
-                    self.logger.error(f"SSHplex: Session '{session.name}' not found for killing")
+            if self._find_tmux_session(session.name) is None:
+                self.logger.info(f"SSHplex: Successfully killed tmux session '{session.name}'")
             else:
-                self.logger.error("SSHplex: No tmux server connection available")
+                self.logger.error(f"SSHplex: Session '{session.name}' still exists after kill attempt")
 
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to kill session: {e}")
+        finally:
+            self.load_sessions()
+
+    def on_key(self, event: Any) -> None:
+        """Ensure key shortcuts work while table has focus."""
+        key = event.key.lower()
+        if key == "k":
+            self.action_kill_session()
+            event.stop()
+            event.prevent_default()
+        elif key == "b":
+            self.action_toggle_broadcast()
+            event.stop()
+            event.prevent_default()
+        elif key == "r":
+            self.action_refresh_sessions()
+            event.stop()
+            event.prevent_default()
 
     def action_refresh_sessions(self) -> None:
         """Refresh the session list."""
         self.logger.info("SSHplex: Refreshing tmux sessions")
         self.load_sessions()
+        if self.table and self.sessions and self.table.cursor_row < 0:
+            self.table.move_cursor(row=0)
 
     def action_close_manager(self) -> None:
         """Close the session manager."""
@@ -701,11 +749,8 @@ class TmuxSessionManager(ModalScreen):
 
             try:
                 # Find the tmux session
-                if self.tmux_server is None:
-                    self.logger.error("SSHplex: tmux server not initialized")
-                    return
-
-                tmux_session = self.tmux_server.find_where({"session_name": session.name})
+                self.tmux_server = libtmux.Server()
+                tmux_session = self._find_tmux_session(session.name)
                 if not tmux_session:
                     self.logger.error(f"SSHplex: Session '{session.name}' not found")
                     return
@@ -764,7 +809,7 @@ class TmuxSessionManager(ModalScreen):
                     window = tmux_session.windows[0]  # Use first window
 
                     # Create a new pane by splitting the window vertically
-                    new_pane = window.split_window(vertical=True)
+                    new_pane = self._split_window(window, vertical=True)
 
                     if new_pane:
                         # Set a title for the new pane
@@ -859,7 +904,7 @@ class TmuxSessionManager(ModalScreen):
                     window = tmux_session.windows[0]  # Use first window
 
                     # Create a new pane by splitting the window vertically
-                    new_pane = window.split_window(vertical=True)
+                    new_pane = self._split_window(window, vertical=True)
 
                     if new_pane:
                         # Set a title for the new pane

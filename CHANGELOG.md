@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1] - 2026-02-26
+
+### Added
+- Demo assets for local multi-provider testing: `demo/docker-compose.consul-demo.yml`, `demo/seed-consul-demo.sh`, `demo/ansible-inventory-demo.yml`, and `demo/sshplex.demo.yaml`.
+
+### Fixed
+- iTerm2 native now preserves duplicate targets in queue (multiple hosts with same IP no longer collapse to one tab/pane).
+- Connection routing now separates display label from SSH target to support same-IP hosts with distinct names.
+- tmux pane creation compatibility with newer libtmux by using `Window.split()` fallback logic.
+- tmux session manager compatibility and key handling regressions (`k`, `b`, `r`, refresh/session lookup/kill reliability).
+- Config editor no longer crashes on invalid select values in config (safe defaults applied in UI).
+- Connection summary now reports real success count (`X/Y`) instead of always showing selected host count.
+
 ## [1.6.0] - 2026-02-26
 
 ### Added

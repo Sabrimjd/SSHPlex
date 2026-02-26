@@ -84,6 +84,14 @@ class TmuxManager(MultiplexerBase):
             self.logger.error(f"SSHplex: Failed to initialize tmux server: {e}")
             return False
 
+    @staticmethod
+    def _split_window(window: Any, vertical: bool = True) -> Any:
+        """Split tmux window with libtmux version compatibility."""
+        split = getattr(window, "split", None)
+        if callable(split):
+            return split(vertical=vertical)
+        return window.split_window(vertical=vertical)
+
     def create_session(self) -> bool:
         """Create a new tmux session with SSHplex branding."""
         try:
@@ -179,20 +187,20 @@ class TmuxManager(MultiplexerBase):
                 # Additional panes - attempt split with fallback
                 vertical_split = (self.current_window_pane_count % 2 == 0)
                 try:
-                    pane = self.current_window.split_window(vertical=vertical_split)
+                    pane = self._split_window(self.current_window, vertical=vertical_split)
                 except Exception as e:
                     # Handle "no space" error by resizing or creating a new window
                     self.logger.warning(f"Pane split failed ({e}), attempting layout adjustment")
                     try:
                         # Resize window to fit more panes
                         self.current_window.resize(height=80, width=200)
-                        pane = self.current_window.split_window(vertical=vertical_split)
+                        pane = self._split_window(self.current_window, vertical=vertical_split)
                     except Exception:
                         # If still fails, create a new window
                         self.logger.info("Creating new window due to insufficient space")
                         ensure_window_available()
                         vertical_split = True  # first split in new window
-                        pane = self.current_window.split_window(vertical=vertical_split)
+                        pane = self._split_window(self.current_window, vertical=vertical_split)
 
                 if pane is None:
                     raise RuntimeError(f"Failed to create tmux pane for {hostname}")

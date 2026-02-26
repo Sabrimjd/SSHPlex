@@ -109,6 +109,51 @@ sot:
         token: "your-token"
 ```
 
+## Local Demo (Consul + Ansible)
+
+This repo includes a small demo setup that uses the same IP (`192.168.31.216`) with different host names.
+
+```bash
+# Start Consul + seed 3 demo nodes
+docker compose -f demo/docker-compose.consul-demo.yml up -d
+
+# Optional: inspect nodes
+curl -s http://localhost:8500/v1/catalog/nodes | jq
+```
+
+Demo files:
+- `demo/ansible-inventory-demo.yml`
+- `demo/docker-compose.consul-demo.yml`
+- `demo/sshplex.demo.yaml`
+
+Example config snippet:
+
+```yaml
+sot:
+  providers: ["ansible", "consul"]
+  import:
+    - name: "demo-ansible"
+      type: ansible
+      inventory_paths:
+        - "demo/ansible-inventory-demo.yml"
+
+    - name: "demo-consul"
+      type: consul
+      config:
+        host: "127.0.0.1"
+        port: 8500
+        token: ""
+        scheme: "http"
+        verify: false
+        dc: "dc1"
+```
+
+Run with the bundled demo config:
+
+```bash
+sshplex --config demo/sshplex.demo.yaml
+```
+
 ## CLI Reference
 
 ```bash

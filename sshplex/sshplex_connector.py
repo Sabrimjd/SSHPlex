@@ -42,6 +42,8 @@ class SSHplexConnector:
         self.logger = get_logger()
         self.system = platform.system().lower()
         self.backend = getattr(config.tmux, 'backend', 'tmux') if config else 'tmux'
+        self.last_success_count = 0
+        self.last_failed_hosts: List[str] = []
 
         # Initialize multiplexer based on backend config
         if self.backend == "iterm2-native":
@@ -106,17 +108,20 @@ class SSHplexConnector:
             # Create tmux session
             if not self.multiplexer.create_session():
                 self.logger.error("SSHplex: Failed to create tmux session")
+                self.last_success_count = 0
+                self.last_failed_hosts = [h.ip if h.ip else h.name for h in hosts]
                 return False
 
             success_count = 0
             failed_hosts = []
 
             for _i, host in enumerate(hosts):
-                hostname = host.ip if host.ip else host.name
+                target_host = host.ip if host.ip else host.name
+                pane_id = host.name if host.name else target_host
 
-                # Validate hostname format to prevent injection
-                if not re.match(r'^[a-zA-Z0-9.-]+$', hostname):
-                    self.logger.warning(f"Invalid hostname format (potential injection): {hostname}")
+                # Validate connection target format to prevent injection
+                if not re.match(r'^[a-zA-Z0-9.-]+$', target_host):
+                    self.logger.warning(f"Invalid hostname format (potential injection): {target_host}")
                     self.logger.warning("Skipping potentially malicious host")
                     continue
 
@@ -124,10 +129,10 @@ class SSHplexConnector:
                 ssh_command = self._build_ssh_command(host, username, key_path, port)
                 self.logger.debug(
                     "SSHplex: Built SSH command for "
-                    f"{hostname}: {self._sanitize_ssh_command(ssh_command)}"
+                    f"{target_host}: {self._sanitize_ssh_command(ssh_command)}"
                 )
 
-                self.logger.info(f"SSHplex: Connecting to {hostname} as {username}")
+                self.logger.info(f"SSHplex: Connecting to {target_host} as {username}")
 
                 # Attempt connection with retry logic
                 connection_success = False
@@ -138,24 +143,24 @@ class SSHplexConnector:
                         if self.backend == "iterm2-native":
                             if use_panes:
                                 max_panes = self.config.tmux.max_panes_per_window if self.config else 5
-                                if self.multiplexer.create_pane(hostname, ssh_command, max_panes):
+                                if self.multiplexer.create_pane(pane_id, ssh_command, max_panes):
                                     connection_success = True
-                                    self.logger.info(f"SSHplex: Successfully created pane for {hostname}")
+                                    self.logger.info(f"SSHplex: Successfully created pane for {target_host}")
                                 else:
                                     last_error = "Failed to create iTerm2 native pane"
                             else:
-                                if self.multiplexer.create_window(hostname, ssh_command):
+                                if self.multiplexer.create_window(pane_id, ssh_command):
                                     connection_success = True
-                                    self.logger.info(f"SSHplex: Successfully created tab for {hostname}")
+                                    self.logger.info(f"SSHplex: Successfully created tab for {target_host}")
                                 else:
                                     last_error = "Failed to create iTerm2 native tab"
                         else:
                             if use_panes:
                                 # Create pane with SSH command
                                 max_panes = self.config.tmux.max_panes_per_window if self.config else 5
-                                if self.multiplexer.create_pane(hostname, ssh_command, max_panes):
+                                if self.multiplexer.create_pane(pane_id, ssh_command, max_panes):
                                     connection_success = True
-                                    self.logger.info(f"SSHplex: Successfully created pane for {hostname}")
+                                    self.logger.info(f"SSHplex: Successfully created pane for {target_host}")
                                 else:
                                     last_error = "Failed to create tmux pane"
                             else:
@@ -163,15 +168,15 @@ class SSHplexConnector:
                                 use_iterm2 = "darwin" in self.system and (self.config.tmux.control_with_iterm2 if self.config else False)
                                 if use_iterm2:
                                     # iTerm2 mode: use single-pane windows for tmux -CC integration
-                                    if self.multiplexer.create_pane(hostname, ssh_command, 1):
+                                    if self.multiplexer.create_pane(pane_id, ssh_command, 1):
                                         connection_success = True
-                                        self.logger.info(f"SSHplex: Successfully created window for {hostname}")
+                                        self.logger.info(f"SSHplex: Successfully created window for {target_host}")
                                     else:
                                         last_error = "Failed to create iTerm2 window"
                                 else:
-                                    if self.multiplexer.create_window(hostname, ssh_command):
+                                    if self.multiplexer.create_window(pane_id, ssh_command):
                                         connection_success = True
-                                        self.logger.info(f"SSHplex: Successfully created window for {hostname}")
+                                        self.logger.info(f"SSHplex: Successfully created window for {target_host}")
                                     else:
                                         last_error = "Failed to create tmux window"
                         
@@ -180,7 +185,7 @@ class SSHplexConnector:
                             
                     except Exception as e:
                         last_error = str(e)
-                        self.logger.warning(f"SSHplex: Connection attempt {attempt}/{max_attempts} failed for {hostname}: {e}")
+                        self.logger.warning(f"SSHplex: Connection attempt {attempt}/{max_attempts} failed for {target_host}: {e}")
                     
                     # If not successful and more attempts remain, wait before retry
                     if not connection_success and attempt < max_attempts:
@@ -190,14 +195,14 @@ class SSHplexConnector:
                         else:
                             delay = base_delay
                         
-                        self.logger.info(f"SSHplex: Retrying {hostname} in {delay}s (attempt {attempt + 1}/{max_attempts})")
+                        self.logger.info(f"SSHplex: Retrying {target_host} in {delay}s (attempt {attempt + 1}/{max_attempts})")
                         time.sleep(delay)
 
                 if connection_success:
                     success_count += 1
                 else:
-                    self.logger.error(f"SSHplex: Failed to create connection for {hostname} after {max_attempts} attempts: {last_error}")
-                    failed_hosts.append(hostname)
+                    self.logger.error(f"SSHplex: Failed to create connection for {target_host} after {max_attempts} attempts: {last_error}")
+                    failed_hosts.append(target_host)
 
             # Apply tiled layout for multiple panes (only when using panes, not windows)
             if use_panes and success_count > 1:
@@ -213,6 +218,9 @@ class SSHplexConnector:
             mode_text = "panes" if use_panes else "windows"
             broadcast_text = " with broadcast" if use_broadcast else ""
             self.logger.info(f"SSHplex: Connected to {success_count}/{len(hosts)} hosts using {mode_text}{broadcast_text}")
+
+            self.last_success_count = success_count
+            self.last_failed_hosts = failed_hosts
             
             if failed_hosts:
                 self.logger.warning(f"SSHplex: Failed to connect to hosts: {', '.join(failed_hosts)}")
@@ -221,6 +229,8 @@ class SSHplexConnector:
 
         except Exception as e:
             self.logger.error(f"SSHplex: Error during connection process: {e}")
+            self.last_success_count = 0
+            self.last_failed_hosts = [h.ip if h.ip else h.name for h in hosts]
             return False
 
     def _build_ssh_command(self, host: Any, username: str, key_path: Optional[str] = None, port: int = 22) -> str:
