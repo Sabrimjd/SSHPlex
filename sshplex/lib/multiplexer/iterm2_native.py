@@ -270,6 +270,19 @@ class ITerm2NativeManager(MultiplexerBase):
 
             sessions: List[Any] = []
             current_tab = window.current_tab
+
+            # If current_tab is None, try to get first tab from tabs list
+            if current_tab is None and window.tabs:
+                current_tab = window.tabs[0]
+
+            # If still None, create a new tab
+            if current_tab is None:
+                current_tab = await window.async_create_tab(profile=profile)
+
+            if current_tab is None:
+                self.logger.error("SSHplex: Failed to get or create a tab")
+                return
+
             current_tab_pane_count = 0
 
             for hostname, command in sessions_data:
@@ -282,6 +295,9 @@ class ITerm2NativeManager(MultiplexerBase):
                 if current_tab_pane_count == 0:
                     # First session in tab - use existing
                     session = current_tab.current_session
+                    if session is None:
+                        self.logger.error(f"SSHplex: No current session in tab for {hostname}")
+                        continue
                 else:
                     # Split existing session
                     if split_pattern == 'vertical':
@@ -291,7 +307,16 @@ class ITerm2NativeManager(MultiplexerBase):
                     else:  # alternate
                         vertical = (current_tab_pane_count % 2 == 0)
 
-                    last_session = sessions[-1] if sessions else current_tab.current_session
+                    # Get last session to split
+                    if sessions:
+                        last_session = sessions[-1]
+                    else:
+                        # Fallback to current session if available
+                        last_session = current_tab.current_session
+                        if last_session is None:
+                            self.logger.error(f"SSHplex: No session available to split for {hostname}")
+                            continue
+
                     session = await last_session.async_split_pane(vertical=vertical, profile=profile)
 
                 if not session:
