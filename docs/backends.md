@@ -84,8 +84,11 @@ Pure iTerm2 Python API with no tmux dependency. Best for simple use cases.
 ```yaml
 tmux:
   backend: "iterm2-native"
+  use_panes: true
+  iterm2_native_target: "current-window"  # current-window, new-window
   iterm2_profile: "Default"
   iterm2_split_pattern: "alternate"  # alternate, vertical, horizontal
+  iterm2_native_hide_from_history: true
   max_panes_per_window: 5
 ```
 
@@ -99,6 +102,8 @@ pip install "sshplex[iterm2]"
 - Native iTerm2 tabs and splits
 - Real broadcast input via iTerm2 broadcast domains
 - SSHplex-controlled tab/session naming
+- Open in current iTerm2 window or dedicated new window
+- iTerm2 tab manager from SSHplex (`s`) to refresh/kill managed native tabs
 
 **Naming Convention:**
 | Element | Format | Example |
@@ -111,6 +116,10 @@ pip install "sshplex[iterm2]"
 - iTerm2 native uses real broadcast domains
 - Toggle with iTerm2's `Cmd+Option+I` shortcut
 - Or enable in config: `broadcast: true`
+
+**Shell History Behavior:**
+- By default, SSHplex prefixes native dispatched commands with a leading space (`iterm2_native_hide_from_history: true`).
+- This works when your shell is configured to ignore commands starting with a space (for example: `HIST_IGNORE_SPACE` in zsh or `HISTCONTROL=ignorespace` in bash).
 
 ## Choosing a Backend
 

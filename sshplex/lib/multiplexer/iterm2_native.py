@@ -8,6 +8,7 @@ Backend options:
 """
 
 import platform
+import re
 from typing import Any, Dict, List, Optional
 
 from ..logger import get_logger
@@ -86,6 +87,46 @@ class ITerm2NativeManager(MultiplexerBase):
             if config and hasattr(config, 'tmux')
             else 'Default'
         )
+        self._native_target = (
+            getattr(config.tmux, 'iterm2_native_target', 'current-window')
+            if config and hasattr(config, 'tmux')
+            else 'current-window'
+        )
+        self._hide_from_history = (
+            bool(getattr(config.tmux, 'iterm2_native_hide_from_history', True))
+            if config and hasattr(config, 'tmux')
+            else True
+        )
+
+    @staticmethod
+    def _sanitize_command(command: str) -> str:
+        """Redact sensitive SSH command values in logs."""
+        redacted = re.sub(r"(\s-i\s+)\S+", r"\1<redacted-key>", command)
+        redacted = re.sub(r"(IdentityFile=)\S+", r"\1<redacted-key>", redacted)
+        return redacted
+
+    @staticmethod
+    def _extract_tab_session(tab: Any) -> Optional[Any]:
+        """Get a usable session from an iTerm2 tab."""
+        if tab is None:
+            return None
+
+        current = getattr(tab, "current_session", None)
+        if current is not None:
+            return current
+
+        sessions = getattr(tab, "sessions", None)
+        if sessions:
+            return sessions[0]
+
+        return None
+
+    def _command_for_send(self, command: str) -> str:
+        """Prepare command text for iTerm2 async_send_text."""
+        text = command
+        if self._hide_from_history and text and not text.startswith(" "):
+            text = " " + text
+        return text + "\n"
 
     def _check_iterm2_api(self) -> bool:
         """Check if iTerm2 Python API is available.
@@ -258,49 +299,156 @@ class ITerm2NativeManager(MultiplexerBase):
         split_pattern = self._split_pattern
         enable_broadcast = self._broadcast_enabled and len(sessions_data) > 1
 
+        self.logger.debug(
+            "SSHplex: iTerm2 native attach start "
+            f"(session={self.session_name}, profile={profile}, split_pattern={split_pattern}, "
+            f"max_panes_per_tab={max_panes}, queued_sessions={len(sessions_data)}, "
+            f"broadcast={enable_broadcast}, auto_attach={auto_attach}, target={self._native_target})"
+        )
+
         async def _create_sessions(connection: Any) -> None:
             """Create all sessions in a single async context."""
             sessions: List[Any] = []
+
+            # Ensure iTerm2 app delegates are initialized.
+            app = await iterm2.async_get_app(connection)
+            if app is None:
+                raise ITerm2NativeError("Failed to initialize iTerm2 app delegate")
+            self.logger.debug("SSHplex: iTerm2 app delegate initialized")
+
+            async def _create_tab_with_session(window_obj: Any, profile_name: str) -> Any:
+                """Create a tab and return (tab, session), with shell fallback."""
+                tab = await window_obj.async_create_tab(profile=profile_name)
+                session = self._extract_tab_session(tab)
+
+                if session is None:
+                    self.logger.warning(
+                        "SSHplex: Tab created without session, retrying with explicit /bin/zsh shell"
+                    )
+                    tab = await window_obj.async_create_tab(profile=profile_name, command="/bin/zsh")
+                    session = self._extract_tab_session(tab)
+
+                return tab, session
+
+            async def _set_labels(tab_obj: Any, session_obj: Any, hostname: str) -> None:
+                """Set visible names for session and tab."""
+                await session_obj.async_set_name(hostname)
+                try:
+                    await tab_obj.async_set_title(hostname)
+                except Exception as title_error:
+                    self.logger.debug(
+                        f"SSHplex: Could not set tab title for '{hostname}': {title_error}"
+                    )
+                try:
+                    await tab_obj.async_set_variable("user.sshplex_managed", True)
+                    await tab_obj.async_set_variable("user.sshplex_session_name", self.session_name)
+                    await tab_obj.async_set_variable("user.sshplex_hostname", hostname)
+                except Exception as var_error:
+                    self.logger.debug(
+                        f"SSHplex: Could not set tab metadata for '{hostname}': {var_error}"
+                    )
 
             # Get first command to run in the initial window
             first_hostname, first_command = sessions_data[0] if sessions_data else (None, None)
 
             if not first_hostname:
                 self.logger.error("SSHplex: No sessions to create")
-                return
+                raise ITerm2NativeError("No sessions to create")
+            first_command_text = first_command or f"ssh {first_hostname}"
 
-            # Create window with first command
-            window = await iterm2.Window.async_create(
-                connection,
-                profile=profile,
-                command=first_command
-            )
-            if not window:
-                self.logger.error("SSHplex: Failed to create iTerm2 window")
-                return
+            current_tab = None
+            if self._native_target == "current-window":
+                await app.async_refresh_focus()
+                window = app.current_window
+                if window is None:
+                    self.logger.warning(
+                        "SSHplex: No current iTerm2 window found, falling back to new window"
+                    )
+                    window = await iterm2.Window.async_create(connection, profile=profile)
+                    if not window:
+                        self.logger.error("SSHplex: Failed to create fallback iTerm2 window")
+                        raise ITerm2NativeError("Failed to create fallback iTerm2 window")
+                    self.logger.info(f"SSHplex: Created fallback iTerm2 window for {len(sessions_data)} sessions")
+                else:
+                    self.logger.info("SSHplex: Using current iTerm2 window as attach target")
+                    current_tab, recovered_session = await _create_tab_with_session(window, profile)
+                    if recovered_session is not None:
+                        await _set_labels(current_tab, recovered_session, first_hostname)
+                        await recovered_session.async_send_text(self._command_for_send(first_command_text))
+                        sessions.append(recovered_session)
+                        self.logger.info(f"SSHplex: Created session for '{first_hostname}'")
+                        self.logger.debug(
+                            "SSHplex: Dispatched first command to "
+                            f"'{first_hostname}': {self._sanitize_command(first_command_text)}"
+                        )
+            else:
+                # Create dedicated window for SSHplex native sessions.
+                window = await iterm2.Window.async_create(connection, profile=profile)
+                if not window:
+                    self.logger.error("SSHplex: Failed to create iTerm2 window")
+                    raise ITerm2NativeError("Failed to create iTerm2 window")
+                self.logger.info(f"SSHplex: Created iTerm2 window for {len(sessions_data)} sessions")
 
-            self.logger.info(f"SSHplex: Created iTerm2 window for {len(sessions_data)} sessions")
+            # Refresh app state so session/tab delegates can resolve split results.
+            await app.async_refresh()
 
-            current_tab = window.current_tab
-
-            # If current_tab is None, try to get first tab from tabs list
-            if current_tab is None and window.tabs:
-                current_tab = window.tabs[0]
-
-            # If still None, create a new tab
             if current_tab is None:
-                current_tab = await window.async_create_tab(profile=profile)
+                current_tab = window.current_tab
+
+                # If current_tab is None, try to get first tab from tabs list
+                if current_tab is None and window.tabs:
+                    current_tab = window.tabs[0]
+
+                # If still None, create a new tab
+                if current_tab is None:
+                    current_tab, recovered_session = await _create_tab_with_session(window, profile)
+                    if recovered_session is not None:
+                        await _set_labels(current_tab, recovered_session, first_hostname)
+                        await recovered_session.async_send_text(self._command_for_send(first_command_text))
+                        sessions.append(recovered_session)
+                        self.logger.info(f"SSHplex: Created session for '{first_hostname}'")
+                        self.logger.debug(
+                            "SSHplex: Dispatched first command to "
+                            f"'{first_hostname}': {self._sanitize_command(first_command_text)}"
+                        )
 
             if current_tab is None:
                 self.logger.error("SSHplex: Failed to get or create a tab")
-                return
+                raise ITerm2NativeError("Failed to get or create initial iTerm2 tab")
 
             # Get the session that was created with the first command
-            first_session = current_tab.current_session
-            if first_session:
-                await first_session.async_set_name(first_hostname)
-                sessions.append(first_session)
-                self.logger.info(f"SSHplex: Created session for '{first_hostname}'")
+            first_session = self._extract_tab_session(current_tab)
+            if not sessions:
+                if first_session is None:
+                    self.logger.warning(
+                        "SSHplex: Initial tab has no session, creating recovery tab"
+                    )
+                    recovery_tab, recovery_session = await _create_tab_with_session(window, profile)
+                    if recovery_tab is not None:
+                        current_tab = recovery_tab
+                    first_session = recovery_session
+
+                if first_session is not None:
+                    await _set_labels(current_tab, first_session, first_hostname)
+                    await first_session.async_send_text(self._command_for_send(first_command_text))
+                    sessions.append(first_session)
+                    self.logger.info(f"SSHplex: Created session for '{first_hostname}'")
+                    self.logger.debug(
+                        "SSHplex: Dispatched first command to "
+                        f"'{first_hostname}': {self._sanitize_command(first_command_text)}"
+                    )
+                else:
+                    self.logger.error(
+                        "SSHplex: First tab has no current session "
+                        f"for '{first_hostname}'"
+                    )
+                    self.logger.debug(
+                        "SSHplex: Initial tab diagnostics "
+                        f"(tab={current_tab}, has_sessions={bool(getattr(current_tab, 'sessions', None))})"
+                    )
+                    raise ITerm2NativeError(
+                        f"First tab has no usable session for '{first_hostname}'"
+                    )
 
             current_tab_pane_count = 1  # We already have 1 session
 
@@ -309,15 +457,18 @@ class ITerm2NativeManager(MultiplexerBase):
                 # Check if we need a new tab
                 if current_tab_pane_count >= max_panes:
                     self.logger.info(f"SSHplex: Creating new tab (max {max_panes} panes)")
-                    current_tab = await window.async_create_tab(profile=profile, command=command)
-                    if current_tab:
-                        new_session = current_tab.current_session
-                        if new_session:
-                            await new_session.async_set_name(hostname)
-                            sessions.append(new_session)
-                            current_tab_pane_count = 1
-                            self.logger.info(f"SSHplex: Created session for '{hostname}' in new tab")
-                            continue
+                    current_tab, new_session = await _create_tab_with_session(window, profile)
+                    if current_tab and new_session:
+                        await _set_labels(current_tab, new_session, hostname)
+                        await new_session.async_send_text(self._command_for_send(command))
+                        sessions.append(new_session)
+                        current_tab_pane_count = 1
+                        self.logger.info(f"SSHplex: Created session for '{hostname}' in new tab")
+                        self.logger.debug(
+                            "SSHplex: Dispatched command in new tab to "
+                            f"'{hostname}': {self._sanitize_command(command)}"
+                        )
+                        continue
                     self.logger.error(f"SSHplex: Failed to create tab for {hostname}")
                     continue
 
@@ -342,10 +493,14 @@ class ITerm2NativeManager(MultiplexerBase):
                     continue
 
                 # Set session name (SSHplex-controlled)
-                await session.async_set_name(hostname)
+                await _set_labels(current_tab, session, hostname)
 
                 # Send command
-                await session.async_send_text(command + "\n")
+                await session.async_send_text(self._command_for_send(command))
+                self.logger.debug(
+                    "SSHplex: Dispatched split-pane command to "
+                    f"'{hostname}': {self._sanitize_command(command)}"
+                )
 
                 sessions.append(session)
                 current_tab_pane_count += 1
@@ -353,15 +508,38 @@ class ITerm2NativeManager(MultiplexerBase):
 
             # Enable broadcast if requested
             if enable_broadcast and len(sessions) > 1:
+                # Refresh app and resolve sessions by ID before creating broadcast domains.
+                # This is important for tab-heavy layouts where session objects can be stale.
+                await app.async_refresh()
+
                 domain = iterm2.broadcast.BroadcastDomain()
+                resolved_sessions = 0
                 for session in sessions:
-                    domain.add_session(session)
-                await iterm2.async_set_broadcast_domains(connection, [domain])
-                self.logger.info("SSHplex: Broadcast mode ENABLED")
+                    sid = getattr(session, "session_id", None)
+                    if sid:
+                        resolved = app.get_session_by_id(sid)
+                        if resolved is not None:
+                            domain.add_session(resolved)
+                            resolved_sessions += 1
+
+                if resolved_sessions > 1:
+                    await iterm2.async_set_broadcast_domains(connection, [domain])
+                    self.logger.info(
+                        "SSHplex: Broadcast mode ENABLED "
+                        f"({resolved_sessions} sessions)"
+                    )
+                else:
+                    self.logger.warning(
+                        "SSHplex: Broadcast requested but insufficient resolved sessions "
+                        f"({resolved_sessions}/{len(sessions)})"
+                    )
 
             print(f"\n✅ iTerm2 session created with {len(sessions)} connections")
             if enable_broadcast:
                 print("📡 Broadcast mode enabled - input goes to all sessions")
+
+            if not sessions:
+                raise ITerm2NativeError("No iTerm2 sessions were created")
 
         # Run with iTerm2's run_until_complete to maintain connection
         try:
@@ -380,6 +558,7 @@ class ITerm2NativeManager(MultiplexerBase):
             else:
                 print(f"\n❌ Failed to create iTerm2 session: {e}")
             self.logger.error(f"SSHplex: Failed to create iTerm2 session: {e}")
+            self.logger.exception("SSHplex: iTerm2 native traceback")
 
     def get_session_name(self) -> str:
         """Get the session name."""

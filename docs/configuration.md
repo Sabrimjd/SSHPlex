@@ -12,10 +12,11 @@ Run `sshplex --onboarding` for an interactive setup wizard that will:
 ## Config Editor (Built-in)
 
 Press `e` in the TUI to open the configuration editor with:
-- **7 tabbed sections**: General, SSH, Tmux, Sources, UI, Logging, Cache
+- **4 tabbed sections**: General, SSH, Mux, Sources
+- **Grouped sections in General**: SSHplex, UI, Logging, Cache
 - **Dynamic lists**: Add/remove proxies and imports
 - **Validation**: Pydantic validation before saving
-- **Auto-reload**: Restart SSHplex to apply changes
+- **Auto-reload**: Changes are applied live after saving
 
 ## Configuration Sections
 
@@ -52,6 +53,7 @@ ssh:
 ```yaml
 tmux:
   backend: "tmux"              # "tmux" or "iterm2-native" (macOS only)
+  use_panes: true               # true = panes, false = tabs
   layout: "tiled"              # tiled, even-horizontal, even-vertical
   broadcast: false             # Start with broadcast enabled
   window_name: "sshplex"
@@ -63,7 +65,9 @@ tmux:
   iterm2_profile: "Default"
 
   # iTerm2 native (macOS, backend=iterm2-native)
+  iterm2_native_target: "current-window"  # current-window, new-window
   iterm2_split_pattern: "alternate"  # alternate, vertical, horizontal
+  iterm2_native_hide_from_history: true  # prefix command with leading space
 ```
 
 ### Sources of Truth
@@ -182,6 +186,11 @@ cache:
 2. **API Tokens**: Store sensitive tokens in environment variables
 3. **File Permissions**: Keep config file readable only by you (`chmod 600`)
 4. **SSH Keys**: Use ed25519 keys with passphrases
+
+## Hot Reload Notes
+
+- Most TUI-visible settings reload immediately after saving in the config editor.
+- Changes affecting active SSH sessions (for example, existing iTerm2 tabs/panes) apply to new connections, not already-open sessions.
 
 ## Environment Variables
 

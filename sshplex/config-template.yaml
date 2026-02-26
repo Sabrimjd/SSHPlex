@@ -95,6 +95,10 @@ ssh:
       key_path: "~/.ssh/id_rsa"
 
 tmux:
+  backend: "tmux" # tmux, iterm2-native
+  iterm2_native_target: "current-window" # current-window, new-window (iterm2-native only)
+  iterm2_native_hide_from_history: true # prefix with leading space when dispatching (iterm2-native)
+  use_panes: true # true = panes, false = tabs
   layout: "tiled" # tiled, even-horizontal, even-vertical
   broadcast: false # Start with broadcast off
   window_name: "sshplex"

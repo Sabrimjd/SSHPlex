@@ -41,11 +41,10 @@ class SSHplexConnector:
         self.config = config
         self.logger = get_logger()
         self.system = platform.system().lower()
+        self.backend = getattr(config.tmux, 'backend', 'tmux') if config else 'tmux'
 
         # Initialize multiplexer based on backend config
-        backend = getattr(config.tmux, 'backend', 'tmux') if config else 'tmux'
-
-        if backend == "iterm2-native":
+        if self.backend == "iterm2-native":
             from .lib.multiplexer.iterm2_native import ITerm2NativeManager
             self.multiplexer = ITerm2NativeManager(session_name, config)
             self.logger.info("SSHplex: Using iTerm2 native backend")
@@ -56,6 +55,13 @@ class SSHplexConnector:
                 self.logger.info("SSHplex: Using tmux + iTerm2 -CC mode backend")
             else:
                 self.logger.info("SSHplex: Using tmux standalone backend")
+
+    @staticmethod
+    def _sanitize_ssh_command(command: str) -> str:
+        """Redact sensitive SSH command values in logs."""
+        redacted = re.sub(r"(\s-i\s+)\S+", r"\1<redacted-key>", command)
+        redacted = re.sub(r"(IdentityFile=)\S+", r"\1<redacted-key>", redacted)
+        return redacted
 
     def connect_to_hosts(self, hosts: List[Host], username: str, key_path: Optional[str] = None, port: int = 22, use_panes: bool = True, use_broadcast: bool = False) -> bool:
         """Establish SSH connections to the specified hosts using shell SSH with retry support.
@@ -89,10 +95,12 @@ class SSHplexConnector:
         if self.config is None:
             max_attempts = 1
             base_delay = 1
+            retry_exponential = False
         else:
             retry_config = self.config.ssh.retry
             max_attempts = retry_config.max_attempts if retry_config.enabled else 1
             base_delay = retry_config.delay_seconds
+            retry_exponential = retry_config.exponential_backoff
 
         try:
             # Create tmux session
@@ -114,6 +122,10 @@ class SSHplexConnector:
 
                 # Build SSH command
                 ssh_command = self._build_ssh_command(host, username, key_path, port)
+                self.logger.debug(
+                    "SSHplex: Built SSH command for "
+                    f"{hostname}: {self._sanitize_ssh_command(ssh_command)}"
+                )
 
                 self.logger.info(f"SSHplex: Connecting to {hostname} as {username}")
 
@@ -123,30 +135,45 @@ class SSHplexConnector:
                 
                 for attempt in range(1, max_attempts + 1):
                     try:
-                        if use_panes:
-                            # Create pane with SSH command
-                            max_panes = self.config.tmux.max_panes_per_window if self.config else 5
-                            if self.multiplexer.create_pane(hostname, ssh_command, max_panes):
-                                connection_success = True
-                                self.logger.info(f"SSHplex: Successfully created pane for {hostname}")
-                            else:
-                                last_error = "Failed to create tmux pane"
-                        else:
-                            # Create window (tab) with SSH command
-                            use_iterm2 = "darwin" in self.system and (self.config.tmux.control_with_iterm2 if self.config else False)
-                            if use_iterm2:
-                                # iTerm2 mode: use single-pane windows for tmux -CC integration
-                                if self.multiplexer.create_pane(hostname, ssh_command, 1):
+                        if self.backend == "iterm2-native":
+                            if use_panes:
+                                max_panes = self.config.tmux.max_panes_per_window if self.config else 5
+                                if self.multiplexer.create_pane(hostname, ssh_command, max_panes):
                                     connection_success = True
-                                    self.logger.info(f"SSHplex: Successfully created window for {hostname}")
+                                    self.logger.info(f"SSHplex: Successfully created pane for {hostname}")
                                 else:
-                                    last_error = "Failed to create iTerm2 window"
+                                    last_error = "Failed to create iTerm2 native pane"
                             else:
                                 if self.multiplexer.create_window(hostname, ssh_command):
                                     connection_success = True
-                                    self.logger.info(f"SSHplex: Successfully created window for {hostname}")
+                                    self.logger.info(f"SSHplex: Successfully created tab for {hostname}")
                                 else:
-                                    last_error = "Failed to create tmux window"
+                                    last_error = "Failed to create iTerm2 native tab"
+                        else:
+                            if use_panes:
+                                # Create pane with SSH command
+                                max_panes = self.config.tmux.max_panes_per_window if self.config else 5
+                                if self.multiplexer.create_pane(hostname, ssh_command, max_panes):
+                                    connection_success = True
+                                    self.logger.info(f"SSHplex: Successfully created pane for {hostname}")
+                                else:
+                                    last_error = "Failed to create tmux pane"
+                            else:
+                                # Create window (tab) with SSH command
+                                use_iterm2 = "darwin" in self.system and (self.config.tmux.control_with_iterm2 if self.config else False)
+                                if use_iterm2:
+                                    # iTerm2 mode: use single-pane windows for tmux -CC integration
+                                    if self.multiplexer.create_pane(hostname, ssh_command, 1):
+                                        connection_success = True
+                                        self.logger.info(f"SSHplex: Successfully created window for {hostname}")
+                                    else:
+                                        last_error = "Failed to create iTerm2 window"
+                                else:
+                                    if self.multiplexer.create_window(hostname, ssh_command):
+                                        connection_success = True
+                                        self.logger.info(f"SSHplex: Successfully created window for {hostname}")
+                                    else:
+                                        last_error = "Failed to create tmux window"
                         
                         if connection_success:
                             break
@@ -158,7 +185,7 @@ class SSHplexConnector:
                     # If not successful and more attempts remain, wait before retry
                     if not connection_success and attempt < max_attempts:
                         # Calculate delay with optional exponential backoff
-                        if retry_config.exponential_backoff:
+                        if retry_exponential:
                             delay = base_delay * (2 ** (attempt - 1))
                         else:
                             delay = base_delay

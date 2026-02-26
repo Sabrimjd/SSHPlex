@@ -82,6 +82,7 @@ class TmuxConfig(BaseModel):
         description="Multiplexer backend: 'tmux' or 'iterm2-native'"
     )
     # Common options
+    use_panes: bool = Field(default=True, description="Connection mode: true=panes, false=tabs")
     layout: str = "tiled"  # tiled, even-horizontal, even-vertical
     broadcast: bool = False  # Start with broadcast off
     window_name: str = "sshplex"
@@ -94,6 +95,14 @@ class TmuxConfig(BaseModel):
     )
     # iTerm2 native specific (macOS only, for backend="iterm2-native")
     iterm2_profile: str = Field(default="Default", description="iTerm2 profile to use for new windows/tabs")
+    iterm2_native_target: str = Field(
+        default="current-window",
+        description="Where to open iTerm2 native sessions: current-window or new-window"
+    )
+    iterm2_native_hide_from_history: bool = Field(
+        default=True,
+        description="Prefix native iTerm2 dispatched commands with a leading space"
+    )
     iterm2_split_pattern: str = Field(
         default="alternate",
         description="Split pattern for iTerm2 native: alternate, vertical, horizontal"
@@ -119,6 +128,11 @@ class TmuxConfig(BaseModel):
             raise ValueError(
                 "backend: 'iterm2-native' is only supported on macOS. "
                 "Use backend: 'tmux' on Linux/other systems."
+            )
+
+        if self.iterm2_native_target not in ["current-window", "new-window"]:
+            raise ValueError(
+                "tmux.iterm2_native_target must be one of: ['current-window', 'new-window']"
             )
 
         # Validate control_with_iterm2 on macOS only

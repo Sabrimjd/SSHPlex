@@ -131,12 +131,15 @@ class TestTmuxConfig:
     def test_default_values(self):
         """Test default tmux configuration."""
         config = TmuxConfig()
+        assert config.use_panes is True
         assert config.layout == "tiled"
         assert config.broadcast is False
         assert config.window_name == "sshplex"
         assert config.max_panes_per_window == 5
         assert config.control_with_iterm2 is False
         assert config.iterm2_attach_target == "new-window"
+        assert config.iterm2_native_target == "current-window"
+        assert config.iterm2_native_hide_from_history is True
         assert config.iterm2_profile == "Default"
 
     def test_iterm2_custom_values(self):
@@ -144,10 +147,14 @@ class TestTmuxConfig:
         config = TmuxConfig(
             control_with_iterm2=True,
             iterm2_attach_target="new-tab",
+            iterm2_native_target="new-window",
+            iterm2_native_hide_from_history=False,
             iterm2_profile="Custom"
         )
         assert config.control_with_iterm2 is True
         assert config.iterm2_attach_target == "new-tab"
+        assert config.iterm2_native_target == "new-window"
+        assert config.iterm2_native_hide_from_history is False
         assert config.iterm2_profile == "Custom"
 
     @patch('platform.system')

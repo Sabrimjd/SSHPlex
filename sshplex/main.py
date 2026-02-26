@@ -237,8 +237,8 @@ def debug_mode(config: Any, logger: Any) -> int:
 
 
 def tui_mode(config: Any, logger: Any) -> int:
-    """Run in TUI mode - interactive host selection with tmux panes."""
-    logger.info("Starting TUI mode - interactive host selection with tmux integration")
+    """Run in TUI mode for interactive host selection and connection."""
+    logger.info("Starting TUI mode - interactive host selection")
 
     try:
         # Start the host selector TUI
@@ -246,6 +246,11 @@ def tui_mode(config: Any, logger: Any) -> int:
         selected_hosts = app.run()
 
         if not selected_hosts:
+            created_native = getattr(app, "native_sessions_created_count", 0)
+            if created_native:
+                logger.info(f"Exited TUI after creating {created_native} iTerm2 native session(s)")
+                return 0
+
             logger.info("No hosts selected, exiting")
             return 0
 

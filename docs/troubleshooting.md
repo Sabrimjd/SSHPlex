@@ -44,6 +44,9 @@ logging:
 | `iTerm2 Python API not installed` | `pip install "sshplex[iterm2]"` |
 | Connection refused / Connect call failed | Enable Python API in iTerm2 Settings → General → Magic |
 | Broadcast not working | Press `Cmd+Option+I` or set `broadcast: true` |
+| Tabs open in a new window unexpectedly | Set `tmux.iterm2_native_target: current-window` |
+| SSH command appears in shell history | Keep `iterm2_native_hide_from_history: true` and configure shell ignorespace |
+| Session manager shows no native tabs | Recreate sessions after upgrading (only SSHplex-managed tabs are listed) |
 
 **Enabling iTerm2 Python API:**
 1. Open iTerm2
@@ -75,7 +78,7 @@ logging:
 |-------|----------|
 | Validation error | Check field types (string vs number) and required fields |
 | Config not saving | Check file permissions on `~/.config/sshplex/` |
-| Changes not applied | Restart SSHplex after saving |
+| Changes not applied | Most settings hot-reload; reconnect existing SSH sessions for connection-level changes |
 
 ## Diagnostic Commands
 

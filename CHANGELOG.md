@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-02-26
+
+### Added
+- iTerm2 native backend target selection with `tmux.iterm2_native_target` (`current-window` or `new-window`).
+- iTerm2 native tab manager in the TUI (`s`) with refresh and kill actions for SSHplex-managed tabs.
+- Kill-all shortcut for current native session in iTerm2 tab manager (`Shift+K`).
+- New `tmux.iterm2_native_hide_from_history` option (default `true`) to prefix dispatched commands with a leading space.
+
+### Changed
+- Native iTerm2 mode now keeps SSHplex open after connecting, so additional sessions can be launched without restarting.
+- Config editor now hot-reloads at runtime and applies updated UI/mux settings without restarting SSHplex.
+- General settings layout consolidated (UI, Logging, and Cache sections moved under General).
+- Improved status line to show backend target and in-progress connection state.
+
+### Fixed
+- iTerm2 native startup no longer passes shell command strings to iTerm2 `command=`, fixing `execvp` launch failures.
+- Added robust tab/session recovery logic for iTerm2 native to avoid blank panes and missing first-session cases.
+- Fixed iTerm2 native split/session delegate initialization issues that caused assertion errors.
+- Fixed tabs mode honoring `use_panes: false` and preserving mode through config saves.
+- Fixed iTerm2 native tab naming (tab title and session name now aligned with hostnames).
+- Fixed session-manager Enter key leakage and event-loop crashes during iTerm2 tab kill flows.
+- Improved iTerm2 native broadcast setup reliability in tab-heavy sessions by re-resolving session objects before enabling broadcast.
+
 ## [1.5.0] - 2026-02-25
 
 ### Security
