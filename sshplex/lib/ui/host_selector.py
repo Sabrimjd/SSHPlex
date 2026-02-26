@@ -21,11 +21,12 @@ from textual.widgets import (
 )
 
 from ... import __version__
+from ..config import load_config
 from ..logger import get_logger
 from ..sot.base import Host
 from ..sot.factory import SoTFactory
 from .config_editor import ConfigEditorScreen
-from .session_manager import TmuxSessionManager
+from .session_manager import ITerm2SessionManager, TmuxSessionManager
 
 
 class LoadingScreen(Screen):
@@ -253,6 +254,9 @@ class HostSelector(App):
         self.cache_widget: Optional[Static] = None
         self.loading_screen: Optional[LoadingScreen] = None
         self.sort_reverse = False
+        self.connect_in_progress = False
+        self.latest_native_session_name: Optional[str] = None
+        self.native_sessions_created_count = 0
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -281,6 +285,9 @@ class HostSelector(App):
 
     def on_mount(self) -> None:
         """Initialize the UI and load hosts."""
+        self.use_panes = bool(getattr(self.config.tmux, "use_panes", True))
+        self.use_broadcast = bool(getattr(self.config.tmux, "broadcast", False))
+
         # Get widget references
         self.table = self.query_one("#host-table", DataTable)
         if self.config.ui.show_log_panel:
@@ -605,6 +612,10 @@ class HostSelector(App):
 
     def action_connect_selected(self) -> None:
         """Connect to selected hosts and exit the application."""
+        if self.connect_in_progress:
+            self.log_message("Connection already in progress, please wait...", level="warning")
+            return
+
         if not self.selected_hosts:
             self.log_message("No hosts selected for connection", level="warning")
             return
@@ -621,11 +632,78 @@ class HostSelector(App):
         for host in selected_host_objects:
             self.log_message(f"  - {host.name} ({host.ip})")
 
+        backend = getattr(self.config.tmux, "backend", "tmux")
+        if backend == "iterm2-native":
+            self.log_message("Starting iTerm2 native session (staying in SSHplex TUI)...")
+            self.connect_in_progress = True
+            self.update_status_with_mode()
+            self.run_worker(
+                self._connect_selected_iterm2_native(selected_host_objects),
+                name="connect_iterm2_native",
+            )
+            return
+
         # Exit the TUI and return selected hosts for connection by main.py
         self.exit(selected_host_objects)
 
+    async def _connect_selected_iterm2_native(self, selected_host_objects: List[Host]) -> None:
+        """Create iTerm2 native sessions without exiting host selector."""
+
+        def _connect() -> Optional[str]:
+            from ...sshplex_connector import SSHplexConnector
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            session_name = f"sshplex-{timestamp}"
+            connector = SSHplexConnector(session_name, config=self.config)
+
+            ok = connector.connect_to_hosts(
+                hosts=selected_host_objects,
+                username=self.config.ssh.username,
+                key_path=self.config.ssh.key_path,
+                port=self.config.ssh.port,
+                use_panes=self.use_panes,
+                use_broadcast=self.use_broadcast,
+            )
+            if not ok:
+                return None
+
+            connector.attach_to_session(auto_attach=True)
+            return connector.get_session_name()
+
+        try:
+            session_name = await asyncio.to_thread(_connect)
+            if session_name:
+                self.latest_native_session_name = session_name
+                self.native_sessions_created_count += 1
+                self.log_message(
+                    f"iTerm2 native session created: {session_name} (SSHplex remains open)",
+                    level="info",
+                )
+            else:
+                self.log_message("Failed to create iTerm2 native session", level="error")
+        except Exception as e:
+            self.log_message(f"iTerm2 native connection failed: {e}", level="error")
+        finally:
+            self.connect_in_progress = False
+            self.update_status_with_mode()
+
     def action_show_sessions(self) -> None:
         """Show the tmux session manager modal."""
+        backend = getattr(self.config.tmux, "backend", "tmux")
+        control_with_iterm2 = bool(getattr(self.config.tmux, "control_with_iterm2", False))
+        if backend == "iterm2-native":
+            self.log_message("Opening iTerm2 native session manager...")
+            session_manager = ITerm2SessionManager(self.config, self.latest_native_session_name)
+            self.push_screen(session_manager)
+            return
+
+        if control_with_iterm2:
+            self.log_message(
+                "Session manager is disabled in iTerm2 modes (use tmux standalone backend to manage sessions)",
+                level="warning",
+            )
+            return
+
         self.log_message("Opening tmux session manager...")
         session_manager = TmuxSessionManager(self.config)
         self.push_screen(session_manager)
@@ -636,10 +714,68 @@ class HostSelector(App):
 
         def _on_editor_close(saved: Optional[bool]) -> None:
             if saved:
-                self.log_message("Configuration saved - restart SSHplex for changes to take effect")
+                self.run_worker(self._reload_config_runtime(), name="reload_config_runtime")
 
         editor = ConfigEditorScreen(self.config)
         self.push_screen(editor, callback=_on_editor_close)
+
+    async def _reload_config_runtime(self) -> None:
+        """Reload configuration from disk and apply it live."""
+        try:
+            old_sot = self.config.sot.model_dump()
+            new_config = load_config()
+            await self._apply_runtime_config(new_config)
+            self.log_message("Configuration reloaded successfully")
+            if old_sot != new_config.sot.model_dump():
+                self.log_message("SoT settings changed, refreshing hosts...", level="info")
+                self.run_worker(self.load_hosts(force_refresh=True), name="reload_refresh_hosts")
+        except Exception as e:
+            self.log_message(f"Failed to hot-reload config: {e}", level="error")
+
+    async def _apply_runtime_config(self, new_config: Any) -> None:
+        """Apply config changes to current TUI session."""
+        old_show_log_panel = bool(getattr(self.config.ui, "show_log_panel", True))
+        new_show_log_panel = bool(getattr(new_config.ui, "show_log_panel", True))
+
+        self.config = new_config
+        self.use_panes = bool(getattr(self.config.tmux, "use_panes", True))
+        self.use_broadcast = bool(getattr(self.config.tmux, "broadcast", False))
+
+        # Update log panel visibility without restarting the app.
+        if old_show_log_panel and not new_show_log_panel:
+            try:
+                panel = self.query_one("#log-panel", Container)
+                await panel.remove()
+            except Exception:
+                pass
+            self.log_widget = None
+        elif (not old_show_log_panel) and new_show_log_panel:
+            try:
+                log_panel = Container(id="log-panel")
+                log_widget = Log(id="log", auto_scroll=True)
+                await log_panel.mount(log_widget)
+                search_container = self.query_one("#search-container", Container)
+                await self.mount(log_panel, before=search_container)
+                self.log_widget = log_widget
+            except Exception as e:
+                self.log_message(f"Could not enable log panel dynamically: {e}", level="warning")
+
+        try:
+            panel = self.query_one("#log-panel", Container)
+            panel.styles.height = f"{int(getattr(self.config.ui, 'log_panel_height', 20))}%"
+        except Exception:
+            pass
+
+        # Rebuild table columns from updated configuration.
+        if self.table:
+            for column in list(self.table.ordered_columns):
+                self.table.remove_column(column.key)
+            self.setup_table()
+            self.populate_table(self.get_hosts_to_display())
+
+        # Update dependent UI bits.
+        self.update_cache_display()
+        self.update_status_with_mode()
 
     def action_refresh_hosts(self) -> None:
         """Refresh hosts by fetching fresh data from all SoT providers."""
@@ -720,12 +856,13 @@ class HostSelector(App):
 ## Other
 | Key | Action |
 |-----|--------|
-| `s` | Session manager |
+| `s` | {'iTerm2 tab manager' if (getattr(self.config.tmux, 'backend', 'tmux') == 'iterm2-native') else ('Session manager (disabled in iTerm2-CC)' if bool(getattr(self.config.tmux, 'control_with_iterm2', False)) else 'Session manager')} |
 | `c` | Copy table to clipboard |
 | `e` | Edit configuration |
 | `h` | Show this help |
 
 ## Current Settings
+- **Backend**: {getattr(self.config.tmux, 'backend', 'tmux')}{('/' + getattr(self.config.tmux, 'iterm2_native_target', 'current-window')) if getattr(self.config.tmux, 'backend', 'tmux') == 'iterm2-native' else ''}
 - **Mode**: {"Panes" if self.use_panes else "Tabs"}
 - **Broadcast**: {"ON" if self.use_broadcast else "OFF"}
 - **Hosts**: {len(self.hosts)} total
@@ -777,13 +914,28 @@ class HostSelector(App):
         """Update status bar to include current connection mode and broadcast status."""
         mode = "Panes" if self.use_panes else "Tabs"
         broadcast = "ON" if self.use_broadcast else "OFF"
+        backend = getattr(self.config.tmux, "backend", "tmux")
+        if backend == "iterm2-native":
+            target = getattr(self.config.tmux, "iterm2_native_target", "current-window")
+            backend_display = f"iterm2-native/{target}"
+        else:
+            backend_display = "tmux"
+
+        busy = " | Connecting..." if self.connect_in_progress else ""
         selected_count = len(self.selected_hosts)
         total_hosts = len(self.filtered_hosts) if self.search_filter else len(self.hosts)
 
         if self.search_filter:
-            self.update_status(f"Filter: '{self.search_filter}' - {total_hosts}/{len(self.hosts)} hosts, {selected_count} selected | Mode: {mode} | Broadcast: {broadcast}")
+            self.update_status(
+                f"Filter: '{self.search_filter}' - {total_hosts}/{len(self.hosts)} hosts, "
+                f"{selected_count} selected | Backend: {backend_display} | Mode: {mode} | "
+                f"Broadcast: {broadcast}{busy}"
+            )
         else:
-            self.update_status(f"{total_hosts} hosts loaded, {selected_count} selected | Mode: {mode} | Broadcast: {broadcast}")
+            self.update_status(
+                f"{total_hosts} hosts loaded, {selected_count} selected | Backend: {backend_display} | "
+                f"Mode: {mode} | Broadcast: {broadcast}{busy}"
+            )
 
     def key_enter(self) -> None:
         """Handle Enter key press directly."""
@@ -848,9 +1000,6 @@ class HostSelector(App):
             event.prevent_default()
             event.stop()
             return
-
-        # Let the event bubble up for normal processing
-        event.prevent_default = False
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle Enter key pressed in search input."""

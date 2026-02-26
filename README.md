@@ -2,372 +2,147 @@
 
 **Multiplex your SSH connections with style**
 
-SSHplex is a Python-based SSH connection multiplexer that provides a modern Terminal User Interface (TUI) for selecting and connecting to multiple hosts simultaneously using tmux. It integrates with multiple Sources of Truth (NetBox, Ansible, Consul, static lists) and creates organized tmux sessions for efficient multi-host management.
+SSHplex is a Python-based SSH connection multiplexer with a modern TUI. Connect to multiple hosts simultaneously using tmux or iTerm2, with sources from NetBox, Ansible, Consul, or static lists.
 
 ## Features
 
-- **Interactive TUI**: Modern host selector built with Textual - search, sort, select, connect
-- **Multiple Sources of Truth**: NetBox, Ansible inventories, HashiCorp Consul, and static host lists - use them together or separately
-- **Multi-Provider Support**: Configure multiple instances of the same provider type (e.g., multiple NetBox instances, multiple Consul datacenters)
-- **tmux Integration**: Creates organized sessions with panes or windows for each host
-- **iTerm2 Integration**: Native tmux `-CC` mode on macOS for iTerm2 tabs/splits, with improved detection and fallback guidance
-- **Proxy Support**: Per-provider SSH proxy/jump host configuration
-- **Wildcard Search**: Filter hosts across all columns with glob patterns
-- **Config Editor**: Edit `sshplex.yaml` directly from the TUI (`e`) with tabbed form and validation
-- **Built-in Help**: Keyboard shortcuts help modal (`h`) with live mode/state hints
-- **Sortable Columns**: Click column headers to sort the host table
-- **Copy to Clipboard**: Copy the host table to clipboard for sharing
-- **Intelligent Caching**: Local host caching for fast startup (configurable TTL)
-- **Broadcasting**: Sync input across multiple SSH connections
-- **Session Manager**: Browse, connect to, or kill existing tmux sessions from the TUI
-- **SSH Security**: Configurable host key checking with secure defaults
-- **Connection Retry**: Automatic retry with exponential backoff for reliability
-- **Enhanced CLI**: Debug mode, cache management, and configuration utilities
-
-## Prerequisites
-
-- **Python 3.8+**
-- **tmux**
-- **SSH key** configured for target hosts
-- **macOS or Linux** (Windows via WSL)
-
-```bash
-# macOS
-brew install tmux python3
-
-# Ubuntu/Debian
-sudo apt install tmux python3 python3-pip
-
-# RHEL/CentOS/Fedora
-sudo dnf install tmux python3 python3-pip
-```
-
-## Installation
-
-### From PyPI
-
-```bash
-pip install sshplex
-
-# With Consul support
-pip install "sshplex[consul]"
-```
-
-### From Source
-
-```bash
-git clone https://github.com/sabrimjd/sshplex.git
-cd sshplex
-pip install -e .
-
-# With Consul support
-pip install -e ".[consul]"
-
-# With dev dependencies
-pip install -e ".[dev]"
-```
+- 🖥️ **Modern TUI** - Textual-based host selector with search, sort, and multi-select
+- 🔌 **Multiple Sources** - NetBox, Ansible, Consul, static lists - use them together
+- 📦 **3 Backends** - tmux standalone, tmux + iTerm2, or iTerm2 native (macOS)
+- ✏️ **Config Editor** - Built-in YAML editor with validation (`e` key)
+- 🔄 **Broadcast Input** - Sync commands across multiple SSH sessions
+- 🔐 **SSH Security** - Configurable host key checking and retry logic
+- 🚀 **Fast Startup** - Intelligent caching with configurable TTL
 
 ## Quick Start
 
 ```bash
-# First-time setup - interactive onboarding wizard
+# Install
+pip install sshplex
+
+# First-time setup (interactive wizard)
 sshplex --onboarding
 
 # Launch TUI
 sshplex
-
-# Debug mode - test provider connectivity
-sshplex --debug
-
-# Show configuration paths
-sshplex --show-config
-
-# Clear host cache
-sshplex --clear-cache
 ```
 
-### First-Time Setup
+### Prerequisites
 
-Run `sshplex --onboarding` for an interactive setup wizard that will:
-- Auto-detect your SSH keys and system dependencies
-- Guide you through configuring inventory sources (NetBox, Ansible, Consul, or static hosts)
-- Test connections before saving
-- Generate a working configuration file
-
-On first run without `--onboarding`, SSHplex creates a default config at `~/.config/sshplex/sshplex.yaml`. Edit it with your provider details, or use the built-in config editor (`e` key in TUI).
-
-See [CHANGELOG.md](CHANGELOG.md) for full details.
+- Python 3.8+
+- tmux (Linux/macOS) or iTerm2 (macOS)
+- SSH key configured for target hosts
 
 ## Usage
-
-1. **Start**: Run `sshplex`
-2. **Browse**: Hosts from all configured providers appear in the table
-3. **Search**: Press `/` to filter hosts (supports wildcards)
-4. **Select**: `Space` to toggle, `a` to select all, `d` to deselect all
-5. **Configure**: `p` to toggle panes/tabs, `b` to toggle broadcast
-6. **Edit Config**: `e` to open the built-in configuration editor
-7. **Connect**: `Enter` to create tmux session and connect
-8. **Sessions**: `s` to manage existing tmux sessions
-9. **Copy**: `c` to copy the host table to clipboard
-10. **Refresh**: `r` to refresh hosts from providers (bypasses cache)
-
-### TUI Keybindings
 
 | Key | Action |
 |-----|--------|
 | `Space` | Toggle host selection |
-| `a` | Select all hosts |
-| `d` | Deselect all hosts |
+| `a` / `d` | Select / Deselect all |
 | `Enter` | Connect to selected hosts |
 | `/` | Search/filter hosts |
 | `p` | Toggle panes/tabs mode |
 | `b` | Toggle broadcast mode |
+| `e` | Open config editor |
 | `s` | Open session manager |
-| `e` | Open configuration editor |
-| `h` | Open keyboard shortcuts help |
-| `c` | Copy table to clipboard |
-| `r` | Refresh from providers |
-| `Escape` | Focus table / clear search |
+| `h` | Show keyboard shortcuts |
 | `q` | Quit |
 
-### tmux Commands (once attached)
+## Multiplexer Backends
 
-```bash
-Ctrl+b + Arrow Keys    # Switch between panes
-Ctrl+b + n/p           # Next/Previous window
-Ctrl+b + b             # Toggle broadcast (custom SSHplex binding)
-Ctrl+b + d             # Detach from session
-Ctrl+b + z             # Zoom/unzoom current pane
+| Backend | Platform | Best For |
+|---------|----------|----------|
+| **tmux** | Linux, macOS | Maximum compatibility, persistence |
+| **tmux + iTerm2** | macOS | Native UI + persistence |
+| **iTerm2 native** | macOS | Simple setup, no tmux dependency |
+
+```yaml
+# ~/.config/sshplex/sshplex.yaml
+tmux:
+  backend: "tmux"  # or "iterm2-native" on macOS
+  layout: "tiled"
+  max_panes_per_window: 5
 ```
 
-## CLI Reference
-
-```bash
-sshplex                        # Launch TUI
-sshplex --debug                # Test provider connectivity
-sshplex --clear-cache          # Clear host cache
-sshplex --show-config          # Show configuration paths
-sshplex --config /path/to.yml  # Use custom config file
-sshplex --verbose              # Enable verbose logging
-sshplex --version              # Show version
-```
-
-## Configuration
-
-Configuration is stored at `~/.config/sshplex/sshplex.yaml`. See [config-template.yaml](sshplex/config-template.yaml) for a full example.
+## Sources of Truth
 
 ### Static Hosts
-
 ```yaml
 sot:
   import:
     - name: "my-servers"
       type: static
       hosts:
-        - name: "web-01"
-          ip: "192.168.1.10"
-          description: "Web server"
-          tags: ["web", "production"]
-        - name: "db-01"
-          ip: "192.168.1.20"
-          description: "Database server"
-          tags: ["database", "production"]
+        - {name: "web-01", ip: "192.168.1.10", tags: ["web"]}
 ```
 
 ### NetBox
-
 ```yaml
 sot:
   import:
-    - name: "prod-netbox"
+    - name: "prod"
       type: netbox
       url: "https://netbox.example.com/"
       token: "your-api-token"
-      verify_ssl: true
-      timeout: 30
-      default_filters:
-        status: "active"
-        role: "virtual-machine"
-        has_primary_ip: "true"
 ```
 
-### Ansible Inventory
-
+### Ansible
 ```yaml
 sot:
   import:
-    - name: "production-hosts"
+    - name: "inventory"
       type: ansible
-      inventory_paths:
-        - "/path/to/inventory.yml"
-      default_filters:
-        groups: ["webservers", "databases"]
-        exclude_groups: ["maintenance"]
-        host_patterns: ["^prod-.*"]
+      inventory_paths: ["/path/to/inventory.yml"]
 ```
 
 ### Consul
-
-Requires `pip install "sshplex[consul]"`.
-
+```bash
+pip install "sshplex[consul]"
+```
 ```yaml
 sot:
   import:
-    - name: "consul-dc1"
+    - name: "dc1"
       type: consul
       config:
         host: "consul.example.com"
-        port: 443
-        token: "your-consul-token"
-        scheme: "https"
-        verify: false
-        dc: "dc1"
-        cert: ""  # Optional SSL cert path
+        token: "your-token"
 ```
 
-### SSH Proxy / Jump Host
-
-Configure per-provider proxy routing:
-
-```yaml
-ssh:
-  username: "admin"
-  key_path: "~/.ssh/id_ed25519"
-  port: 22
-  proxy:
-    - name: "prod-proxy"
-      imports: ["consul-dc1", "prod-netbox"]  # Which providers use this proxy
-      host: "jumphost.example.com"
-      username: "admin"
-      key_path: "~/.ssh/jump_key"
-```
-
-### SSH Security Options
-
-Configure SSH host key checking and retry behavior:
-
-```yaml
-ssh:
-  username: "admin"
-  key_path: "~/.ssh/id_ed25519"
-  # Security options
-  strict_host_key_checking: false  # Options: true (strict), false (accept-new)
-  user_known_hosts_file: ""  # Empty = default ~/.ssh/known_hosts
-  # Connection retry
-  retry:
-    enabled: true
-    max_attempts: 3
-    delay_seconds: 2
-    exponential_backoff: true  # Double delay on each retry
-```
-
-**Security Note**: By default, SSHplex uses `StrictHostKeyChecking=accept-new` which automatically accepts new host keys but warns on key changes. For production environments, set `strict_host_key_checking: true` for maximum security.
-
-### iTerm2 Integration (macOS)
-
-Enable native iTerm2 tmux integration with `-CC` mode for a native macOS experience:
-
-```yaml
-tmux:
-  control_with_iterm2: true          # Enable iTerm2 -CC mode
-  iterm2_attach_target: "new-tab"    # "new-window" or "new-tab"
-  iterm2_profile: "Default"          # iTerm2 profile to use
-```
-
-#### iTerm2 Settings Required
-
-**Important:** For proper tab behavior, configure iTerm2:
-
-1. Open **iTerm2 → Settings → General → tmux**
-2. Set **"When attaching, restore windows as:"** to **"Tabs in the attaching window"**
-
-If set to "Native windows", iTerm2 will create separate windows for each tmux pane instead of tabs.
-
-#### Understanding the 3-Tab Layout
-
-When using iTerm2 `-CC` mode, you'll see **3 tabs** in one iTerm2 window:
-
-| Tab | Purpose | Contents |
-|-----|---------|----------|
-| **Controller** | tmux control | Shows `** tmux mode started **` menu |
-| **Tmux Pane** | SSH session | The actual SSH connection |
-| **iTerm2 Native** | iTerm2 view | Native rendering of the tmux pane |
-
-**Why 3 tabs?**
-
-1. **Controller tab** - Required by iTerm2's `-CC` protocol. Press `esc` here to detach cleanly.
-2. **Tmux pane** - The SSH session created by SSHplex before iTerm2 attached.
-3. **iTerm2 native** - iTerm2's native rendering of the tmux pane (provides native scrolling, split panes, etc.)
-
-The **Tmux Pane** and **iTerm2 Native** tabs show the same SSH session but in different views:
-- **Tmux pane tab**: Text-based tmux rendering
-- **iTerm2 native tab**: Native macOS rendering with better scrolling, fonts, etc.
-
-You can close either the "Tmux Pane" or "iTerm2 Native" tab — they're synchronized. Most users prefer the native tab for better macOS integration.
-
-#### Keyboard Shortcuts in iTerm2 Mode
-
-| Shortcut | Action |
-|----------|--------|
-| `esc` (in controller) | Detach cleanly from tmux |
-| `X` (in controller) | Force-quit tmux mode |
-| `Cmd+W` | Close current tab (kills tmux pane) |
-| `Cmd+D` | Split pane (creates new tmux pane) |
-
-#### Benefits of iTerm2 -CC Mode
-
-- **Native UI**: Use iTerm2's native tabs, splits, and scrolling
-- **Persistence**: Session survives iTerm2 restarts
-- **Better fonts**: Full macOS font rendering
-- **Mouse support**: Native selection and copy/paste
-- **Search**: Use iTerm2's find feature (`Cmd+F`)
-
-### Cache
-
-```yaml
-cache:
-  enabled: true
-  cache_dir: "~/.cache/sshplex"
-  ttl_hours: 24  # Refresh daily
-```
-
-### UI
-
-```yaml
-ui:
-  show_log_panel: false
-  table_columns: ["name", "ip", "cluster", "role", "tags", "description", "provider"]
-```
-
-## Troubleshooting
-
-### Debug Mode
+## CLI Reference
 
 ```bash
-sshplex --debug
+sshplex                        # Launch TUI
+sshplex --onboarding           # Interactive setup wizard
+sshplex --debug                # Test provider connectivity
+sshplex --show-config          # Show config paths
+sshplex --clear-cache          # Clear host cache
+sshplex --config /path/to.yml  # Use custom config
 ```
 
-Tests provider connectivity and lists all discovered hosts.
+## Documentation
 
-### Enable Logging
+| Guide | Description |
+|-------|-------------|
+| [Configuration](docs/configuration.md) | Full config reference with examples |
+| [Backends](docs/backends.md) | Multiplexer backend options and setup |
+| [Troubleshooting](docs/troubleshooting.md) | Common issues and solutions |
 
-```yaml
-logging:
-  enabled: true
-  level: "DEBUG"
-  file: "logs/sshplex.log"
+## Installation Options
+
+```bash
+# Basic (tmux only)
+pip install sshplex
+
+# With Consul support
+pip install "sshplex[consul]"
+
+# With iTerm2 native support (macOS)
+pip install "sshplex[iterm2]"
+
+# Development
+pip install -e ".[dev]"
 ```
-
-### Common Issues
-
-| Issue | Solution |
-|-------|----------|
-| `tmux is not installed` | Install tmux: `brew install tmux` / `apt install tmux` |
-| NetBox connection failed | Check URL, token, and network connectivity |
-| Ansible inventory not loading | Verify file paths exist and YAML syntax is valid |
-| No hosts found | Remove filters temporarily, check provider logs |
-| Consul import error | Install with `pip install "sshplex[consul]"` |
-| SSH key auth failed | Check key path and permissions (`chmod 600`) |
 
 ## Development
 
@@ -377,20 +152,12 @@ cd sshplex
 pip install -e ".[dev]"
 
 # Run tests
-python3 -m pytest tests/
+pytest tests/ -v
 
-# Lint & quality checks
+# Quality checks
 ruff check sshplex tests
 mypy sshplex
-vulture sshplex tests --min-confidence 80
-
-# Local Consul for testing
-docker-compose -f docker-compose.consul.yml up -d
 ```
-
-## Contributing
-
-SSHplex welcomes contributions! The codebase follows the KISS principle.
 
 ## License
 
@@ -400,14 +167,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 **Sabrimjd** - [@sabrimjd](https://github.com/sabrimjd)
 
-## Acknowledgments
-
-- [Textual](https://textual.textualize.io/) - Modern TUI framework
-- [NetBox](https://netbox.dev/) - Infrastructure source of truth
-- [HashiCorp Consul](https://www.consul.io/) - Service discovery
-- [tmux](https://github.com/tmux/tmux) - Terminal multiplexing
-- [loguru](https://github.com/Delgan/loguru) - Logging
-
 ---
 
-**SSHplex** - Because managing multiple SSH connections should be simple and elegant.
+**SSHplex** - Because managing multiple SSH connections should be simple.
