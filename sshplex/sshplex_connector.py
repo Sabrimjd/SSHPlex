@@ -219,7 +219,7 @@ class SSHplexConnector:
         if not hostname:
             raise ValueError(f"Host missing both ip and name: {host}")
 
-        cmd_parts = ["TERM=xterm-256color", "ssh"]
+        cmd_parts = ["TERM=xterm-256color", "/usr/bin/ssh"]
 
         # Try to configure proxy if available
         try:
@@ -242,7 +242,7 @@ class SSHplexConnector:
                             os.path.isabs(proxy_key) and '..' not in proxy_key):
                             # Use shlex.quote for safe shell escaping
                             cmd_parts.extend([
-                                "-o", f"ProxyCommand=ssh -i {shlex.quote(proxy_key)} -W %h:%p {shlex.quote(proxy_user)}@{shlex.quote(proxy_host)}"
+                                "-o", f"ProxyCommand=/usr/bin/ssh -i {shlex.quote(proxy_key)} -W %h:%p {shlex.quote(proxy_user)}@{shlex.quote(proxy_host)}"
                             ])
                         else:
                             self.logger.warning("Proxy configuration contains invalid values, skipping proxy")
