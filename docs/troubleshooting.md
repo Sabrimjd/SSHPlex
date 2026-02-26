@@ -42,8 +42,14 @@ logging:
 | Issue | Solution |
 |-------|----------|
 | `iTerm2 Python API not installed` | `pip install "sshplex[iterm2]"` |
-| Connection fails | Ensure iTerm2 is running with API enabled |
+| Connection refused / Connect call failed | Enable Python API in iTerm2 Settings → General → Magic |
 | Broadcast not working | Press `Cmd+Option+I` or set `broadcast: true` |
+
+**Enabling iTerm2 Python API:**
+1. Open iTerm2
+2. Go to **iTerm2 → Settings → General → Magic**
+3. Enable **"Python API"**
+4. Restart iTerm2
 
 ### Provider Issues
 

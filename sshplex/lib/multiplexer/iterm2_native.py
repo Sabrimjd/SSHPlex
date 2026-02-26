@@ -138,6 +138,16 @@ class ITerm2NativeManager(MultiplexerBase):
                 self._app = await iterm2.async_get_app(self._connection)
                 self.logger.info("SSHplex: Connected to iTerm2")
             except Exception as e:
+                error_msg = str(e)
+                if "Connect call failed" in error_msg or "Connection refused" in error_msg:
+                    raise ITerm2NativeError(
+                        "iTerm2 Python API is not enabled. "
+                        "To fix:\n"
+                        "  1. Open iTerm2\n"
+                        "  2. Go to iTerm2 → Settings → General → Magic\n"
+                        "  3. Enable 'Python API'\n"
+                        "  4. Restart iTerm2 and try again"
+                    ) from e
                 raise ITerm2NativeError(f"Failed to connect to iTerm2: {e}") from e
         return self._connection
 
