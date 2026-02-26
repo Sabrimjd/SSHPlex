@@ -265,12 +265,62 @@ ssh:
 
 ### iTerm2 Integration (macOS)
 
-Enable native iTerm2 tmux integration with `-CC` mode:
+Enable native iTerm2 tmux integration with `-CC` mode for a native macOS experience:
 
 ```yaml
 tmux:
-  control_with_iterm2: true  # Opens new iTerm2 window with native tabs/splits
+  control_with_iterm2: true          # Enable iTerm2 -CC mode
+  iterm2_attach_target: "new-tab"    # "new-window" or "new-tab"
+  iterm2_profile: "Default"          # iTerm2 profile to use
 ```
+
+#### iTerm2 Settings Required
+
+**Important:** For proper tab behavior, configure iTerm2:
+
+1. Open **iTerm2 → Settings → General → tmux**
+2. Set **"When attaching, restore windows as:"** to **"Tabs in the attaching window"**
+
+If set to "Native windows", iTerm2 will create separate windows for each tmux pane instead of tabs.
+
+#### Understanding the 3-Tab Layout
+
+When using iTerm2 `-CC` mode, you'll see **3 tabs** in one iTerm2 window:
+
+| Tab | Purpose | Contents |
+|-----|---------|----------|
+| **Controller** | tmux control | Shows `** tmux mode started **` menu |
+| **Tmux Pane** | SSH session | The actual SSH connection |
+| **iTerm2 Native** | iTerm2 view | Native rendering of the tmux pane |
+
+**Why 3 tabs?**
+
+1. **Controller tab** - Required by iTerm2's `-CC` protocol. Press `esc` here to detach cleanly.
+2. **Tmux pane** - The SSH session created by SSHplex before iTerm2 attached.
+3. **iTerm2 native** - iTerm2's native rendering of the tmux pane (provides native scrolling, split panes, etc.)
+
+The **Tmux Pane** and **iTerm2 Native** tabs show the same SSH session but in different views:
+- **Tmux pane tab**: Text-based tmux rendering
+- **iTerm2 native tab**: Native macOS rendering with better scrolling, fonts, etc.
+
+You can close either the "Tmux Pane" or "iTerm2 Native" tab — they're synchronized. Most users prefer the native tab for better macOS integration.
+
+#### Keyboard Shortcuts in iTerm2 Mode
+
+| Shortcut | Action |
+|----------|--------|
+| `esc` (in controller) | Detach cleanly from tmux |
+| `X` (in controller) | Force-quit tmux mode |
+| `Cmd+W` | Close current tab (kills tmux pane) |
+| `Cmd+D` | Split pane (creates new tmux pane) |
+
+#### Benefits of iTerm2 -CC Mode
+
+- **Native UI**: Use iTerm2's native tabs, splits, and scrolling
+- **Persistence**: Session survives iTerm2 restarts
+- **Better fonts**: Full macOS font rendering
+- **Mouse support**: Native selection and copy/paste
+- **Search**: Use iTerm2's find feature (`Cmd+F`)
 
 ### Cache
 

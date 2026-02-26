@@ -251,11 +251,31 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         "Max Panes Per Window",
                         Input(value=str(self.config.tmux.max_panes_per_window)),
                     )
+                    yield Static("iTerm2 Integration (macOS)", classes="section-header")
                     yield _form_field(
                         "cfg-tmux-control_with_iterm2",
-                        "iTerm2 Integration",
+                        "Enable iTerm2",
                         Switch(value=self.config.tmux.control_with_iterm2),
                         "Use iTerm2 tmux -CC mode on macOS",
+                    )
+                    # Get iTerm2 attach target with validation for existing configs
+                    iterm2_target = getattr(self.config.tmux, 'iterm2_attach_target', 'new-window')
+                    if iterm2_target not in ('new-window', 'new-tab'):
+                        iterm2_target = 'new-window'
+                    yield _form_field(
+                        "cfg-tmux-iterm2_attach_target",
+                        "Attach Target",
+                        Select(
+                            [("New Window", "new-window"), ("New Tab", "new-tab")],
+                            value=iterm2_target,
+                        ),
+                        "Where to open tmux session in iTerm2",
+                    )
+                    yield _form_field(
+                        "cfg-tmux-iterm2_profile",
+                        "iTerm2 Profile",
+                        Input(value=getattr(self.config.tmux, 'iterm2_profile', 'Default')),
+                        "iTerm2 profile name to use",
                     )
 
                 with TabPane("Sources", id="tab-sources"), VerticalScroll():
@@ -602,6 +622,8 @@ class ConfigEditorScreen(ModalScreen[bool]):
             "window_name": self._get_input_value("cfg-tmux-window_name", "sshplex"),
             "max_panes_per_window": int(self._get_input_value("cfg-tmux-max_panes_per_window", "5")),
             "control_with_iterm2": self._get_switch_value("cfg-tmux-control_with_iterm2"),
+            "iterm2_attach_target": self._get_select_value("cfg-tmux-iterm2_attach_target", "new-window"),
+            "iterm2_profile": self._get_input_value("cfg-tmux-iterm2_profile", "Default"),
         }
 
         # Sources

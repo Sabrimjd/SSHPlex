@@ -99,7 +99,10 @@ tmux:
   broadcast: false # Start with broadcast off
   window_name: "sshplex"
   max_panes_per_window: 5 # Maximum panes per window before creating a new window
-  control_with_iterm2: false # Use iTerm2 tmux integration (macOS only)
+  # iTerm2 integration (macOS only)
+  control_with_iterm2: false # Use iTerm2 tmux -CC mode (macOS only)
+  iterm2_attach_target: "new-window" # Where to open tmux session: new-window, new-tab
+  iterm2_profile: "Default" # iTerm2 profile name to use
 
 ui:
   show_log_panel: false

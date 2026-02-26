@@ -91,7 +91,7 @@ class TestTmuxManager:
         mock_server.has_session.return_value = False
         mock_session = MagicMock()
         mock_window = MagicMock()
-        mock_session.attached_window = mock_window
+        mock_session.active_window = mock_window
         mock_server.new_session.return_value = mock_session
         mock_libtmux.Server.return_value = mock_server
         
@@ -107,7 +107,7 @@ class TestTmuxManager:
         mock_server.has_session.return_value = True
         mock_session = MagicMock()
         mock_window = MagicMock()
-        mock_session.attached_window = mock_window
+        mock_session.active_window = mock_window
         mock_server.sessions.get.return_value = mock_session
         mock_libtmux.Server.return_value = mock_server
         
@@ -269,43 +269,46 @@ class TestTmuxManagerAttach:
             manager._attach_standard()
             mock_execlp.assert_called_once_with('tmux', 'tmux', 'attach-session', '-t', 'test-session')
 
-    def test_attach_iterm2_running(self, manager):
-        """Test iTerm2 attach when iTerm2 is running."""
+    def test_attach_iterm2_success(self, manager):
+        """Test iTerm2 attach when launch succeeds."""
+        manager.config.tmux.control_with_iterm2 = True
+        manager.config.tmux.iterm2_attach_target = 'new-window'
+        manager.config.tmux.iterm2_profile = 'Default'
+        manager.system = 'darwin'
+
+        with patch('sshplex.lib.utils.iterm2.launch_iterm2_session', return_value=True) as mock_launch:
+            result = manager._attach_iterm2()
+
+            assert result is True
+            mock_launch.assert_called_once()
+
+    def test_attach_iterm2_fails_returns_false(self, manager):
+        """Test iTerm2 attach returns False on failure."""
         manager.config.tmux.control_with_iterm2 = True
         manager.system = 'darwin'
 
-        mock_proc = MagicMock()
-        mock_proc.poll.return_value = None  # process still running
+        with patch('sshplex.lib.utils.iterm2.launch_iterm2_session', return_value=False):
+            result = manager._attach_iterm2()
+            assert result is False
 
-        with patch('sshplex.lib.multiplexer.tmux.subprocess.run') as mock_run, \
-                patch('sshplex.lib.multiplexer.tmux.subprocess.Popen', return_value=mock_proc) as mock_popen:
-            mock_run.return_value = MagicMock(returncode=0, stdout='true')
-
-            manager._attach_iterm2()
-
-            mock_popen.assert_called_once()
-            args = mock_popen.call_args[0][0]
-            assert 'osascript' in args
-
-    def test_attach_iterm2_not_running(self, manager):
-        """Test iTerm2 attach when iTerm2 is not running."""
+    def test_attach_iterm2_handles_exception(self, manager):
+        """Test iTerm2 attach handles exceptions gracefully."""
         manager.config.tmux.control_with_iterm2 = True
         manager.system = 'darwin'
 
-        mock_proc = MagicMock()
-        mock_proc.poll.return_value = None  # process still running
+        with patch('sshplex.lib.utils.iterm2.launch_iterm2_session', side_effect=Exception("Test error")):
+            result = manager._attach_iterm2()
+            assert result is False
 
-        with patch('sshplex.lib.multiplexer.tmux.subprocess.run') as mock_run, \
-                patch('sshplex.lib.multiplexer.tmux.subprocess.Popen', return_value=mock_proc) as mock_popen:
-            # First call: check installed (ok), second call: check running (not running)
-            mock_run.side_effect = [
-                MagicMock(returncode=0, stdout='true'),
-                MagicMock(returncode=0, stdout='false'),
-            ]
+    def test_attach_to_session_falls_back_on_iterm2_failure(self, manager):
+        """Test attach_to_session falls back to standard tmux on iTerm2 failure."""
+        manager.config.tmux.control_with_iterm2 = True
+        manager.system = 'darwin'
 
-            manager._attach_iterm2()
-
-            mock_popen.assert_called_once()
+        with patch('sshplex.lib.utils.iterm2.launch_iterm2_session', return_value=False), \
+                patch('sshplex.lib.multiplexer.tmux.TmuxManager._attach_standard') as mock_standard:
+            manager.attach_to_session(auto_attach=True)
+            mock_standard.assert_called_once()
 
 
 class TestTmuxError:
