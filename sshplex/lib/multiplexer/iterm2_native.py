@@ -260,15 +260,27 @@ class ITerm2NativeManager(MultiplexerBase):
 
         async def _create_sessions(connection: Any) -> None:
             """Create all sessions in a single async context."""
-            # Create new window
-            window = await iterm2.Window.async_create(connection, profile=profile)
+            sessions: List[Any] = []
+
+            # Get first command to run in the initial window
+            first_hostname, first_command = sessions_data[0] if sessions_data else (None, None)
+
+            if not first_hostname:
+                self.logger.error("SSHplex: No sessions to create")
+                return
+
+            # Create window with first command
+            window = await iterm2.Window.async_create(
+                connection,
+                profile=profile,
+                command=first_command
+            )
             if not window:
                 self.logger.error("SSHplex: Failed to create iTerm2 window")
                 return
 
             self.logger.info(f"SSHplex: Created iTerm2 window for {len(sessions_data)} sessions")
 
-            sessions: List[Any] = []
             current_tab = window.current_tab
 
             # If current_tab is None, try to get first tab from tabs list
@@ -283,41 +295,47 @@ class ITerm2NativeManager(MultiplexerBase):
                 self.logger.error("SSHplex: Failed to get or create a tab")
                 return
 
-            current_tab_pane_count = 0
+            # Get the session that was created with the first command
+            first_session = current_tab.current_session
+            if first_session:
+                await first_session.async_set_name(first_hostname)
+                sessions.append(first_session)
+                self.logger.info(f"SSHplex: Created session for '{first_hostname}'")
 
-            for hostname, command in sessions_data:
+            current_tab_pane_count = 1  # We already have 1 session
+
+            # Process remaining sessions (skip first one)
+            for hostname, command in sessions_data[1:]:
                 # Check if we need a new tab
                 if current_tab_pane_count >= max_panes:
                     self.logger.info(f"SSHplex: Creating new tab (max {max_panes} panes)")
-                    current_tab = await window.async_create_tab(profile=profile)
-                    current_tab_pane_count = 0
-
-                if current_tab_pane_count == 0:
-                    # First session in tab - use existing
-                    session = current_tab.current_session
-                    if session is None:
-                        self.logger.error(f"SSHplex: No current session in tab for {hostname}")
-                        continue
-                else:
-                    # Split existing session
-                    if split_pattern == 'vertical':
-                        vertical = True
-                    elif split_pattern == 'horizontal':
-                        vertical = False
-                    else:  # alternate
-                        vertical = (current_tab_pane_count % 2 == 0)
-
-                    # Get last session to split
-                    if sessions:
-                        last_session = sessions[-1]
-                    else:
-                        # Fallback to current session if available
-                        last_session = current_tab.current_session
-                        if last_session is None:
-                            self.logger.error(f"SSHplex: No session available to split for {hostname}")
+                    current_tab = await window.async_create_tab(profile=profile, command=command)
+                    if current_tab:
+                        new_session = current_tab.current_session
+                        if new_session:
+                            await new_session.async_set_name(hostname)
+                            sessions.append(new_session)
+                            current_tab_pane_count = 1
+                            self.logger.info(f"SSHplex: Created session for '{hostname}' in new tab")
                             continue
+                    self.logger.error(f"SSHplex: Failed to create tab for {hostname}")
+                    continue
 
+                # Split existing session
+                if split_pattern == 'vertical':
+                    vertical = True
+                elif split_pattern == 'horizontal':
+                    vertical = False
+                else:  # alternate
+                    vertical = (current_tab_pane_count % 2 == 0)
+
+                # Get last session to split
+                if sessions:
+                    last_session = sessions[-1]
                     session = await last_session.async_split_pane(vertical=vertical, profile=profile)
+                else:
+                    self.logger.error(f"SSHplex: No session available to split for {hostname}")
+                    continue
 
                 if not session:
                     self.logger.error(f"SSHplex: Failed to create session for {hostname}")

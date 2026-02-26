@@ -236,6 +236,15 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         ),
                         "Multiplexer backend (iTerm2 native is macOS only)",
                     )
+                    yield _form_field(
+                        "cfg-mux-use_panes",
+                        "Connection Mode",
+                        Select(
+                            [("Panes (splits)", True), ("Tabs (separate)", False)],
+                            value=True,  # Default to panes
+                        ),
+                        "Panes: split within tabs | Tabs: each host in separate tab",
+                    )
                     # Common fields for all backends
                     yield _form_field(
                         "cfg-mux-layout",
@@ -259,7 +268,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
                     )
                     yield _form_field(
                         "cfg-mux-max_panes_per_window",
-                        "Max Panes Per Window",
+                        "Max Panes Per Tab",
                         Input(value=str(self.config.tmux.max_panes_per_window)),
                     )
                     # Backend-specific fields container
