@@ -155,7 +155,7 @@ class TestTmuxConfig:
         """Test iTerm2 config validation on macOS."""
         mock_system.return_value = "Darwin"
         config = TmuxConfig(control_with_iterm2=True)
-        assert config.validate_iterm2_config() is True
+        assert config.validate_backend_config() is True
 
     @patch('platform.system')
     def test_validate_iterm2_config_on_linux_raises(self, mock_system):
@@ -163,14 +163,14 @@ class TestTmuxConfig:
         mock_system.return_value = "Linux"
         config = TmuxConfig(control_with_iterm2=True)
         with pytest.raises(ValueError, match="only supported on macOS"):
-            config.validate_iterm2_config()
+            config.validate_backend_config()
 
     @patch('platform.system')
     def test_validate_iterm2_disabled_on_linux_ok(self, mock_system):
         """Test iTerm2 disabled on Linux is valid."""
         mock_system.return_value = "Linux"
         config = TmuxConfig(control_with_iterm2=False)
-        assert config.validate_iterm2_config() is True
+        assert config.validate_backend_config() is True
 
 
 class TestUIConfig:

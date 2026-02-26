@@ -69,31 +69,65 @@ class SSHConfig(BaseModel):
     proxy: List[Proxy] = Field(alias='proxy', default_factory=list, description="List of proxies")
 
 class TmuxConfig(BaseModel):
-    """tmux configuration."""
+    """tmux/iTerm2 multiplexer configuration.
+
+    Three backend options:
+    1. tmux standalone: backend="tmux", control_with_iterm2=false
+    2. tmux + iTerm2: backend="tmux", control_with_iterm2=true (macOS only)
+    3. iTerm2 native: backend="iterm2-native" (macOS only)
+    """
+    # Backend selection
+    backend: str = Field(
+        default="tmux",
+        description="Multiplexer backend: 'tmux' or 'iterm2-native'"
+    )
+    # Common options
     layout: str = "tiled"  # tiled, even-horizontal, even-vertical
     broadcast: bool = False  # Start with broadcast off
     window_name: str = "sshplex"
     max_panes_per_window: int = Field(default=5, description="Maximum panes per window before creating a new window")
-    # iTerm2 integration (macOS only)
+    # iTerm2 + tmux integration (macOS only, for backend="tmux")
     control_with_iterm2: bool = Field(default=False, description="Use iTerm2 tmux -CC mode (macOS only)")
     iterm2_attach_target: str = Field(
         default="new-window",
         description="Where to open tmux session in iTerm2: new-window or new-tab"
     )
+    # iTerm2 native specific (macOS only, for backend="iterm2-native")
     iterm2_profile: str = Field(default="Default", description="iTerm2 profile to use for new windows/tabs")
+    iterm2_split_pattern: str = Field(
+        default="alternate",
+        description="Split pattern for iTerm2 native: alternate, vertical, horizontal"
+    )
 
-    def validate_iterm2_config(self) -> bool:
-        """Validate iTerm2 config is only enabled on macOS.
+    def validate_backend_config(self) -> bool:
+        """Validate backend configuration.
 
         Returns:
             True if config is valid, raises ValueError otherwise
         """
         import platform
+
+        # Validate backend option
+        valid_backends = ["tmux", "iterm2-native"]
+        if self.backend not in valid_backends:
+            raise ValueError(
+                f"Invalid backend: {self.backend}. Must be one of: {valid_backends}"
+            )
+
+        # Validate iTerm2 native mode on macOS only
+        if self.backend == "iterm2-native" and platform.system().lower() != "darwin":
+            raise ValueError(
+                "backend: 'iterm2-native' is only supported on macOS. "
+                "Use backend: 'tmux' on Linux/other systems."
+            )
+
+        # Validate control_with_iterm2 on macOS only
         if self.control_with_iterm2 and platform.system().lower() != "darwin":
             raise ValueError(
                 "tmux.control_with_iterm2 is only supported on macOS. "
                 "Set this to false on Linux/other systems."
             )
+
         return True
 
 

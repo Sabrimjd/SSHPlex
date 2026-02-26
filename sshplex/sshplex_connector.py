@@ -1,4 +1,4 @@
-"""SSHplex Connector - SSH connections and tmux session management."""
+"""SSHplex Connector - SSH connections and multiplexer session management."""
 
 import os
 import platform
@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import Any, List, Optional
 
 from .lib.logger import get_logger
-from .lib.multiplexer.tmux import TmuxManager
 from .lib.sot.base import Host
 
 
@@ -19,19 +18,44 @@ class SSHConnectionError(Exception):
 
 
 class SSHplexConnector:
-    """Manages SSH connections and tmux session management."""
+    """Manages SSH connections and multiplexer session management.
+
+    Supports 3 backends:
+    1. tmux standalone - Pure tmux (Linux, macOS)
+    2. tmux + iTerm2 - tmux with iTerm2 -CC mode (macOS)
+    3. iTerm2 native - Pure iTerm2 Python API (macOS)
+    """
 
     def __init__(self, session_name: Optional[str], config: Optional[Any] = None):
-        """Initialize the connector with optional session name and max panes per window."""
+        """Initialize the connector with optional session name and config.
+
+        Args:
+            session_name: Session name (auto-generated if None)
+            config: SSHplex configuration object
+        """
         if session_name is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             session_name = f"sshplex-{timestamp}"
 
         self.session_name = session_name
         self.config = config
-        self.tmux_manager = TmuxManager(session_name, config)
         self.logger = get_logger()
         self.system = platform.system().lower()
+
+        # Initialize multiplexer based on backend config
+        backend = getattr(config.tmux, 'backend', 'tmux') if config else 'tmux'
+
+        if backend == "iterm2-native":
+            from .lib.multiplexer.iterm2_native import ITerm2NativeManager
+            self.multiplexer = ITerm2NativeManager(session_name, config)
+            self.logger.info("SSHplex: Using iTerm2 native backend")
+        else:
+            from .lib.multiplexer.tmux import TmuxManager
+            self.multiplexer = TmuxManager(session_name, config)
+            if getattr(config.tmux, 'control_with_iterm2', False) if config else False:
+                self.logger.info("SSHplex: Using tmux + iTerm2 -CC mode backend")
+            else:
+                self.logger.info("SSHplex: Using tmux standalone backend")
 
     def connect_to_hosts(self, hosts: List[Host], username: str, key_path: Optional[str] = None, port: int = 22, use_panes: bool = True, use_broadcast: bool = False) -> bool:
         """Establish SSH connections to the specified hosts using shell SSH with retry support.
@@ -72,7 +96,7 @@ class SSHplexConnector:
 
         try:
             # Create tmux session
-            if not self.tmux_manager.create_session():
+            if not self.multiplexer.create_session():
                 self.logger.error("SSHplex: Failed to create tmux session")
                 return False
 
@@ -102,7 +126,7 @@ class SSHplexConnector:
                         if use_panes:
                             # Create pane with SSH command
                             max_panes = self.config.tmux.max_panes_per_window if self.config else 5
-                            if self.tmux_manager.create_pane(hostname, ssh_command, max_panes):
+                            if self.multiplexer.create_pane(hostname, ssh_command, max_panes):
                                 connection_success = True
                                 self.logger.info(f"SSHplex: Successfully created pane for {hostname}")
                             else:
@@ -112,13 +136,13 @@ class SSHplexConnector:
                             use_iterm2 = "darwin" in self.system and (self.config.tmux.control_with_iterm2 if self.config else False)
                             if use_iterm2:
                                 # iTerm2 mode: use single-pane windows for tmux -CC integration
-                                if self.tmux_manager.create_pane(hostname, ssh_command, 1):
+                                if self.multiplexer.create_pane(hostname, ssh_command, 1):
                                     connection_success = True
                                     self.logger.info(f"SSHplex: Successfully created window for {hostname}")
                                 else:
                                     last_error = "Failed to create iTerm2 window"
                             else:
-                                if self.tmux_manager.create_window(hostname, ssh_command):
+                                if self.multiplexer.create_window(hostname, ssh_command):
                                     connection_success = True
                                     self.logger.info(f"SSHplex: Successfully created window for {hostname}")
                                 else:
@@ -150,11 +174,11 @@ class SSHplexConnector:
 
             # Apply tiled layout for multiple panes (only when using panes, not windows)
             if use_panes and success_count > 1:
-                self.tmux_manager.setup_tiled_layout()
+                self.multiplexer.setup_tiled_layout()
 
             # Enable broadcast mode if requested
             if use_broadcast and success_count > 1:
-                if self.tmux_manager.enable_broadcast():
+                if self.multiplexer.enable_broadcast():
                     self.logger.info("SSHplex: Broadcast mode enabled")
                 else:
                     self.logger.warning("SSHplex: Failed to enable broadcast mode")
@@ -269,9 +293,9 @@ class SSHplexConnector:
 
     def attach_to_session(self, auto_attach: bool = True) -> None:
         """Prepare session for attachment or auto-attach."""
-        self.tmux_manager.attach_to_session(auto_attach=auto_attach)
+        self.multiplexer.attach_to_session(auto_attach=auto_attach)
 
     def close_connections(self) -> None:
         """Close all SSH connections and tmux session."""
         self.logger.info("SSHplex: Closing all connections")
-        self.tmux_manager.close_session()
+        self.multiplexer.close_session()
