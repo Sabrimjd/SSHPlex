@@ -171,11 +171,14 @@ class ITerm2NativeManager(MultiplexerBase):
             import iterm2
 
             conn = await self._connect()
-            self._window = await iterm2.async_create_window(conn)
+            self._window = await iterm2.Window.async_create(
+                conn,
+                profile=self._profile
+            )
 
             if self._window:
                 # Set window title (SSHplex-controlled)
-                await self._window.async_set_title(f"SSHplex: {self.session_name}")
+                # Note: Window title is set via the first session's name
                 self._current_tab = self._window.current_tab
                 self._current_tab_pane_count = 0
                 self.logger.info(
@@ -212,8 +215,10 @@ class ITerm2NativeManager(MultiplexerBase):
             # Ensure window exists
             if not self._window:
                 await self._connect()
-                self._window = await iterm2.async_create_window(self._connection)
-                await self._window.async_set_title(f"SSHplex: {self.session_name}")
+                self._window = await iterm2.Window.async_create(
+                    self._connection,
+                    profile=self._profile
+                )
                 self._current_tab = self._window.current_tab
                 self._current_tab_pane_count = 0
 
@@ -222,7 +227,9 @@ class ITerm2NativeManager(MultiplexerBase):
                 self.logger.info(
                     f"SSHplex: Max panes ({max_panes_per_window}) reached, creating new tab"
                 )
-                self._current_tab = await self._window.async_create_tab()
+                self._current_tab = await self._window.async_create_tab(
+                    profile=self._profile
+                )
                 self._current_tab_pane_count = 0
 
             session = None
@@ -292,11 +299,13 @@ class ITerm2NativeManager(MultiplexerBase):
             # Ensure window exists
             if not self._window:
                 await self._connect()
-                self._window = await iterm2.async_create_window(self._connection)
-                await self._window.async_set_title(f"SSHplex: {self.session_name}")
+                self._window = await iterm2.Window.async_create(
+                    self._connection,
+                    profile=self._profile
+                )
 
             # Create new tab
-            tab = await self._window.async_create_tab()
+            tab = await self._window.async_create_tab(profile=self._profile)
             if not tab:
                 self.logger.error(f"SSHplex: Failed to create tab for {hostname}")
                 return False
