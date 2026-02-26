@@ -7,9 +7,8 @@ Backend options:
 - backend: "iterm2-native" - Pure iTerm2 Python API (no tmux dependency)
 """
 
-import asyncio
 import platform
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from ..logger import get_logger
 from .base import MultiplexerBase
@@ -65,20 +64,10 @@ class ITerm2NativeManager(MultiplexerBase):
         # Check iTerm2 API availability
         self._check_iterm2_api()
 
-        # iTerm2 connection (established lazily)
-        self._connection: Optional[Any] = None  # iterm2.Connection
-        self._app: Optional[Any] = None  # iterm2.App
-
-        # Window/Tab tracking
-        self._window: Optional[Any] = None  # iterm2.Window
-        self._current_tab: Optional[Any] = None  # iterm2.Tab
-        self._current_tab_pane_count = 0
-
-        # Session tracking: hostname -> iterm2.Session
-        self._iterm2_sessions: Dict[str, Any] = {}
+        # Session tracking: hostname -> SSH command
+        self._pending_sessions: Dict[str, str] = {}
 
         # Broadcast state
-        self._broadcast_domain: Optional[Any] = None  # iterm2.broadcast.BroadcastDomain
         self._broadcast_enabled = False
 
         # Layout config
@@ -122,76 +111,16 @@ class ITerm2NativeManager(MultiplexerBase):
                 "Install with: pip install 'sshplex[iterm2]'"
             ) from None
 
-    async def _connect(self) -> Any:
-        """Establish connection to iTerm2.
-
-        Returns:
-            iterm2.Connection object
-
-        Raises:
-            ITerm2NativeError: If connection fails
-        """
-        if self._connection is None:
-            try:
-                import iterm2
-                self._connection = await iterm2.Connection().async_create()
-                self._app = await iterm2.async_get_app(self._connection)
-                self.logger.info("SSHplex: Connected to iTerm2")
-            except Exception as e:
-                error_msg = str(e)
-                if "Connect call failed" in error_msg or "Connection refused" in error_msg:
-                    raise ITerm2NativeError(
-                        "iTerm2 Python API is not enabled. "
-                        "To fix:\n"
-                        "  1. Open iTerm2\n"
-                        "  2. Go to iTerm2 → Settings → General → Magic\n"
-                        "  3. Enable 'Python API'\n"
-                        "  4. Restart iTerm2 and try again"
-                    ) from e
-                raise ITerm2NativeError(f"Failed to connect to iTerm2: {e}") from e
-        return self._connection
-
-    async def _disconnect(self) -> None:
-        """Close iTerm2 connection."""
-        from contextlib import suppress
-
-        if self._connection:
-            with suppress(Exception):
-                await self._connection.async_close()
-            self._connection = None
-            self._app = None
-
     def create_session(self) -> bool:
-        """Initialize iTerm2 connection and create window.
+        """Initialize iTerm2 session.
+
+        Note: Actual window creation happens in attach_to_session.
 
         Returns:
-            True if session created successfully
+            True always (window created lazily)
         """
-        async def _create():
-            import iterm2
-
-            conn = await self._connect()
-            self._window = await iterm2.Window.async_create(
-                conn,
-                profile=self._profile
-            )
-
-            if self._window:
-                # Set window title (SSHplex-controlled)
-                # Note: Window title is set via the first session's name
-                self._current_tab = self._window.current_tab
-                self._current_tab_pane_count = 0
-                self.logger.info(
-                    f"SSHplex: iTerm2 native session '{self.session_name}' created"
-                )
-                return True
-            return False
-
-        try:
-            return asyncio.run(_create())
-        except Exception as e:
-            self.logger.error(f"SSHplex: Failed to create iTerm2 session: {e}")
-            return False
+        self.logger.info(f"SSHplex: iTerm2 native session '{self.session_name}' initialized")
+        return True
 
     def create_pane(
         self,
@@ -199,7 +128,9 @@ class ITerm2NativeManager(MultiplexerBase):
         command: Optional[str] = None,
         max_panes_per_window: int = 5
     ) -> bool:
-        """Create a new pane for hostname.
+        """Queue a pane creation for the given hostname.
+
+        Note: Panes are created in batch when attach_to_session is called.
 
         Args:
             hostname: Host identifier
@@ -207,353 +138,205 @@ class ITerm2NativeManager(MultiplexerBase):
             max_panes_per_window: Maximum panes before creating new tab
 
         Returns:
-            True if pane created successfully
+            True if pane queued successfully
         """
-        async def _create():
-            import iterm2
+        if command is None:
+            command = f"ssh {hostname}"
 
-            # Ensure window exists
-            if not self._window:
-                await self._connect()
-                self._window = await iterm2.Window.async_create(
-                    self._connection,
-                    profile=self._profile
-                )
-                self._current_tab = self._window.current_tab
-                self._current_tab_pane_count = 0
-
-            # Check if we need a new tab
-            if self._current_tab_pane_count >= max_panes_per_window:
-                self.logger.info(
-                    f"SSHplex: Max panes ({max_panes_per_window}) reached, creating new tab"
-                )
-                self._current_tab = await self._window.async_create_tab(
-                    profile=self._profile
-                )
-                self._current_tab_pane_count = 0
-
-            session = None
-
-            if self._current_tab_pane_count == 0:
-                # First session in tab - use existing
-                session = self._current_tab.current_session
-            else:
-                # Split existing session
-                # Determine split direction based on pattern
-                if self._split_pattern == 'vertical':
-                    vertical = True
-                elif self._split_pattern == 'horizontal':
-                    vertical = False
-                else:  # alternate
-                    vertical = (self._current_tab_pane_count % 2 == 0)
-
-                # Get last session to split
-                sessions = self._current_tab.sessions
-                if sessions:
-                    last_session = sessions[-1]
-                    session = await last_session.async_split_pane(
-                        vertical=vertical,
-                        profile=self._profile
-                    )
-
-            if not session:
-                self.logger.error(f"SSHplex: Failed to create pane for {hostname}")
-                return False
-
-            # Set session name (SSHplex-controlled)
-            await session.async_set_name(hostname)
-
-            # Send command
-            if command:
-                await session.async_send_text(command + "\n")
-
-            # Track session
-            self._iterm2_sessions[hostname] = session
-            self._current_tab_pane_count += 1
-
-            self.logger.info(
-                f"SSHplex: Created pane for '{hostname}' "
-                f"({self._current_tab_pane_count}/{max_panes_per_window} in tab)"
-            )
-            return True
-
-        try:
-            return asyncio.run(_create())
-        except Exception as e:
-            self.logger.error(f"SSHplex: Failed to create pane for '{hostname}': {e}")
-            return False
+        self._pending_sessions[hostname] = command
+        self._max_panes_per_tab = max_panes_per_window
+        self.logger.info(f"SSHplex: Queued iTerm2 pane for '{hostname}'")
+        return True
 
     def create_window(self, hostname: str, command: Optional[str] = None) -> bool:
-        """Create a new tab for hostname (not a split pane).
+        """Queue a window creation for the given hostname.
 
         Args:
             hostname: Host identifier
             command: SSH command to execute
 
         Returns:
-            True if tab created successfully
+            True if window queued successfully
         """
-        async def _create():
-            import iterm2
-
-            # Ensure window exists
-            if not self._window:
-                await self._connect()
-                self._window = await iterm2.Window.async_create(
-                    self._connection,
-                    profile=self._profile
-                )
-
-            # Create new tab
-            tab = await self._window.async_create_tab(profile=self._profile)
-            if not tab:
-                self.logger.error(f"SSHplex: Failed to create tab for {hostname}")
-                return False
-
-            session = tab.current_session
-
-            # Set names (SSHplex-controlled)
-            await tab.async_set_title(hostname)
-            await session.async_set_name(hostname)
-
-            # Send command
-            if command:
-                await session.async_send_text(command + "\n")
-
-            # Track session
-            self._iterm2_sessions[hostname] = session
-
-            self.logger.info(f"SSHplex: Created tab for '{hostname}'")
-            return True
-
-        try:
-            return asyncio.run(_create())
-        except Exception as e:
-            self.logger.error(f"SSHplex: Failed to create tab for '{hostname}': {e}")
-            return False
+        return self.create_pane(hostname, command, max_panes_per_window=1)
 
     def send_command(self, hostname: str, command: str) -> bool:
         """Send command to specific session.
+
+        Note: Not supported in native mode after session creation.
+        Use iTerm2's native features instead.
 
         Args:
             hostname: Host identifier
             command: Command to send
 
         Returns:
-            True if command sent successfully
+            False (not supported after creation)
         """
-        async def _send():
-            session = self._iterm2_sessions.get(hostname)
-            if not session:
-                self.logger.error(f"SSHplex: Session for '{hostname}' not found")
-                return False
-
-            await session.async_send_text(command + "\n", suppress_broadcast=True)
-            self.logger.debug(f"SSHplex: Sent command to '{hostname}': {command}")
-            return True
-
-        try:
-            return asyncio.run(_send())
-        except Exception as e:
-            self.logger.error(f"SSHplex: Failed to send command to '{hostname}': {e}")
-            return False
+        self.logger.warning(
+            "SSHplex: send_command not supported in iTerm2 native mode. "
+            "Use iTerm2's native command features instead."
+        )
+        return False
 
     def broadcast_command(self, command: str) -> bool:
-        """Send command to all sessions (only works if broadcast enabled).
+        """Send command to all panes.
+
+        Note: Use broadcast mode instead for simultaneous input.
 
         Args:
             command: Command to broadcast
 
         Returns:
-            True if command broadcast successfully
+            True if broadcast enabled
         """
-        if not self._broadcast_enabled:
-            self.logger.warning(
-                "SSHplex: Broadcast not enabled. Call enable_broadcast() first."
-            )
-            return False
-
-        async def _broadcast():
-            # When broadcast is on, sending to any session goes to all
-            first_session = next(iter(self._iterm2_sessions.values()), None)
-            if not first_session:
-                return False
-
-            await first_session.async_send_text(command + "\n")
-            self.logger.info(f"SSHplex: Broadcast command: {command}")
+        if self._broadcast_enabled:
+            self.logger.info("SSHplex: Commands sent to all sessions via broadcast mode")
             return True
-
-        try:
-            return asyncio.run(_broadcast())
-        except Exception as e:
-            self.logger.error(f"SSHplex: Failed to broadcast command: {e}")
+        else:
+            self.logger.warning(
+                "SSHplex: Enable broadcast mode first for simultaneous input. "
+                "Press Cmd+Option+I in iTerm2 or set broadcast: true in config."
+            )
             return False
 
     def enable_broadcast(self) -> bool:
-        """Enable broadcast mode across all sessions.
+        """Enable broadcast mode.
+
+        Note: Broadcast is enabled when creating sessions if broadcast: true in config.
 
         Returns:
-            True if broadcast enabled successfully
+            True if broadcast enabled
         """
-        async def _enable():
-            import iterm2
-
-            if not self._iterm2_sessions:
-                self.logger.warning("SSHplex: No sessions to enable broadcast")
-                return False
-
-            self._broadcast_domain = iterm2.broadcast.BroadcastDomain()
-            for session in self._iterm2_sessions.values():
-                self._broadcast_domain.add_session(session)
-
-            await iterm2.async_set_broadcast_domains(
-                self._connection,
-                [self._broadcast_domain]
-            )
-            self._broadcast_enabled = True
-            self.logger.info("SSHplex: Broadcast mode ENABLED")
-            return True
-
-        try:
-            return asyncio.run(_enable())
-        except Exception as e:
-            self.logger.error(f"SSHplex: Failed to enable broadcast: {e}")
-            return False
+        self._broadcast_enabled = True
+        self.logger.info("SSHplex: Broadcast mode will be enabled when session is created")
+        return True
 
     def disable_broadcast(self) -> bool:
         """Disable broadcast mode.
 
         Returns:
-            True if broadcast disabled successfully
+            True if broadcast disabled
         """
-        async def _disable():
-            import iterm2
-
-            await iterm2.async_set_broadcast_domains(self._connection, [])
-            self._broadcast_domain = None
-            self._broadcast_enabled = False
-            self.logger.info("SSHplex: Broadcast mode DISABLED")
-            return True
-
-        try:
-            return asyncio.run(_disable())
-        except Exception as e:
-            self.logger.error(f"SSHplex: Failed to disable broadcast: {e}")
-            return False
-
-    def toggle_broadcast(self) -> bool:
-        """Toggle broadcast mode.
-
-        Returns:
-            True if toggle successful
-        """
-        if self._broadcast_enabled:
-            return self.disable_broadcast()
-        return self.enable_broadcast()
-
-    def setup_tiled_layout(self) -> bool:
-        """Apply tiled layout to all tabs.
-
-        Returns:
-            True if layout applied successfully
-        """
-        async def _layout():
-            import iterm2
-
-            if not self._window:
-                return False
-
-            for tab in self._window.tabs:
-                sessions = tab.sessions
-                if len(sessions) > 1:
-                    # Equal sizes
-                    for session in sessions:
-                        session.preferred_size = iterm2.util.Size(80, 24)
-                    await tab.async_update_layout()
-
-            self.logger.info("SSHplex: Applied tiled layout")
-            return True
-
-        try:
-            return asyncio.run(_layout())
-        except Exception as e:
-            self.logger.error(f"SSHplex: Failed to apply layout: {e}")
-            return False
-
-    def set_pane_title(self, pane_id: str, title: str) -> bool:
-        """Set the title of a specific pane (session).
-
-        Args:
-            pane_id: Hostname (used as session identifier)
-            title: New title
-
-        Returns:
-            True if title set successfully
-        """
-        async def _set_title():
-            session = self._iterm2_sessions.get(pane_id)
-            if not session:
-                return False
-
-            await session.async_set_name(title)
-            return True
-
-        try:
-            return asyncio.run(_set_title())
-        except Exception as e:
-            self.logger.error(f"SSHplex: Failed to set pane title: {e}")
-            return False
-
-    def attach_to_session(self, auto_attach: bool = True) -> None:
-        """Prepare session for interactive use.
-
-        Args:
-            auto_attach: If True, bring window to front
-        """
-        if not auto_attach:
-            print(
-                f"\n✅ iTerm2 session '{self.session_name}' created "
-                f"with {len(self._iterm2_sessions)} connections"
-            )
-            print("💡 Use iTerm2's native features to interact")
-            return
-
-        async def _attach():
-            if self._window:
-                await self._window.async_activate()
-                print(
-                    f"\n✅ iTerm2 window activated "
-                    f"with {len(self._iterm2_sessions)} sessions"
-                )
-
-        try:
-            asyncio.run(_attach())
-        except Exception as e:
-            self.logger.error(f"SSHplex: Failed to attach: {e}")
+        self._broadcast_enabled = False
+        self.logger.info("SSHplex: Broadcast mode disabled")
+        return True
 
     def close_session(self) -> None:
-        """Close the iTerm2 window and disconnect."""
-        from contextlib import suppress
+        """Close the iTerm2 window.
 
-        async def _close():
-            if self._window:
-                with suppress(Exception):
-                    await self._window.async_close(force=True)
+        Note: User should close iTerm2 window manually.
+        """
+        self._pending_sessions.clear()
+        self._broadcast_enabled = False
+        self.logger.info(f"SSHplex: iTerm2 native session '{self.session_name}' cleared")
 
-            await self._disconnect()
+    def attach_to_session(self, auto_attach: bool = True) -> None:
+        """Create iTerm2 sessions with all queued SSH connections.
+
+        This is the main entry point that creates the iTerm2 window and panes.
+
+        Args:
+            auto_attach: If True, create sessions immediately
+        """
+        if not self._pending_sessions:
+            self.logger.warning("SSHplex: No sessions to create")
+            print("\n⚠️  No SSH connections to create.")
+            return
 
         try:
-            asyncio.run(_close())
+            import iterm2
+        except ImportError:
+            print("\n❌ iTerm2 Python API not installed.")
+            print("   Install with: pip install 'sshplex[iterm2]'")
+            return
+
+        # Build sessions list for the async function
+        sessions_data = list(self._pending_sessions.items())
+        max_panes = self._max_panes_per_tab
+        profile = self._profile
+        split_pattern = self._split_pattern
+        enable_broadcast = self._broadcast_enabled and len(sessions_data) > 1
+
+        async def _create_sessions(connection: Any) -> None:
+            """Create all sessions in a single async context."""
+            # Create new window
+            window = await iterm2.Window.async_create(connection, profile=profile)
+            if not window:
+                self.logger.error("SSHplex: Failed to create iTerm2 window")
+                return
+
+            self.logger.info(f"SSHplex: Created iTerm2 window for {len(sessions_data)} sessions")
+
+            sessions: List[Any] = []
+            current_tab = window.current_tab
+            current_tab_pane_count = 0
+
+            for hostname, command in sessions_data:
+                # Check if we need a new tab
+                if current_tab_pane_count >= max_panes:
+                    self.logger.info(f"SSHplex: Creating new tab (max {max_panes} panes)")
+                    current_tab = await window.async_create_tab(profile=profile)
+                    current_tab_pane_count = 0
+
+                if current_tab_pane_count == 0:
+                    # First session in tab - use existing
+                    session = current_tab.current_session
+                else:
+                    # Split existing session
+                    if split_pattern == 'vertical':
+                        vertical = True
+                    elif split_pattern == 'horizontal':
+                        vertical = False
+                    else:  # alternate
+                        vertical = (current_tab_pane_count % 2 == 0)
+
+                    last_session = sessions[-1] if sessions else current_tab.current_session
+                    session = await last_session.async_split_pane(vertical=vertical, profile=profile)
+
+                if not session:
+                    self.logger.error(f"SSHplex: Failed to create session for {hostname}")
+                    continue
+
+                # Set session name (SSHplex-controlled)
+                await session.async_set_name(hostname)
+
+                # Send command
+                await session.async_send_text(command + "\n")
+
+                sessions.append(session)
+                current_tab_pane_count += 1
+                self.logger.info(f"SSHplex: Created session for '{hostname}'")
+
+            # Enable broadcast if requested
+            if enable_broadcast and len(sessions) > 1:
+                domain = iterm2.broadcast.BroadcastDomain()
+                for session in sessions:
+                    domain.add_session(session)
+                await iterm2.async_set_broadcast_domains(connection, [domain])
+                self.logger.info("SSHplex: Broadcast mode ENABLED")
+
+            print(f"\n✅ iTerm2 session created with {len(sessions)} connections")
+            if enable_broadcast:
+                print("📡 Broadcast mode enabled - input goes to all sessions")
+
+        # Run with iTerm2's run_until_complete to maintain connection
+        try:
+            print(f"\n🚀 Creating iTerm2 session with {len(sessions_data)} SSH connections...")
+            iterm2.run_until_complete(_create_sessions)
+            self.logger.info("SSHplex: iTerm2 session created successfully")
         except Exception as e:
-            self.logger.error(f"SSHplex: Error closing session: {e}")
-        finally:
-            self._iterm2_sessions.clear()
-            self._broadcast_domain = None
-            self._broadcast_enabled = False
-            self._window = None
-            self._current_tab = None
-            self._current_tab_pane_count = 0
-            self.logger.info(f"SSHplex: iTerm2 native session '{self.session_name}' closed")
+            error_msg = str(e)
+            if "Connect call failed" in error_msg or "Connection refused" in error_msg:
+                print("\n❌ iTerm2 Python API is not enabled.")
+                print("   To fix:")
+                print("   1. Open iTerm2")
+                print("   2. Go to iTerm2 → Settings → General → Magic")
+                print("   3. Enable 'Python API'")
+                print("   4. Restart iTerm2 and try again")
+            else:
+                print(f"\n❌ Failed to create iTerm2 session: {e}")
+            self.logger.error(f"SSHplex: Failed to create iTerm2 session: {e}")
 
     def get_session_name(self) -> str:
         """Get the session name."""
@@ -565,3 +348,27 @@ class ITerm2NativeManager(MultiplexerBase):
         iTerm2 has built-in broadcast shortcuts (Cmd+Option+I).
         """
         return True
+
+    def setup_tiled_layout(self) -> bool:
+        """Apply tiled layout to all tabs.
+
+        Note: Called after attach_to_session in base class, but sessions
+        are already created in iTerm2 native mode.
+        """
+        # Layout is applied automatically when creating panes
+        return True
+
+    def set_pane_title(self, pane_id: str, title: str) -> bool:
+        """Set the title of a specific pane (session).
+
+        Note: Not supported after session creation in iTerm2 native mode.
+
+        Args:
+            pane_id: Hostname (used as session identifier)
+            title: New title
+
+        Returns:
+            False (not supported after creation)
+        """
+        self.logger.warning("SSHplex: set_pane_title not supported after session creation")
+        return False

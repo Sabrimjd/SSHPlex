@@ -58,69 +58,60 @@ class TestITerm2NativeManagerInit:
 class TestITerm2NativeManagerSession:
     """Tests for session management."""
 
-    def test_create_session_fails_without_iterm2(self, manager):
-        """Test that manager validates iTerm2 API on init."""
-        # Manager already validates iTerm2 API in __init__
-        # If we get here, iterm2 module check passed (or mocked)
-        assert manager.session_name == 'test-session'
+    def test_create_session_returns_true(self, manager):
+        """Test that create_session returns True."""
+        assert manager.create_session() is True
+
+    def test_create_pane_queues_session(self, manager):
+        """Test that create_pane queues a session."""
+        result = manager.create_pane('host1', 'ssh user@host1')
+        assert result is True
+        assert 'host1' in manager._pending_sessions
+        assert manager._pending_sessions['host1'] == 'ssh user@host1'
 
 
 class TestITerm2NativeManagerBroadcast:
     """Tests for broadcast functionality."""
 
-    def test_enable_broadcast_no_sessions(self, manager):
-        """Test enable broadcast fails without sessions."""
-        manager._iterm2_sessions = {}
-        manager._connection = MagicMock()
-
+    def test_enable_broadcast(self, manager):
+        """Test enable broadcast sets flag."""
         result = manager.enable_broadcast()
-
-        assert result is False
-
-    def test_toggle_broadcast_calls_enable(self, manager):
-        """Test toggling broadcast calls enable when disabled."""
-        manager._connection = MagicMock()
-        manager._iterm2_sessions = {'host1': MagicMock()}
-        manager._broadcast_enabled = False
-
-        # Mock enable_broadcast to return True
-        with patch.object(manager, 'enable_broadcast', return_value=True) as mock_enable:
-            result = manager.toggle_broadcast()
-
-        mock_enable.assert_called_once()
         assert result is True
+        assert manager._broadcast_enabled is True
+
+    def test_disable_broadcast(self, manager):
+        """Test disable broadcast clears flag."""
+        manager._broadcast_enabled = True
+        result = manager.disable_broadcast()
+        assert result is True
+        assert manager._broadcast_enabled is False
+
+    def test_broadcast_command_without_enable(self, manager):
+        """Test broadcasting command fails when not enabled."""
+        manager._broadcast_enabled = False
+        result = manager.broadcast_command('ls -la')
+        assert result is False
 
 
 class TestITerm2NativeManagerCommand:
     """Tests for command sending."""
 
-    def test_send_command_unknown_host(self, manager):
-        """Test sending command to unknown host."""
-        result = manager.send_command('unknown', 'ls -la')
-
-        assert result is False
-
-    def test_broadcast_command_without_enable(self, manager):
-        """Test broadcasting command fails when not enabled."""
-        manager._broadcast_enabled = False
-        manager._iterm2_sessions = {'host1': MagicMock()}
-
-        result = manager.broadcast_command('ls -la')
-
+    def test_send_command_returns_false(self, manager):
+        """Test sending command returns False (not supported after creation)."""
+        result = manager.send_command('host1', 'ls -la')
         assert result is False
 
 
 class TestITerm2NativeManagerClose:
     """Tests for session closing."""
 
-    def test_close_session_no_window(self, manager):
-        """Test closing when no window exists."""
-        manager._window = None
-        manager._connection = None
-
-        # Should not raise
+    def test_close_session_clears_pending(self, manager):
+        """Test closing session clears pending sessions."""
+        manager._pending_sessions['host1'] = 'ssh user@host1'
+        manager._broadcast_enabled = True
         manager.close_session()
-        assert len(manager._iterm2_sessions) == 0
+        assert len(manager._pending_sessions) == 0
+        assert manager._broadcast_enabled is False
 
 
 class TestITerm2NativeManagerAttach:
@@ -130,14 +121,11 @@ class TestITerm2NativeManagerAttach:
         """Test getting session name."""
         assert manager.get_session_name() == 'test-session'
 
-    def test_attach_to_session_no_auto(self, manager, capsys):
-        """Test attach without auto shows message."""
-        manager._iterm2_sessions = {'host1': MagicMock()}
+    def test_attach_to_session_no_sessions(self, manager, capsys):
+        """Test attach with no sessions shows warning."""
         manager.attach_to_session(auto_attach=False)
-
         captured = capsys.readouterr()
-        assert 'test-session' in captured.out
-        assert '1 connections' in captured.out
+        assert 'No SSH connections' in captured.out
 
 
 class TestITerm2NativeManagerConfig:
