@@ -227,6 +227,15 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
                 with TabPane("Tmux", id="tab-tmux"), VerticalScroll():
                     yield _form_field(
+                        "cfg-tmux-backend",
+                        "Backend",
+                        Select(
+                            [("tmux", "tmux"), ("iTerm2 Native", "iterm2-native")],
+                            value=getattr(self.config.tmux, 'backend', 'tmux'),
+                        ),
+                        "Multiplexer backend (iTerm2 native is macOS only)",
+                    )
+                    yield _form_field(
                         "cfg-tmux-layout",
                         "Layout",
                         Select(
@@ -254,9 +263,9 @@ class ConfigEditorScreen(ModalScreen[bool]):
                     yield Static("iTerm2 Integration (macOS)", classes="section-header")
                     yield _form_field(
                         "cfg-tmux-control_with_iterm2",
-                        "Enable iTerm2",
+                        "Enable iTerm2 -CC Mode",
                         Switch(value=self.config.tmux.control_with_iterm2),
-                        "Use iTerm2 tmux -CC mode on macOS",
+                        "Use iTerm2 tmux -CC mode (requires backend=tmux)",
                     )
                     # Get iTerm2 attach target with validation for existing configs
                     iterm2_target = getattr(self.config.tmux, 'iterm2_attach_target', 'new-window')
@@ -276,6 +285,15 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         "iTerm2 Profile",
                         Input(value=getattr(self.config.tmux, 'iterm2_profile', 'Default')),
                         "iTerm2 profile name to use",
+                    )
+                    yield _form_field(
+                        "cfg-tmux-iterm2_split_pattern",
+                        "Split Pattern (iTerm2 Native)",
+                        Select(
+                            [("Alternate", "alternate"), ("Vertical", "vertical"), ("Horizontal", "horizontal")],
+                            value=getattr(self.config.tmux, 'iterm2_split_pattern', 'alternate'),
+                        ),
+                        "Pane split pattern for iTerm2 native backend",
                     )
 
                 with TabPane("Sources", id="tab-sources"), VerticalScroll():
@@ -617,6 +635,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
         # Tmux
         data["tmux"] = {
+            "backend": self._get_select_value("cfg-tmux-backend", "tmux"),
             "layout": self._get_select_value("cfg-tmux-layout", "tiled"),
             "broadcast": self._get_switch_value("cfg-tmux-broadcast"),
             "window_name": self._get_input_value("cfg-tmux-window_name", "sshplex"),
@@ -624,6 +643,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
             "control_with_iterm2": self._get_switch_value("cfg-tmux-control_with_iterm2"),
             "iterm2_attach_target": self._get_select_value("cfg-tmux-iterm2_attach_target", "new-window"),
             "iterm2_profile": self._get_input_value("cfg-tmux-iterm2_profile", "Default"),
+            "iterm2_split_pattern": self._get_select_value("cfg-tmux-iterm2_split_pattern", "alternate"),
         }
 
         # Sources
