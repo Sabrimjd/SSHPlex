@@ -203,7 +203,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
                 with open(cache_file) as f:
                     hosts_data = yaml.safe_load(f) or []
 
-                keys = set()
+                keys: set[str] = set()
                 for host in hosts_data[:200]:
                     if not isinstance(host, dict):
                         continue
