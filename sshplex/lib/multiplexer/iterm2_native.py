@@ -7,6 +7,8 @@ Backend options:
 - backend: "iterm2-native" - Pure iTerm2 Python API (no tmux dependency)
 """
 
+import contextlib
+import io
 import platform
 import re
 from typing import Any, List, Optional, Tuple
@@ -544,7 +546,22 @@ class ITerm2NativeManager(MultiplexerBase):
         # Run with iTerm2's run_until_complete to maintain connection
         try:
             print(f"\n🚀 Creating iTerm2 session with {len(sessions_data)} SSH connections...")
-            iterm2.run_until_complete(_create_sessions)
+            noisy_stderr = io.StringIO()
+            with contextlib.redirect_stderr(noisy_stderr):
+                iterm2.run_until_complete(_create_sessions)
+
+            stderr_text = noisy_stderr.getvalue().strip()
+            if stderr_text:
+                benign_markers = [
+                    "ConnectionClosedError",
+                    "CancelledError",
+                    "sent 1000 (OK)",
+                    "no close frame received",
+                ]
+                if any(marker in stderr_text for marker in benign_markers):
+                    self.logger.debug("SSHplex: Suppressed benign iTerm2 websocket shutdown noise")
+                else:
+                    self.logger.warning(f"SSHplex: iTerm2 stderr output: {stderr_text}")
             self.logger.info("SSHplex: iTerm2 session created successfully")
         except Exception as e:
             error_msg = str(e)

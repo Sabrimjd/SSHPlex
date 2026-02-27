@@ -108,7 +108,7 @@ Examples:
             return debug_mode(config, logger)
         else:
             # TUI mode - main application
-            return tui_mode(config, logger)
+            return tui_mode(config, logger, args.config)
 
     except FileNotFoundError as e:
         print(f"Error: {e}")
@@ -236,13 +236,13 @@ def debug_mode(config: Any, logger: Any) -> int:
     return 0
 
 
-def tui_mode(config: Any, logger: Any) -> int:
+def tui_mode(config: Any, logger: Any, config_path: Optional[str] = None) -> int:
     """Run in TUI mode for interactive host selection and connection."""
     logger.info("Starting TUI mode - interactive host selection")
 
     try:
         # Start the host selector TUI
-        app = HostSelector(config=config)
+        app = HostSelector(config=config, config_path=config_path or "")
         selected_hosts = app.run()
 
         if not selected_hosts:

@@ -1,64 +1,72 @@
 sshplex:
-  version: "1.6.0"
-  session_prefix: "sshplex-demo"
-
+  version: 1.6.1
+  session_prefix: sshplex-demo
 sot:
-  providers: ["ansible", "consul"]
+  providers:
+  - ansible
+  - consul
   import:
-    - name: "demo-ansible"
-      type: ansible
-      inventory_paths:
-        - "demo/ansible-inventory-demo.yml"
-
-    - name: "demo-consul"
-      type: consul
-      config:
-        host: "127.0.0.1"
-        port: 8500
-        token: ""
-        scheme: "http"
-        verify: false
-        dc: "dc1"
-
+  - name: demo-ansible
+    type: ansible
+    verify_ssl: true
+    timeout: 30
+    default_filters: {}
+    inventory_paths:
+    - demo/ansible-inventory-demo.yml
+  - name: demo-consul
+    type: consul
+    verify_ssl: true
+    timeout: 30
+    default_filters: {}
+    config:
+      host: 127.0.0.1
+      port: 8500
+      token: ''
+      scheme: http
+      verify: true
+      dc: dc1
+      cert: ''
 ssh:
-  username: "sab"
-  key_path: "~/.ssh/id_rsa"
+  username: sab
+  key_path: ~/.ssh/id_rsa
   timeout: 10
   port: 22
   strict_host_key_checking: false
-  user_known_hosts_file: ""
+  user_known_hosts_file: ''
   retry:
     enabled: true
     max_attempts: 2
-    delay_seconds: 1
+    delay_seconds: 1.0
     exponential_backoff: true
   proxy: []
-
 tmux:
-  backend: "iterm2-native"
+  backend: iterm2-native
   use_panes: true
-  layout: "tiled"
+  layout: tiled
   broadcast: false
-  window_name: "sshplex-demo"
+  window_name: sshplex-demo
   max_panes_per_window: 5
   control_with_iterm2: false
-  iterm2_attach_target: "new-window"
-  iterm2_profile: "Default"
-  iterm2_native_target: "current-window"
+  iterm2_attach_target: new-window
+  iterm2_profile: Default
+  iterm2_native_target: current-window
   iterm2_native_hide_from_history: true
-  iterm2_split_pattern: "alternate"
-
+  iterm2_split_pattern: alternate
 logging:
   enabled: true
-  level: "INFO"
-  file: "logs/sshplex-demo.log"
-
+  level: INFO
+  file: logs/sshplex-demo.log
 ui:
   show_log_panel: true
   log_panel_height: 20
-  table_columns: ["name", "ip", "cluster", "role", "tags", "provider"]
-
+  table_columns:
+  - name
+  - ip
+  - cluster
+  - role
+  - tags
+  - provider
 cache:
   enabled: false
-  cache_dir: "~/.cache/sshplex"
+  cache_dir: ~/.cache/sshplex
   ttl_hours: 24

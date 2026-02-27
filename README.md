@@ -8,8 +8,8 @@ SSHplex is a Python-based SSH connection multiplexer with a modern TUI. Connect 
 
 - 🖥️ **Modern TUI** - Textual-based host selector with search, sort, and multi-select
 - 🔌 **Multiple Sources** - NetBox, Ansible, Consul, static lists - use them together
-- 📦 **3 Backends** - tmux standalone, tmux + iTerm2, or iTerm2 native (macOS)
-- ✏️ **Config Editor** - Built-in YAML editor with validation (`e` key)
+- 📦 **3 Mux Backends** - tmux standalone, tmux + iTerm2, or iTerm2 native (macOS)
+- ✏️ **Config Editor** - Built-in YAML editor with validation 
 - 🔄 **Broadcast Input** - Sync commands across multiple SSH sessions
 - 🔐 **SSH Security** - Configurable host key checking and retry logic
 - 🚀 **Fast Startup** - Intelligent caching with configurable TTL
@@ -30,23 +30,8 @@ sshplex
 ### Prerequisites
 
 - Python 3.8+
-- tmux (Linux/macOS) or iTerm2 (macOS)
+- tmux (Linux/macOS) and/or iTerm2 (macOS)
 - SSH key configured for target hosts
-
-## Usage
-
-| Key | Action |
-|-----|--------|
-| `Space` | Toggle host selection |
-| `a` / `d` | Select / Deselect all |
-| `Enter` | Connect to selected hosts |
-| `/` | Search/filter hosts |
-| `p` | Toggle panes/tabs mode |
-| `b` | Toggle broadcast mode |
-| `e` | Open config editor |
-| `s` | Open session manager |
-| `h` | Show keyboard shortcuts |
-| `q` | Quit |
 
 ## Multiplexer Backends
 
@@ -56,58 +41,6 @@ sshplex
 | **tmux + iTerm2** | macOS | Native UI + persistence |
 | **iTerm2 native** | macOS | Simple setup, no tmux dependency |
 
-```yaml
-# ~/.config/sshplex/sshplex.yaml
-tmux:
-  backend: "tmux"  # or "iterm2-native" on macOS
-  layout: "tiled"
-  max_panes_per_window: 5
-```
-
-## Sources of Truth
-
-### Static Hosts
-```yaml
-sot:
-  import:
-    - name: "my-servers"
-      type: static
-      hosts:
-        - {name: "web-01", ip: "192.168.1.10", tags: ["web"]}
-```
-
-### NetBox
-```yaml
-sot:
-  import:
-    - name: "prod"
-      type: netbox
-      url: "https://netbox.example.com/"
-      token: "your-api-token"
-```
-
-### Ansible
-```yaml
-sot:
-  import:
-    - name: "inventory"
-      type: ansible
-      inventory_paths: ["/path/to/inventory.yml"]
-```
-
-### Consul
-```bash
-pip install "sshplex[consul]"
-```
-```yaml
-sot:
-  import:
-    - name: "dc1"
-      type: consul
-      config:
-        host: "consul.example.com"
-        token: "your-token"
-```
 
 ## Local Demo (Consul + Ansible)
 
@@ -126,43 +59,10 @@ Demo files:
 - `demo/docker-compose.consul-demo.yml`
 - `demo/sshplex.demo.yaml`
 
-Example config snippet:
-
-```yaml
-sot:
-  providers: ["ansible", "consul"]
-  import:
-    - name: "demo-ansible"
-      type: ansible
-      inventory_paths:
-        - "demo/ansible-inventory-demo.yml"
-
-    - name: "demo-consul"
-      type: consul
-      config:
-        host: "127.0.0.1"
-        port: 8500
-        token: ""
-        scheme: "http"
-        verify: false
-        dc: "dc1"
-```
-
 Run with the bundled demo config:
 
 ```bash
 sshplex --config demo/sshplex.demo.yaml
-```
-
-## CLI Reference
-
-```bash
-sshplex                        # Launch TUI
-sshplex --onboarding           # Interactive setup wizard
-sshplex --debug                # Test provider connectivity
-sshplex --show-config          # Show config paths
-sshplex --clear-cache          # Clear host cache
-sshplex --config /path/to.yml  # Use custom config
 ```
 
 ## Documentation
@@ -179,14 +79,8 @@ sshplex --config /path/to.yml  # Use custom config
 # Basic (tmux only)
 pip install sshplex
 
-# With Consul support
-pip install "sshplex[consul]"
-
-# With iTerm2 native support (macOS)
-pip install "sshplex[iterm2]"
-
-# Development
-pip install -e ".[dev]"
+# With Consul,DEV,Iterm2 support
+pip install "sshplex[dev,consul,iterm2]"
 ```
 
 ## Development

@@ -87,10 +87,24 @@ class TmuxManager(MultiplexerBase):
     @staticmethod
     def _split_window(window: Any, vertical: bool = True) -> Any:
         """Split tmux window with libtmux version compatibility."""
+        split_window = getattr(window, "split_window", None)
+        if callable(split_window):
+            try:
+                return split_window(vertical=vertical)
+            except Exception as exc:
+                if "deprecated" not in str(exc).lower() and "removed" not in str(exc).lower():
+                    raise
+
         split = getattr(window, "split", None)
         if callable(split):
-            return split(vertical=vertical)
-        return window.split_window(vertical=vertical)
+            try:
+                from libtmux.window import PaneDirection
+                direction = PaneDirection.Below if vertical else PaneDirection.Right
+                return split(direction=direction)
+            except Exception:
+                return split()
+
+        raise RuntimeError("No compatible tmux split method found")
 
     def create_session(self) -> bool:
         """Create a new tmux session with SSHplex branding."""

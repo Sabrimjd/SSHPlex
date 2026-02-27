@@ -44,6 +44,7 @@ class SSHplexConnector:
         self.backend = getattr(config.tmux, 'backend', 'tmux') if config else 'tmux'
         self.last_success_count = 0
         self.last_failed_hosts: List[str] = []
+        self.multiplexer: Any
 
         # Initialize multiplexer based on backend config
         if self.backend == "iterm2-native":
