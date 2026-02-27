@@ -9,7 +9,7 @@ Backend options:
 
 import platform
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from ..logger import get_logger
 from .base import MultiplexerBase
