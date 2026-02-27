@@ -1,6 +1,8 @@
 """SSHplex TUI tmux session manager widget."""
 
 import asyncio
+import contextlib
+import io
 from typing import Any, List, Optional
 
 import libtmux
@@ -91,16 +93,31 @@ class ConfirmDialog(ModalScreen[bool]):
 class TmuxSession:
     """Simple tmux session data structure."""
 
-    def __init__(self, name: str, session_id: str, created: str, windows: int, attached: bool = False):
+    def __init__(
+        self,
+        name: str,
+        session_id: str,
+        created: str,
+        age: str,
+        windows: int,
+        panes: int,
+        clients: int,
+        active_cmd: str,
+        broadcast: bool = False,
+    ):
         self.name = name
         self.session_id = session_id
         self.created = created
+        self.age = age
         self.windows = windows
-        self.attached = attached
+        self.panes = panes
+        self.clients = clients
+        self.active_cmd = active_cmd
+        self.broadcast = broadcast
 
     def __str__(self) -> str:
-        status = "📎" if self.attached else "💤"
-        return f"{status} {self.name} ({self.windows} windows)"
+        status = "ON" if self.broadcast else "OFF"
+        return f"{self.name} ({self.windows} windows, broadcast {status})"
 
 
 class ITerm2ManagedTab:
@@ -130,20 +147,20 @@ class ITerm2SessionManager(ModalScreen):
     }
 
     #session-dialog {
-        width: 90;
-        height: 22;
+        width: 96%;
+        height: 88%;
         border: thick $primary 60%;
         background: $surface;
     }
 
     #session-table {
         height: 1fr;
-        margin: 1;
+        margin: 0 1;
     }
 
     #session-header {
         height: 3;
-        margin: 1;
+        margin: 1 1 0 1;
         text-align: center;
         background: $primary;
         color: $text;
@@ -151,7 +168,7 @@ class ITerm2SessionManager(ModalScreen):
 
     #session-footer {
         height: 3;
-        margin: 1;
+        margin: 0 1 1 1;
         text-align: center;
         background: $surface;
         color: $text-muted;
@@ -237,7 +254,9 @@ class ITerm2SessionManager(ModalScreen):
                     )
 
         try:
-            iterm2.run_until_complete(_load)
+            noisy_stderr = io.StringIO()
+            with contextlib.redirect_stderr(noisy_stderr):
+                iterm2.run_until_complete(_load)
         except SystemExit as e:
             raise RuntimeError("Failed to connect to iTerm2 API") from e
         return loaded
@@ -322,7 +341,9 @@ class ITerm2SessionManager(ModalScreen):
                         return
 
         try:
-            iterm2.run_until_complete(_kill)
+            noisy_stderr = io.StringIO()
+            with contextlib.redirect_stderr(noisy_stderr):
+                iterm2.run_until_complete(_kill)
         except SystemExit as e:
             raise RuntimeError("Failed to connect to iTerm2 API") from e
 
@@ -381,36 +402,36 @@ class TmuxSessionManager(ModalScreen):
     }
 
     #session-dialog {
-        width: 80;
-        height: 20;
+        width: 96%;
+        height: 88%;
         border: thick $primary 60%;
         background: $surface;
     }
 
     #session-table {
         height: 1fr;
-        margin: 1;
+        margin: 0 1;
     }
 
     #session-header {
-        height: 3;
-        margin: 1;
+        height: 2;
+        margin: 1 1 0 1;
         text-align: center;
         background: $primary;
         color: $text;
     }
 
     #broadcast-status {
-        height: 2;
-        margin: 1;
+        height: 1;
+        margin: 0 1;
         text-align: center;
         background: $secondary;
         color: $text;
     }
 
     #session-footer {
-        height: 3;
-        margin: 1;
+        height: 2;
+        margin: 0 1 1 1;
         text-align: center;
         background: $surface;
         color: $text-muted;
@@ -443,10 +464,24 @@ class TmuxSessionManager(ModalScreen):
     @staticmethod
     def _split_window(window: Any, vertical: bool = True) -> Any:
         """Split tmux window with libtmux version compatibility."""
+        split_window = getattr(window, "split_window", None)
+        if callable(split_window):
+            try:
+                return split_window(vertical=vertical)
+            except Exception as exc:
+                if "deprecated" not in str(exc).lower() and "removed" not in str(exc).lower():
+                    raise
+
         split = getattr(window, "split", None)
         if callable(split):
-            return split(vertical=vertical)
-        return window.split_window(vertical=vertical)
+            try:
+                from libtmux.window import PaneDirection
+                direction = PaneDirection.Below if vertical else PaneDirection.Right
+                return split(direction=direction)
+            except Exception:
+                return split()
+
+        raise RuntimeError("No compatible tmux split method found")
 
     def _find_tmux_session(self, session_name: str) -> Optional[Any]:
         """Find tmux session with libtmux compatibility fallbacks."""
@@ -484,10 +519,14 @@ class TmuxSessionManager(ModalScreen):
         self.table = self.query_one("#session-table", DataTable)
 
         # Setup table columns
-        self.table.add_column("Status", width=8)
-        self.table.add_column("Session Name", width=25)
-        self.table.add_column("Created", width=20)
-        self.table.add_column("Windows", width=8)
+        self.table.add_column("Broadcast", width=9)
+        self.table.add_column("Session Name", width=26)
+        self.table.add_column("Age", width=9)
+        self.table.add_column("Clients", width=8)
+        self.table.add_column("Active Cmd", width=18)
+        self.table.add_column("Created", width=16)
+        self.table.add_column("Windows", width=7)
+        self.table.add_column("Panes", width=6)
 
         # Load sessions first
         self.load_sessions()
@@ -510,21 +549,36 @@ class TmuxSessionManager(ModalScreen):
             self.sessions.clear()
 
             for session in tmux_sessions:
-                # Check if session is attached (use session.attached property or check windows)
-                try:
-                    # libtmux sessions have an 'attached' property or we can check if it has windows
-                    attached = hasattr(session, 'attached') and session.attached
-                    if not hasattr(session, 'attached'):
-                        # Fallback: check if session has active windows/panes
-                        attached = len(session.windows) > 0 and any(len(w.panes) > 0 for w in session.windows)
-                except (AttributeError, RuntimeError):
-                    attached = False
-
                 # Get window count safely
                 try:
                     window_count = len(session.windows) if hasattr(session, 'windows') else 0
                 except (AttributeError, RuntimeError):
                     window_count = 0
+
+                # Get pane count safely
+                try:
+                    pane_count = sum(len(w.panes) for w in session.windows)
+                except (AttributeError, RuntimeError, TypeError):
+                    pane_count = 0
+
+                # Read synchronize-panes state across session windows
+                try:
+                    broadcast_on = any(
+                        bool(window.show_options().get("synchronize-panes"))
+                        for window in session.windows
+                    )
+                except Exception:
+                    broadcast_on = False
+
+                # Get attached client count
+                try:
+                    attached_result = session.cmd('display-message', '-p', '#{session_attached}')
+                    if attached_result and getattr(attached_result, 'stdout', None):
+                        clients = int(attached_result.stdout[0])
+                    else:
+                        clients = 0
+                except Exception:
+                    clients = 0
 
                 # Get creation time - libtmux doesn't provide session.created directly
                 try:
@@ -535,17 +589,54 @@ class TmuxSessionManager(ModalScreen):
                         timestamp = int(result.stdout[0])
                         created_dt = datetime.datetime.fromtimestamp(timestamp)
                         created = created_dt.strftime("%Y-%m-%d %H:%M:%S")
+                        now_dt = datetime.datetime.now()
+                        age_delta = max((now_dt - created_dt).total_seconds(), 0)
+                        if age_delta < 60:
+                            age = f"{int(age_delta)}s"
+                        elif age_delta < 3600:
+                            age = f"{int(age_delta // 60)}m"
+                        elif age_delta < 86400:
+                            age = f"{int(age_delta // 3600)}h"
+                        else:
+                            age = f"{int(age_delta // 86400)}d"
                     else:
                         created = "Unknown"
+                        age = "-"
                 except (ValueError, AttributeError, IndexError, OSError):
                     created = "Unknown"
+                    age = "-"
+
+                # Summarize active pane commands in this session
+                cmd_counts: dict[str, int] = {}
+                try:
+                    for window in session.windows:
+                        for pane in window.panes:
+                            try:
+                                pane_cmd = str(getattr(pane, 'pane_current_command', '') or '')
+                            except Exception:
+                                pane_cmd = ''
+                            if not pane_cmd:
+                                pane_cmd = '?'
+                            cmd_counts[pane_cmd] = cmd_counts.get(pane_cmd, 0) + 1
+                except Exception:
+                    pass
+
+                if cmd_counts:
+                    top = sorted(cmd_counts.items(), key=lambda x: x[1], reverse=True)[:2]
+                    active_cmd = ", ".join(f"{name}({count})" for name, count in top)
+                else:
+                    active_cmd = "-"
 
                 tmux_session = TmuxSession(
                     name=session.session_name or "Unknown",
                     session_id=session.session_id or "Unknown",
                     created=created,
+                    age=age,
                     windows=window_count,
-                    attached=attached
+                    panes=pane_count,
+                    clients=clients,
+                    active_cmd=active_cmd,
+                    broadcast=broadcast_on
                 )
                 self.sessions.append(tmux_session)
 
@@ -559,7 +650,7 @@ class TmuxSessionManager(ModalScreen):
             # Show error in table
             if self.table is not None:
                 self.table.clear()
-                self.table.add_row("❌", "tmux error", str(e), "0")
+                self.table.add_row("-", "tmux error", "-", "-", "-", str(e), "0", "0")
 
     def populate_table(self) -> None:
         """Populate the table with session data."""
@@ -570,19 +661,20 @@ class TmuxSessionManager(ModalScreen):
         self.table.clear()
 
         if not self.sessions:
-            self.table.add_row("ℹ️", "No tmux sessions found", "Create one with SSHplex", "0")
+            self.table.add_row("-", "No tmux sessions found", "-", "-", "-", "Create one with SSHplex", "0", "0")
             return
 
         # Add sessions to table
         for session in self.sessions:
-            status_icon = "📎" if session.attached else "💤"
-            status_text = "Active" if session.attached else "Detached"
-
             self.table.add_row(
-                f"{status_icon} {status_text}",
+                "ON" if session.broadcast else "OFF",
                 session.name,
+                session.age,
+                str(session.clients),
+                session.active_cmd,
                 session.created,
                 str(session.windows),
+                str(session.panes),
                 key=session.name
             )
 
@@ -755,8 +847,12 @@ class TmuxSessionManager(ModalScreen):
                     self.logger.error(f"SSHplex: Session '{session.name}' not found")
                     return
 
-                # Toggle broadcast mode
-                self.broadcast_enabled = not self.broadcast_enabled
+                # Toggle from actual current state
+                current_enabled = any(
+                    bool(window.show_options().get("synchronize-panes"))
+                    for window in tmux_session.windows
+                )
+                self.broadcast_enabled = not current_enabled
 
                 if self.broadcast_enabled:
                     # Enable synchronize-panes for all windows in the session
@@ -777,6 +873,9 @@ class TmuxSessionManager(ModalScreen):
                     # Update broadcast status display
                     status_widget = self.query_one("#broadcast-status", Static)
                     status_widget.update("📡 Broadcast: OFF")
+
+                # Refresh table to update per-session broadcast column
+                self.load_sessions()
 
             except Exception as e:
                 self.logger.error(f"SSHplex: Failed to toggle broadcast for session '{session.name}': {e}")

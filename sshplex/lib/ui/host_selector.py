@@ -235,7 +235,7 @@ class HostSelector(App):
     use_panes: reactive[bool] = reactive(True)  # True for panes, False for tabs
     use_broadcast: reactive[bool] = reactive(False)  # True for broadcast enabled, False for disabled
 
-    def __init__(self, config: Any) -> None:
+    def __init__(self, config: Any, config_path: str = "") -> None:
         """Initialize the host selector.
 
         Args:
@@ -243,6 +243,7 @@ class HostSelector(App):
         """
         super().__init__()
         self.config = config
+        self.config_path = config_path
         self.logger = get_logger()
         self.hosts: List[Host] = []
         self.filtered_hosts: List[Host] = []
@@ -716,14 +717,14 @@ class HostSelector(App):
             if saved:
                 self.run_worker(self._reload_config_runtime(), name="reload_config_runtime")
 
-        editor = ConfigEditorScreen(self.config)
+        editor = ConfigEditorScreen(self.config, self.config_path)
         self.push_screen(editor, callback=_on_editor_close)
 
     async def _reload_config_runtime(self) -> None:
         """Reload configuration from disk and apply it live."""
         try:
             old_sot = self.config.sot.model_dump()
-            new_config = load_config()
+            new_config = load_config(self.config_path or None)
             await self._apply_runtime_config(new_config)
             self.log_message("Configuration reloaded successfully")
             if old_sot != new_config.sot.model_dump():

@@ -10,7 +10,9 @@ SSHplex is a Python-based SSH connection multiplexer with a modern TUI. Connect 
 - 🔌 **Multiple Sources** - NetBox, Ansible, Consul, static lists - use them together
 - 📦 **3 Backends** - tmux standalone, tmux + iTerm2, or iTerm2 native (macOS)
 - ✏️ **Config Editor** - Built-in YAML editor with validation (`e` key)
+- 🧭 **Friendly Settings UX** - Table-column presets and safer config value handling
 - 🔄 **Broadcast Input** - Sync commands across multiple SSH sessions
+- 🕵️ **History Control** - Toggle whether native iTerm2-dispatched commands are stored in shell history
 - 🔐 **SSH Security** - Configurable host key checking and retry logic
 - 🚀 **Fast Startup** - Intelligent caching with configurable TTL
 

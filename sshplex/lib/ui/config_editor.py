@@ -1,6 +1,7 @@
 """SSHplex Configuration Editor Screen."""
 
 from typing import Any, Dict, List
+from pathlib import Path
 
 import yaml
 from textual.app import ComposeResult
@@ -42,6 +43,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
     BINDINGS = [
         Binding("escape", "cancel", "Cancel", show=True),
+        Binding("q", "cancel", "Cancel", show=False),
         Binding("ctrl+s", "save", "Save", show=True, priority=True),
     ]
 
@@ -77,15 +79,17 @@ class ConfigEditorScreen(ModalScreen[bool]):
     }
 
     #editor-buttons {
-        height: 3;
+        height: 5;
         dock: bottom;
         align: center middle;
-        margin-top: 1;
+        padding: 1 0;
     }
 
     #editor-buttons Button {
+        height: 3;
         min-width: 18;
         margin: 0 2;
+        content-align: center middle;
     }
 
     TabbedContent {
@@ -153,13 +157,22 @@ class ConfigEditorScreen(ModalScreen[bool]):
     }
     """
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, config_path: str = "") -> None:
         super().__init__()
         self.config = config
+        self.config_path = config_path
         self._proxy_counter = 0
         self._import_counter = 0
         self._import_types: Dict[str, str] = {}  # idx -> current type
         self._mux_backend: str = "tmux"  # current mux backend
+        self._table_column_presets: Dict[str, List[str]] = {
+            "custom": [],
+            "minimal": ["name", "ip"],
+            "standard": ["name", "ip", "cluster", "role", "tags"],
+            "operational": ["name", "ip", "status", "role", "cluster", "source"],
+            "inventory": ["name", "ip", "site", "platform", "env", "role", "status"],
+        }
+        self._table_columns_hint = self._build_table_columns_hint()
 
     @staticmethod
     def _safe_select_initial(value: str, allowed: List[str], default: str) -> str:
@@ -167,6 +180,49 @@ class ConfigEditorScreen(ModalScreen[bool]):
         if value in allowed:
             return value
         return default
+
+    def _detect_table_columns_preset(self) -> str:
+        """Detect which preset matches current table columns."""
+        current = [str(c).strip() for c in self.config.ui.table_columns]
+        for preset, cols in self._table_column_presets.items():
+            if preset == "custom":
+                continue
+            if current == cols:
+                return preset
+        return "custom"
+
+    def _build_table_columns_hint(self) -> str:
+        """Build a user-friendly hint for available table columns."""
+        common = ["name", "ip", "cluster", "role", "tags", "status", "source", "site", "platform", "env"]
+        metadata_keys: List[str] = []
+
+        try:
+            cache_dir = Path(str(getattr(self.config.cache, "cache_dir", "~/cache/sshplex"))).expanduser()
+            cache_file = cache_dir / "hosts.yaml"
+            if cache_file.exists():
+                with open(cache_file) as f:
+                    hosts_data = yaml.safe_load(f) or []
+
+                keys = set()
+                for host in hosts_data[:200]:
+                    if not isinstance(host, dict):
+                        continue
+                    metadata = host.get("metadata", {})
+                    if isinstance(metadata, dict):
+                        keys.update(str(k) for k in metadata.keys())
+
+                metadata_keys = sorted(k for k in keys if k not in {"name", "ip", "metadata"})
+        except Exception:
+            metadata_keys = []
+
+        if metadata_keys:
+            sample = ", ".join(metadata_keys[:8])
+            return (
+                "Presets available. Common: " + ", ".join(common) +
+                f" | Cached metadata keys: {sample}"
+            )
+
+        return "Presets available. Common columns: " + ", ".join(common)
 
     def compose(self) -> ComposeResult:
         with Vertical(id="config-editor-dialog"):
@@ -193,10 +249,25 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         Input(value=str(self.config.ui.log_panel_height)),
                     )
                     yield _form_field(
+                        "cfg-ui-table_columns_preset",
+                        "Table Columns Preset",
+                        Select(
+                            [
+                                ("Custom", "custom"),
+                                ("Minimal", "minimal"),
+                                ("Standard", "standard"),
+                                ("Operational", "operational"),
+                                ("Inventory", "inventory"),
+                            ],
+                            value=self._detect_table_columns_preset(),
+                        ),
+                        "Choose a preset or keep Custom",
+                    )
+                    yield _form_field(
                         "cfg-ui-table_columns",
                         "Table Columns",
                         Input(value=", ".join(self.config.ui.table_columns)),
-                        "Comma-separated column names",
+                        self._table_columns_hint,
                     )
                     yield Static("Logging", classes="section-header")
                     yield _form_field(
@@ -344,6 +415,12 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         "Start with broadcast enabled",
                     )
                     yield _form_field(
+                        "cfg-mux-register_history",
+                        "Register SSHPlex Commands in Shell History",
+                        Switch(value=not bool(getattr(self.config.tmux, 'iterm2_native_hide_from_history', True))),
+                        "iTerm2-native only. OFF means commands are hidden from history.",
+                    )
+                    yield _form_field(
                         "cfg-mux-window_name",
                         "Window Name",
                         Input(value=self.config.tmux.window_name),
@@ -469,13 +546,6 @@ class ConfigEditorScreen(ModalScreen[bool]):
                 ),
                 "Pane split pattern",
             ))
-            children.append(_form_field(
-                "cfg-mux-iterm2_native_hide_from_history",
-                "Hide from Shell History",
-                Switch(value=bool(getattr(self.config.tmux, 'iterm2_native_hide_from_history', True))),
-                "Prefix dispatched commands with a leading space",
-            ))
-
         return Vertical(*children, id="mux-backend-fields-container")
 
     # --- Dynamic proxy list ---
@@ -626,6 +696,14 @@ class ConfigEditorScreen(ModalScreen[bool]):
             if self._mux_backend != new_backend:
                 self._mux_backend = new_backend
                 self.run_worker(self._rebuild_mux_backend_fields(new_backend))
+            return
+
+        # Handle table-column presets
+        if select_id == "cfg-ui-table_columns_preset":
+            preset = str(event.value)
+            if preset in self._table_column_presets and preset != "custom":
+                columns_input = self.query_one("#cfg-ui-table_columns", Input)
+                columns_input.value = ", ".join(self._table_column_presets[preset])
             return
 
         # Handle import type changes
@@ -785,6 +863,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
             "use_panes": self._get_select_value("cfg-mux-use_panes", "panes") == "panes",
             "layout": self._get_select_value("cfg-mux-layout", "tiled"),
             "broadcast": self._get_switch_value("cfg-mux-broadcast"),
+            "iterm2_native_hide_from_history": not self._get_switch_value("cfg-mux-register_history", False),
             "window_name": self._get_input_value("cfg-mux-window_name", "sshplex"),
             "max_panes_per_window": int(self._get_input_value("cfg-mux-max_panes_per_window", "5")),
         }
@@ -800,9 +879,6 @@ class ConfigEditorScreen(ModalScreen[bool]):
             mux_data["iterm2_native_target"] = self._get_select_value("cfg-mux-iterm2_native_target", "current-window")
             mux_data["iterm2_profile"] = self._get_input_value("cfg-mux-iterm2_profile", "Default")
             mux_data["iterm2_split_pattern"] = self._get_select_value("cfg-mux-iterm2_split_pattern", "alternate")
-            mux_data["iterm2_native_hide_from_history"] = self._get_switch_value(
-                "cfg-mux-iterm2_native_hide_from_history"
-            )
 
         data["tmux"] = mux_data
 
@@ -946,7 +1022,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
         # Remove None values for cleaner YAML
         yaml_data = _clean_none(yaml_data)
 
-        config_path = get_default_config_path()
+        config_path = get_default_config_path() if not self.config_path else Path(self.config_path)
         config_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
