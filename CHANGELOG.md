@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.2] - 2026-02-27
+
+### Added
+- tmux session manager now includes richer differentiation fields: broadcast state, pane count, session age, attached clients, and active command summary.
+- Config editor adds table-column presets and a user-friendly shell-history registration toggle for iTerm2-native mode.
+
+### Changed
+- tmux and iTerm2 session manager modals now use larger responsive sizing for better visibility on real terminals.
+- Demo GIF refreshed and compressed for lighter README/demo usage.
+
+### Fixed
+- Resolved tmux session manager reliability regressions for kill/broadcast/refresh actions.
+- Improved libtmux compatibility for pane splitting across deprecated/new API variants.
+- Suppressed benign iTerm2 websocket shutdown noise during mode switching.
+- Config editor now saves and hot-reloads the active `--config` file path instead of always targeting the default config.
+- Tightened settings validation and select safety to avoid crashes from invalid config values.
+
 ## [1.6.1] - 2026-02-26
 
 ### Added
