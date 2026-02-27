@@ -7,11 +7,11 @@ Backend options:
 - backend: "iterm2-native" - Pure iTerm2 Python API (no tmux dependency)
 """
 
+import contextlib
+import io
 import platform
 import re
-import io
-import contextlib
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from ..logger import get_logger
 from .base import MultiplexerBase

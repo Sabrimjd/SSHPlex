@@ -1,7 +1,7 @@
 """SSHplex Configuration Editor Screen."""
 
-from typing import Any, Dict, List
 from pathlib import Path
+from typing import Any, Dict, List
 
 import yaml
 from textual.app import ComposeResult
@@ -209,7 +209,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         continue
                     metadata = host.get("metadata", {})
                     if isinstance(metadata, dict):
-                        keys.update(str(k) for k in metadata.keys())
+                        keys.update(str(k) for k in metadata)
 
                 metadata_keys = sorted(k for k in keys if k not in {"name", "ip", "metadata"})
         except Exception:
