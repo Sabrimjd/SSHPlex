@@ -9,10 +9,18 @@ SSHplex is a Python-based SSH connection multiplexer with a modern TUI. Connect 
 - 🖥️ **Modern TUI** - Textual-based host selector with search, sort, and multi-select
 - 🔌 **Multiple Sources** - NetBox, Ansible, Consul, static lists - use them together
 - 📦 **3 Mux Backends** - tmux standalone, tmux + iTerm2, or iTerm2 native (macOS)
-- ✏️ **Config Editor** - Built-in YAML editor with validation 
+- ✏️ **Config Editor** - Built-in editor with compact source cards, static host rows, and full YAML pane
 - 🔄 **Broadcast Input** - Sync commands across multiple SSH sessions
 - 🔐 **SSH Security** - Configurable host key checking and retry logic
 - 🚀 **Fast Startup** - Intelligent caching with configurable TTL
+
+## What Is New in QoL v2
+
+- **Static host manager in UI** - Add and edit static hosts as rows (`name`, `ip`, `alias`, `user`, `port`, `key_path`) instead of raw YAML blobs.
+- **Per-host SSH preview** - Preview effective SSH values from `ssh -G` in settings and from host selector (`o`).
+- **Smarter table columns** - Detect columns from live hosts/cache/imports, including SSH-oriented fields like `alias`, `user`, `port`, and `key_path`.
+- **Better Sources UX** - Provider toggles and collapsible import cards make large source configs easier to navigate.
+- **Rich YAML view** - Side-by-side YAML edit + syntax-highlight preview for full config inspection.
 
 ## Quick Start
 

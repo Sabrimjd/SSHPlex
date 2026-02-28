@@ -28,6 +28,7 @@ from ..config import get_default_config_path, load_config
 from ..logger import get_logger
 from ..sot.base import Host
 from ..sot.factory import SoTFactory
+from ..utils.ssh_config import build_ssh_command_preview, mask_sensitive, resolve_ssh_effective_config
 from .config_editor import ConfigEditorScreen
 from .session_manager import ITerm2SessionManager, TmuxSessionManager
 
@@ -236,6 +237,7 @@ class HostSelector(App):
         Binding("q", "quit", "Quit", show=True),
         Binding("c", "copy_select", "Copy", show=True),
         Binding("e", "edit_config", "Config", show=True),
+        Binding("o", "show_host_ssh", "SSH View", show=True),
         Binding("l", "toggle_log_panel", "Logs", show=True),
     ]
 
@@ -373,6 +375,7 @@ class HostSelector(App):
         yield SystemCommand("Toggle Broadcast", "Toggle broadcast mode", self.action_toggle_broadcast)
         yield SystemCommand("Toggle Log Panel", "Show or hide the log panel", self.action_toggle_log_panel)
         yield SystemCommand("Clear Logs", "Clear in-app log panel", self.action_clear_logs)
+        yield SystemCommand("Show Host SSH", "Show resolved SSH values for current host", self.action_show_host_ssh)
         yield SystemCommand("Search", "Focus search input", self.action_start_search)
         yield SystemCommand("Help", "Show keyboard shortcuts", self.action_show_help)
         yield SystemCommand("Copy Selection", "Copy selected hosts to clipboard", self.action_copy_select)
@@ -586,7 +589,7 @@ class HostSelector(App):
 
             # Highlight selected hosts with color
             for column in self.config.ui.table_columns:
-                value = str(getattr(host, column, 'N/A'))
+                value = self._get_column_value(host, column)
                 if is_selected:
                     # Highlight selected hosts
                     row_data.append(f"[bold]{value}[/bold]")
@@ -611,6 +614,36 @@ class HostSelector(App):
             return None
         return hosts_to_use[row].name
 
+    @staticmethod
+    def _normalize_column_name(column: str) -> str:
+        """Normalize aliases used in table column config."""
+        mapping = {
+            "source": "provider",
+            "alias": "ssh_alias",
+            "user": "ssh_user",
+            "port": "ssh_port",
+            "key": "ssh_key_path",
+            "key_path": "ssh_key_path",
+            "hostname": "ip",
+        }
+        return mapping.get(column, column)
+
+    def _get_column_value(self, host: Host, column: str) -> str:
+        """Get display value for a table column from host attributes/metadata."""
+        key = self._normalize_column_name(str(column).strip())
+        value = getattr(host, key, None)
+        if value in (None, "") and isinstance(getattr(host, "metadata", None), dict):
+            value = host.metadata.get(key)
+
+        if value in (None, ""):
+            if key == "ssh_user":
+                value = str(getattr(self.config.ssh, "username", ""))
+            elif key == "ssh_port":
+                value = str(getattr(self.config.ssh, "port", 22))
+            else:
+                value = "N/A"
+        return str(value)
+
     def action_copy_select(self) -> None:
 
         hosts = self.get_hosts_to_display()
@@ -624,7 +657,7 @@ class HostSelector(App):
 
         # Host rows
         for host in hosts:
-            row = [str(getattr(host, col, "N/A")) for col in columns]
+            row = [self._get_column_value(host, col) for col in columns]
             table.append(row)
 
         # Compute max width for each column
@@ -804,7 +837,7 @@ class HostSelector(App):
             if saved:
                 self.run_worker(self._reload_config_runtime(), name="reload_config_runtime")
 
-        editor = ConfigEditorScreen(self.config, self.config_path)
+        editor = ConfigEditorScreen(self.config, self.config_path, runtime_hosts=self.hosts)
         self.push_screen(editor, callback=_on_editor_close)
 
     async def _reload_config_runtime(self) -> None:
@@ -904,6 +937,43 @@ class HostSelector(App):
             except Exception as e:
                 self.log_message(f"Could not toggle log panel: {e}", level="warning")
 
+    def action_show_host_ssh(self) -> None:
+        """Show resolved SSH settings for host under cursor."""
+        host_name = self._current_cursor_host_name()
+        if not host_name:
+            self.log_message("No host selected", level="warning")
+            return
+
+        host = next((item for item in self.get_hosts_to_display() if item.name == host_name), None)
+        if not host:
+            self.log_message("Could not find host data", level="warning")
+            return
+
+        alias = str(getattr(host, "ssh_alias", "") or host.metadata.get("ssh_alias", "")).strip()
+        user_override = str(getattr(host, "ssh_user", "") or host.metadata.get("ssh_user", "")).strip()
+        port_override = str(getattr(host, "ssh_port", "") or host.metadata.get("ssh_port", "")).strip()
+        key_override = str(getattr(host, "ssh_key_path", "") or host.metadata.get("ssh_key_path", "")).strip()
+
+        target = alias or host.ip or host.name
+        resolved = resolve_ssh_effective_config(target)
+
+        hostname = resolved.get("hostname", target) if resolved else target
+        user = user_override or resolved.get("user", "") or str(getattr(self.config.ssh, "username", ""))
+        port = port_override or resolved.get("port", "22")
+        identity = key_override or resolved.get("identityfile", "") or str(getattr(self.config.ssh, "key_path", ""))
+        identity_display = mask_sensitive(str(identity).split()[0]) if identity else "-"
+        proxy_jump = resolved.get("proxyjump", "-")
+        try:
+            port_int = int(port)
+        except Exception:
+            port_int = 22
+        preview_cmd = build_ssh_command_preview(hostname, user, port_int, identity)
+
+        self.log_message(
+            f"SSH[{host.name}] cmd={preview_cmd} | host={hostname} user={user or '-'} port={port} key={identity_display} proxyjump={proxy_jump}"
+        )
+        self.notify(f"SSH {host.name}: {user}@{hostname}:{port}", timeout=3)
+
     def update_row_checkbox(self, row_key: str, selected: bool) -> None:
         """Update the checkbox for a specific row."""
         if not self.table:
@@ -986,6 +1056,7 @@ class HostSelector(App):
 | `s` | {'iTerm2 tab manager' if (getattr(self.config.tmux, 'backend', 'tmux') == 'iterm2-native') else ('Session manager (disabled in iTerm2-CC)' if bool(getattr(self.config.tmux, 'control_with_iterm2', False)) else 'Session manager')} |
 | `c` | Copy table to clipboard |
 | `e` | Edit configuration |
+| `o` | Show SSH resolution |
 | `h` | Show this help |
 
 ## Current Settings
@@ -1103,7 +1174,7 @@ class HostSelector(App):
         self.filtered_hosts = [
             host for host in self.hosts
             if any(
-                fnmatch.fnmatchcase(str(getattr(host, attr, "") or "").lower(), term.lower())
+                fnmatch.fnmatchcase(self._get_column_value(host, attr).lower(), term.lower())
                 for attr in self.config.ui.table_columns
             )
         ]

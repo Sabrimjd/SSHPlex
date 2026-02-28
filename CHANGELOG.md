@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.3] - 2026-03-01
+
+### Added
+- Static host management in the Config Editor now uses row-based CRUD fields (`name`, `ip`, `alias`, `user`, `port`, `key_path`) with inline add/remove and SSH preview actions.
+- Host selector adds SSH resolution preview action (`o`) to display effective connection settings for the host under cursor.
+- New `Config YAML` tab includes side-by-side editing and rich syntax preview for full configuration review.
+
+### Changed
+- Sources tab was redesigned for compact workflows with provider checkboxes (`static`, `netbox`, `ansible`, `consul`) and collapsible import cards.
+- Column detection now uses live host data, cache, imports, and unsaved static rows; detection includes SSH-related fields when present.
+- SSH command construction now honors per-host static overrides and `ssh_alias` resolution for user/port/key targeting.
+
+### Fixed
+- Prevented static import UI mount-time crashes while adding imports/hosts dynamically.
+- Improved table/search/copy rendering so normalized columns (for example `source`, `alias`, `user`, `port`, `key_path`) resolve consistently.
+
 ## [1.6.2] - 2026-02-27
 
 ### Added
