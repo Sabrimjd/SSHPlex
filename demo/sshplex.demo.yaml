@@ -1,5 +1,5 @@
 sshplex:
-  version: 1.6.1
+  version: 1.6.2
   session_prefix: sshplex-demo
 sot:
   providers:
@@ -57,6 +57,7 @@ logging:
   level: INFO
   file: logs/sshplex-demo.log
 ui:
+  theme: tokyo-night
   show_log_panel: true
   log_panel_height: 20
   table_columns:
@@ -65,8 +66,7 @@ ui:
   - cluster
   - role
   - tags
-  - provider
 cache:
-  enabled: false
+  enabled: true
   cache_dir: ~/.cache/sshplex
   ttl_hours: 24

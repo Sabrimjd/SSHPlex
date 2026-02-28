@@ -109,6 +109,7 @@ tmux:
   iterm2_profile: "Default" # iTerm2 profile name to use
 
 ui:
+  theme: "textual-dark"
   show_log_panel: false
   log_panel_height: 20
   table_columns: ["name", "ip", "cluster", "tags", "description", "provider"]

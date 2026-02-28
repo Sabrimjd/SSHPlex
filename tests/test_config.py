@@ -186,6 +186,7 @@ class TestUIConfig:
     def test_default_values(self):
         """Test default UI configuration."""
         config = UIConfig()
+        assert config.theme == "textual-dark"
         assert config.show_log_panel is True
         assert config.log_panel_height == 20
         assert "name" in config.table_columns

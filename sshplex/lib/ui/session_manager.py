@@ -178,6 +178,7 @@ class ITerm2SessionManager(ModalScreen):
     BINDINGS = [
         Binding("k", "kill_session", "Kill Tab", show=True),
         Binding("shift+k", "kill_current_session", "Kill Current Session", show=True),
+        Binding("f", "toggle_current_filter", "Filter Current", show=True),
         Binding("r", "refresh_sessions", "Refresh", show=True),
         Binding("escape", "close_manager", "Close", show=True),
         Binding("q", "close_manager", "Close", show=False),
@@ -192,14 +193,21 @@ class ITerm2SessionManager(ModalScreen):
         self.tabs: List[ITerm2ManagedTab] = []
         self.table: Optional[DataTable] = None
         self.current_session_name = current_session_name
+        self.show_current_only = bool(current_session_name)
 
     def compose(self) -> ComposeResult:
         with Container(id="session-dialog"):
             yield Static("🖥️  SSHplex - iTerm2 Native Session Manager", id="session-header")
             yield DataTable(id="session-table", cursor_type="row")
-            yield Static("K: Kill Tab | Shift+K: Kill Current Session | R: Refresh | ESC: Close", id="session-footer")
+            yield Static("K: Kill Tab | Shift+K: Kill Current Session | F: Toggle Current Filter | R: Refresh | ESC: Close", id="session-footer")
 
     def on_mount(self) -> None:
+        if self.current_session_name:
+            header = self.query_one("#session-header", Static)
+            filter_mode = "current" if self.show_current_only else "all"
+            header.update(
+                f"🖥️  SSHplex - iTerm2 Native Session Manager  |  session: {self.current_session_name} ({filter_mode})"
+            )
         self.table = self.query_one("#session-table", DataTable)
         self.table.add_column("Host", width=26)
         self.table.add_column("Session", width=24)
@@ -279,11 +287,15 @@ class ITerm2SessionManager(ModalScreen):
             return
 
         self.table.clear()
-        if not self.tabs:
+        visible_tabs = self.tabs
+        if self.show_current_only and self.current_session_name:
+            visible_tabs = [tab for tab in self.tabs if tab.session_name == self.current_session_name]
+
+        if not visible_tabs:
             self.table.add_row("No SSHplex iTerm2 tabs", "-", "-", "-")
             return
 
-        for tab in self.tabs:
+        for tab in visible_tabs:
             self.table.add_row(
                 tab.hostname,
                 tab.session_name,
@@ -354,6 +366,7 @@ class ITerm2SessionManager(ModalScreen):
         try:
             await asyncio.to_thread(self._close_tab_blocking, tab_item)
             self.logger.info(f"SSHplex: Closed managed iTerm2 tab '{tab_item.hostname}'")
+            self.app.notify(f"Closed tab: {tab_item.hostname}", timeout=2)
             await self.load_sessions()
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to close iTerm2 tab '{tab_item.hostname}': {e}")
@@ -384,10 +397,25 @@ class ITerm2SessionManager(ModalScreen):
                 self.logger.error(f"SSHplex: Failed to close tab '{tab.hostname}' in '{session_name}': {e}")
 
         self.logger.info(f"SSHplex: Closed {closed_count}/{len(session_tabs)} tabs for '{session_name}'")
+        self.app.notify(f"Closed {closed_count}/{len(session_tabs)} tabs for {session_name}", timeout=3)
         await self.load_sessions()
 
     def action_refresh_sessions(self) -> None:
         self.run_worker(self.load_sessions(), name="iterm2_refresh_sessions")
+
+    def action_toggle_current_filter(self) -> None:
+        if not self.current_session_name:
+            self.app.notify("No current native session context", timeout=2)
+            return
+        self.show_current_only = not self.show_current_only
+        mode = "current session only" if self.show_current_only else "all sessions"
+        header = self.query_one("#session-header", Static)
+        header.update(
+            f"🖥️  SSHplex - iTerm2 Native Session Manager  |  session: {self.current_session_name} "
+            f"({'current' if self.show_current_only else 'all'})"
+        )
+        self.app.notify(f"Showing {mode}", timeout=2)
+        self.populate_table()
 
     def action_close_manager(self) -> None:
         self.dismiss()

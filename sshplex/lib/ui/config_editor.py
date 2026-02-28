@@ -1,5 +1,6 @@
 """SSHplex Configuration Editor Screen."""
 
+import contextlib
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -239,6 +240,45 @@ class ConfigEditorScreen(ModalScreen[bool]):
                     )
                     yield Static("UI", classes="section-header")
                     yield _form_field(
+                        "cfg-ui-theme",
+                        "Theme",
+                        Select(
+                            [
+                                ("textual-dark", "textual-dark"),
+                                ("textual-light", "textual-light"),
+                                ("nord", "nord"),
+                                ("gruvbox", "gruvbox"),
+                                ("catppuccin-mocha", "catppuccin-mocha"),
+                                ("dracula", "dracula"),
+                                ("tokyo-night", "tokyo-night"),
+                                ("monokai", "monokai"),
+                                ("flexoki", "flexoki"),
+                                ("catppuccin-latte", "catppuccin-latte"),
+                                ("catppuccin-frappe", "catppuccin-frappe"),
+                                ("catppuccin-macchiato", "catppuccin-macchiato"),
+                                ("solarized-light", "solarized-light"),
+                                ("solarized-dark", "solarized-dark"),
+                                ("rose-pine", "rose-pine"),
+                                ("rose-pine-moon", "rose-pine-moon"),
+                                ("rose-pine-dawn", "rose-pine-dawn"),
+                                ("atom-one-dark", "atom-one-dark"),
+                                ("atom-one-light", "atom-one-light"),
+                            ],
+                            value=self._safe_select_initial(
+                                str(getattr(self.config.ui, "theme", "textual-dark")),
+                                [
+                                    "textual-dark", "textual-light", "nord", "gruvbox", "catppuccin-mocha",
+                                    "dracula", "tokyo-night", "monokai", "flexoki", "catppuccin-latte",
+                                    "catppuccin-frappe", "catppuccin-macchiato", "solarized-light",
+                                    "solarized-dark", "rose-pine", "rose-pine-moon", "rose-pine-dawn",
+                                    "atom-one-dark", "atom-one-light",
+                                ],
+                                "textual-dark",
+                            ),
+                        ),
+                        "Persisted app theme used on next launch",
+                    )
+                    yield _form_field(
                         "cfg-ui-show_log_panel",
                         "Show Log Panel",
                         Switch(value=self.config.ui.show_log_panel),
@@ -269,6 +309,9 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         Input(value=", ".join(self.config.ui.table_columns)),
                         self._table_columns_hint,
                     )
+                    with Horizontal(classes="list-buttons"):
+                        yield Button("Detect from Cache", id="btn-detect-columns", variant="primary")
+                        yield Button("Apply Standard", id="btn-columns-standard", variant="default")
                     yield Static("Logging", classes="section-header")
                     yield _form_field(
                         "cfg-logging-enabled",
@@ -685,6 +728,11 @@ class ConfigEditorScreen(ModalScreen[bool]):
         elif btn_id.startswith("btn-remove-import-"):
             idx = btn_id.replace("btn-remove-import-", "")
             self._remove_import(idx)
+        elif btn_id == "btn-detect-columns":
+            self._apply_detected_columns_from_cache()
+        elif btn_id == "btn-columns-standard":
+            columns_input = self.query_one("#cfg-ui-table_columns", Input)
+            columns_input.value = ", ".join(self._table_column_presets["standard"])
 
     def on_select_changed(self, event: Select.Changed) -> None:
         """Handle select changes to re-render dynamic fields."""
@@ -895,6 +943,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
         columns_str = self._get_input_value("cfg-ui-table_columns", "name, ip, cluster, role, tags")
         columns = [c.strip() for c in columns_str.split(",") if c.strip()]
         data["ui"] = {
+            "theme": self._get_select_value("cfg-ui-theme", "textual-dark"),
             "show_log_panel": self._get_switch_value("cfg-ui-show_log_panel", True),
             "log_panel_height": int(self._get_input_value("cfg-ui-log_panel_height", "20")),
             "table_columns": columns,
@@ -1001,12 +1050,58 @@ class ConfigEditorScreen(ModalScreen[bool]):
         else:
             status.update(f"[green]{message}[/green]")
 
+    def _focus_field_for_error(self, error_text: str) -> None:
+        """Best-effort focus jump to a likely related field."""
+        mapping = [
+            ("tmux.backend", "#cfg-mux-backend"),
+            ("iterm2_native_target", "#cfg-mux-iterm2_native_target"),
+            ("iterm2_split_pattern", "#cfg-mux-iterm2_split_pattern"),
+            ("ui.theme", "#cfg-ui-theme"),
+            ("logging.level", "#cfg-logging-level"),
+            ("table_columns", "#cfg-ui-table_columns"),
+            ("session_prefix", "#cfg-general-session_prefix"),
+        ]
+        for needle, selector in mapping:
+            if needle in error_text:
+                with contextlib.suppress(Exception):
+                    self.query_one(selector).focus()
+                return
+
+    def _apply_detected_columns_from_cache(self) -> None:
+        """Populate table columns using cached metadata keys plus core fields."""
+        detected = ["name", "ip", "cluster", "role", "tags"]
+        try:
+            cache_dir = Path(str(getattr(self.config.cache, "cache_dir", "~/.cache/sshplex"))).expanduser()
+            cache_file = cache_dir / "hosts.yaml"
+            if cache_file.exists():
+                with open(cache_file) as f:
+                    hosts_data = yaml.safe_load(f) or []
+                keys: set[str] = set()
+                for host in hosts_data[:200]:
+                    if not isinstance(host, dict):
+                        continue
+                    metadata = host.get("metadata", {})
+                    if isinstance(metadata, dict):
+                        keys.update(str(k) for k in metadata)
+                extra = [k for k in sorted(keys) if k not in {"name", "ip"}]
+                detected = ["name", "ip"] + extra[:8]
+        except Exception:
+            pass
+
+        try:
+            columns_input = self.query_one("#cfg-ui-table_columns", Input)
+            columns_input.value = ", ".join(detected)
+            self._update_status("Detected columns from cache metadata")
+        except Exception as e:
+            self._update_status(f"Could not apply detected columns: {e}", error=True)
+
     def action_save(self) -> None:
         """Validate and save configuration."""
         try:
             data = self._collect_form_data()
         except (ValueError, TypeError) as e:
             self._update_status(f"Invalid input: {e}", error=True)
+            self._focus_field_for_error(str(e))
             return
 
         # Validate via Pydantic
@@ -1014,6 +1109,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
             validated = Config(**data)
         except Exception as e:
             self._update_status(f"Validation error: {e}", error=True)
+            self._focus_field_for_error(str(e))
             return
 
         # Dump to YAML with by_alias=True for correct 'import' key

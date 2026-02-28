@@ -34,6 +34,7 @@ class LoggingConfig(BaseModel):
 
 class UIConfig(BaseModel):
     """User interface configuration."""
+    theme: str = "textual-dark"
     show_log_panel: bool = True
     log_panel_height: int = 20  # Percentage of screen height
     table_columns: list = Field(default_factory=lambda: ["name", "ip", "cluster", "role", "tags"])
