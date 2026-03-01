@@ -102,12 +102,12 @@ jobs:
             raise SystemExit("Unable to resolve release version from GITHUB_REF_NAME")
 
         changelog = changelog_path.read_text(encoding="utf-8")
-        section_start_re = re.compile(rf"^## \\[{re.escape(version)}\\].*$", re.MULTILINE)
+        section_start_re = re.compile(rf"^## \[{re.escape(version)}\].*$", re.MULTILINE)
         section_start_match = section_start_re.search(changelog)
         if not section_start_match:
             raise SystemExit(f"No changelog section found for version {version}")
 
-        next_section_re = re.compile(r"^## \\[", re.MULTILINE)
+        next_section_re = re.compile(r"^## \[", re.MULTILINE)
         next_section_match = next_section_re.search(changelog, section_start_match.end())
         section_end = next_section_match.start() if next_section_match else len(changelog)
 
