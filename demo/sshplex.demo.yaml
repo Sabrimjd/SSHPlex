@@ -1,72 +1,104 @@
 sshplex:
-  version: 1.6.4
+  version: 1.7.0
   session_prefix: sshplex-demo
+
 sot:
   providers:
-  - static
-  - ansible
-  - consul
+    - static
+    - ansible
+    - consul
+    - git
   import:
-  - name: demo-static
-    type: static
-    hosts:
-    - name: demo-bastion
-      ip: 192.168.31.216
-      alias: bastion
-      user: demo
-      port: 22
-      key_path: ~/.ssh/id_rsa
-      description: Demo static bastion host
-      tags:
-      - static
-      - demo
-      cluster: demo
-      role: bastion
-    - name: demo-worker-1
-      ip: 192.168.31.216
-      alias: worker1
-      user: demo
-      port: 22
-      key_path: ~/.ssh/id_rsa
-      description: Demo static worker host
-      tags:
-      - static
-      - worker
-      cluster: demo
-      role: worker
-  - name: demo-ansible
-    type: ansible
-    verify_ssl: true
-    timeout: 30
-    default_filters: {}
-    inventory_paths:
-    - demo/ansible-inventory-demo.yml
-  - name: demo-consul
-    type: consul
-    verify_ssl: true
-    timeout: 30
-    default_filters: {}
-    config:
-      host: 127.0.0.1
-      port: 8500
-      token: ''
-      scheme: http
-      verify: true
-      dc: dc1
-      cert: ''
+    - name: demo-static
+      type: static
+      hosts:
+        - name: demo-bastion
+          ip: 192.168.31.216
+          ssh_alias: bastion
+          ssh_user: demo
+          ssh_port: 22
+          ssh_key_path: ~/.ssh/id_rsa
+          description: Demo static bastion host
+          tags:
+            - static
+            - demo
+          cluster: demo
+          role: bastion
+        - name: demo-worker-1
+          ip: 192.168.31.216
+          ssh_alias: worker1
+          ssh_user: demo
+          ssh_port: 22
+          ssh_key_path: ~/.ssh/id_rsa
+          description: Demo static worker host
+          tags:
+            - static
+            - worker
+          cluster: demo
+          role: worker
+
+    - name: demo-ansible
+      type: ansible
+      verify_ssl: true
+      timeout: 30
+      default_filters: {}
+      inventory_paths:
+        - demo/ansible-inventory-demo.yml
+
+    - name: demo-consul
+      type: consul
+      verify_ssl: true
+      timeout: 30
+      default_filters: {}
+      config:
+        host: 127.0.0.1
+        port: 8500
+        token: ""
+        scheme: http
+        verify: true
+        dc: dc1
+        cert: ""
+
+    - name: demo-git-ansible
+      type: git
+      repo_url: https://github.com/Sabrimjd/SSHPlex.git
+      branch: main
+      source_pattern: demo/ansible-inventory-demo.yml
+      inventory_format: ansible
+      default_filters:
+        groups:
+          - demo_app
+          - demo_db
+      auto_pull: true
+      pull_interval_seconds: 300
+      priority: 50
+      pull_strategy: ff-only
+
+    - name: demo-git-static
+      type: git
+      repo_url: https://github.com/Sabrimjd/SSHPlex.git
+      branch: main
+      source_pattern: demo/git-static-hosts-demo.yml
+      inventory_format: static
+      auto_pull: true
+      pull_interval_seconds: 300
+      priority: 55
+      pull_strategy: ff-only
+
 ssh:
   username: sab
   key_path: ~/.ssh/id_rsa
   timeout: 10
   port: 22
   strict_host_key_checking: false
-  user_known_hosts_file: ''
+  user_known_hosts_file: ""
   retry:
     enabled: true
     max_attempts: 2
     delay_seconds: 1.0
     exponential_backoff: true
   proxy: []
+
 tmux:
   backend: iterm2-native
   use_panes: true
@@ -80,29 +112,29 @@ tmux:
   iterm2_native_target: current-window
   iterm2_native_hide_from_history: true
   iterm2_split_pattern: alternate
+
 logging:
   enabled: true
   level: INFO
   file: logs/sshplex-demo.log
+
 ui:
   theme: tokyo-night
   show_log_panel: false
   log_panel_height: 20
   table_columns:
-  - name
-  - ip
-  - cluster
-  - role
-  - tags
-  - source
-  - status
-  - platform
-  - ansible_connection
-  - ansible_group
-  - ansible_port
-  - ansible_user
-  - description
-  - inventory_file
+    - name
+    - ip
+    - source
+    - status
+    - cluster
+    - role
+    - tags
+    - description
+    - user
+    - port
+    - platform
+
 cache:
   enabled: true
   cache_dir: ~/.cache/sshplex

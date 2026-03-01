@@ -8,7 +8,7 @@ import yaml
 from rich.syntax import Syntax
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
@@ -48,6 +48,197 @@ def _form_row(*fields: Vertical) -> Horizontal:
     return Horizontal(*fields, classes="form-row")
 
 
+class TableColumnsPickerScreen(ModalScreen[list[str] | None]):
+    """Modal picker for table columns with grouped checkboxes."""
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel", show=True),
+        Binding("ctrl+s", "apply", "Apply", show=True, priority=True),
+    ]
+
+    CSS = """
+    TableColumnsPickerScreen {
+        align: center middle;
+    }
+
+    #columns-picker-dialog {
+        layout: vertical;
+        width: 88%;
+        height: 86%;
+        border: thick $primary;
+        background: $surface;
+        padding: 0 1;
+    }
+
+    #columns-picker-title {
+        height: 1;
+        text-style: bold;
+        color: $text;
+        text-align: center;
+        margin-bottom: 0;
+    }
+
+    #columns-picker-subtitle {
+        height: 1;
+        color: $text-muted;
+        text-style: italic;
+        margin-bottom: 0;
+    }
+
+    #columns-picker-scroll {
+        height: 1fr;
+        border: round $secondary;
+        padding: 0 1;
+        margin-bottom: 0;
+    }
+
+    .columns-picker-category {
+        height: 1;
+        margin-top: 1;
+        margin-bottom: 0;
+        color: $primary;
+        text-style: bold;
+    }
+
+    .columns-picker-grid {
+        grid-size: 3;
+        grid-columns: 1fr 1fr 1fr;
+        grid-gutter: 0 1;
+        width: 1fr;
+        height: auto;
+        margin-bottom: 0;
+    }
+
+    .columns-picker-checkbox {
+        height: auto;
+        width: 1fr;
+        color: $text;
+        margin-bottom: 0;
+    }
+
+    #columns-picker-actions {
+        height: 4;
+        align: center middle;
+        padding: 0;
+    }
+
+    #columns-picker-actions Button {
+        height: 3;
+        min-width: 12;
+        margin: 0 1;
+    }
+    """
+
+    def __init__(
+        self,
+        categorized_columns: Dict[str, List[str]],
+        selected_columns: List[str],
+        detected_columns: List[str],
+    ) -> None:
+        super().__init__()
+        self._categorized_columns = categorized_columns
+        self._selected_columns = list(selected_columns)
+        self._detected_columns = list(detected_columns)
+        self._column_by_checkbox_id: Dict[str, str] = {}
+        self._checkbox_id_by_column: Dict[str, str] = {}
+        ordered: List[str] = []
+        for columns in categorized_columns.values():
+            for column in columns:
+                if column not in ordered:
+                    ordered.append(column)
+        self._ordered_columns = ordered
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="columns-picker-dialog"):
+            yield Static("Table Columns Picker", id="columns-picker-title")
+            yield Static(
+                "Select columns by category (SoT, origin, SSH). Use Ctrl+S to apply.",
+                id="columns-picker-subtitle",
+            )
+
+            with VerticalScroll(id="columns-picker-scroll"):
+                checkbox_idx = 1
+                selected_set = set(self._selected_columns)
+                for category, columns in self._categorized_columns.items():
+                    if not columns:
+                        continue
+                    yield Static(category, classes="columns-picker-category")
+
+                    checkboxes: List[Checkbox] = []
+                    for column in columns:
+                        checkbox_id = f"col-picker-{checkbox_idx}"
+                        self._column_by_checkbox_id[checkbox_id] = column
+                        self._checkbox_id_by_column[column] = checkbox_id
+                        checkboxes.append(
+                            Checkbox(
+                                column,
+                                value=column in selected_set,
+                                id=checkbox_id,
+                                classes="columns-picker-checkbox",
+                                compact=True,
+                            )
+                        )
+                        checkbox_idx += 1
+
+                    yield Grid(*checkboxes, classes="columns-picker-grid")
+
+            with Horizontal(id="columns-picker-actions"):
+                yield Button("Detected", id="btn-columns-select-detected", variant="primary")
+                yield Button("All", id="btn-columns-select-all", variant="default")
+                yield Button("None", id="btn-columns-select-none", variant="default")
+                yield Button("Apply", id="btn-columns-apply", variant="success")
+                yield Button("Cancel", id="btn-columns-cancel", variant="default")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        btn_id = event.button.id or ""
+        if btn_id == "btn-columns-select-detected":
+            detected = [col for col in self._detected_columns if col in self._checkbox_id_by_column]
+            if detected:
+                self._set_selected_columns(detected)
+            else:
+                self.app.notify("No detected columns available", title="Columns", timeout=2)
+            return
+        if btn_id == "btn-columns-select-all":
+            self._set_selected_columns(self._ordered_columns)
+            return
+        if btn_id == "btn-columns-select-none":
+            self._set_selected_columns([])
+            return
+        if btn_id == "btn-columns-apply":
+            self.action_apply()
+            return
+        if btn_id == "btn-columns-cancel":
+            self.action_cancel()
+
+    def _set_selected_columns(self, selected_columns: List[str]) -> None:
+        selected = set(selected_columns)
+        for checkbox_id, column in self._column_by_checkbox_id.items():
+            with contextlib.suppress(Exception):
+                checkbox = self.query_one(f"#{checkbox_id}", Checkbox)
+                checkbox.value = column in selected
+
+    def _get_selected_columns(self) -> List[str]:
+        selected: List[str] = []
+        for column in self._ordered_columns:
+            checkbox_id = self._checkbox_id_by_column.get(column)
+            if not checkbox_id:
+                continue
+            with contextlib.suppress(Exception):
+                checkbox = self.query_one(f"#{checkbox_id}", Checkbox)
+                if checkbox.value:
+                    selected.append(column)
+        return selected
+
+    def action_apply(self) -> None:
+        selected = self._get_selected_columns()
+        if not selected:
+            selected = ["name", "ip"]
+        self.dismiss(selected)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class ConfigEditorScreen(ModalScreen[bool]):
     """Modal screen for editing sshplex.yaml configuration."""
 
@@ -68,14 +259,14 @@ class ConfigEditorScreen(ModalScreen[bool]):
         height: 92%;
         border: thick $primary;
         background: $surface;
-        padding: 1;
+        padding: 0 1;
     }
 
     #editor-title {
         text-align: center;
         text-style: bold;
         color: $text;
-        margin-bottom: 1;
+        margin-bottom: 0;
         width: 100%;
     }
 
@@ -85,20 +276,20 @@ class ConfigEditorScreen(ModalScreen[bool]):
         background: $surface;
         color: $text-muted;
         padding: 0 1;
-        margin-top: 1;
+        margin-top: 0;
     }
 
     #editor-buttons {
-        height: 5;
+        height: 4;
         dock: bottom;
         align: center middle;
-        padding: 1 0;
+        padding: 0;
     }
 
     #editor-buttons Button {
         height: 3;
-        min-width: 18;
-        margin: 0 2;
+        min-width: 14;
+        margin: 0 1;
         content-align: center middle;
     }
 
@@ -107,24 +298,28 @@ class ConfigEditorScreen(ModalScreen[bool]):
     }
 
     TabPane {
-        padding: 0 1;
+        padding: 0;
     }
 
     .form-field {
         height: auto;
-        margin-bottom: 1;
+        margin-bottom: 0;
     }
 
     .form-row {
         layout: horizontal;
         height: auto;
-        margin-bottom: 1;
+        margin-bottom: 0;
     }
 
     .form-row .form-field {
         width: 1fr;
         margin-right: 1;
         margin-bottom: 0;
+    }
+
+    .form-row .form-field:last-child {
+        margin-right: 0;
     }
 
     .form-label {
@@ -141,8 +336,8 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
     .section-header {
         height: 1;
-        margin-top: 1;
-        margin-bottom: 1;
+        margin-top: 0;
+        margin-bottom: 0;
         color: $primary;
         text-style: bold underline;
     }
@@ -150,7 +345,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
     .dynamic-list {
         border: none;
         padding: 0;
-        margin-bottom: 1;
+        margin-bottom: 0;
         height: auto;
     }
 
@@ -165,14 +360,14 @@ class ConfigEditorScreen(ModalScreen[bool]):
     .dynamic-list-item {
         border: none;
         padding: 0;
-        margin-bottom: 1;
+        margin-bottom: 0;
         height: auto;
     }
 
     .proxy-row {
         layout: horizontal;
-        height: 3;
-        margin-bottom: 1;
+        height: auto;
+        margin-bottom: 0;
     }
 
     .proxy-row Input {
@@ -192,19 +387,20 @@ class ConfigEditorScreen(ModalScreen[bool]):
     }
 
     .proxy-row Button {
-        min-width: 10;
+        height: 3;
+        min-width: 8;
     }
 
     .import-collapsible {
         border: solid $secondary;
-        padding: 0 1;
-        margin-bottom: 1;
+        padding: 0;
+        margin-bottom: 0;
     }
 
     .import-header {
         layout: horizontal;
-        height: 3;
-        margin-bottom: 1;
+        height: auto;
+        margin-bottom: 0;
     }
 
     .import-name {
@@ -213,7 +409,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
     }
 
     .import-type {
-        width: 18;
+        width: 16;
         margin-right: 1;
     }
 
@@ -223,8 +419,8 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
     .import-row {
         layout: horizontal;
-        height: 3;
-        margin-bottom: 1;
+        height: auto;
+        margin-bottom: 0;
     }
 
     .import-row Input,
@@ -240,7 +436,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
     }
 
     .import-netbox-token {
-        width: 26;
+        width: 22;
     }
 
     .import-consul-host {
@@ -250,33 +446,50 @@ class ConfigEditorScreen(ModalScreen[bool]):
     .import-consul-port,
     .import-consul-scheme,
     .import-consul-dc {
+        width: 10;
+    }
+
+    .import-git-repo,
+    .import-git-source {
+        width: 1fr;
+    }
+
+    .import-git-branch,
+    .import-git-format,
+    .import-git-auto-pull {
+        width: 18;
+    }
+
+    .import-git-priority,
+    .import-git-interval {
         width: 12;
     }
 
     #sources-providers {
         layout: horizontal;
         height: auto;
-        margin-bottom: 1;
+        margin-bottom: 0;
     }
 
     #sources-providers Checkbox {
-        width: 18;
-        margin-right: 2;
+        width: 14;
+        margin-right: 1;
     }
 
     .list-buttons {
-        height: 3;
+        height: auto;
         align: left middle;
     }
 
     .list-buttons Button {
-        margin: 0 1;
+        height: 3;
+        margin: 0 1 0 0;
     }
 
     .static-host-row {
         layout: horizontal;
-        height: 3;
-        margin-bottom: 1;
+        height: auto;
+        margin-bottom: 0;
     }
 
     .static-host-row Input {
@@ -314,20 +527,21 @@ class ConfigEditorScreen(ModalScreen[bool]):
     }
 
     .static-host-row Button {
-        min-width: 9;
+        height: 3;
+        min-width: 8;
         margin-right: 0;
     }
 
     .static-host-list {
-        height: 9;
+        height: 15;
         border: round $secondary;
-        padding: 1;
+        padding: 0;
     }
 
     #yaml-editor-row {
         layout: horizontal;
         height: 1fr;
-        margin-bottom: 1;
+        margin-bottom: 0;
     }
 
     #cfg-yaml-editor {
@@ -364,7 +578,19 @@ class ConfigEditorScreen(ModalScreen[bool]):
         self._table_column_presets: Dict[str, List[str]] = {
             "custom": [],
             "minimal": ["name", "ip"],
-            "standard": ["name", "ip", "cluster", "role", "tags"],
+            "standard": [
+                "name",
+                "ip",
+                "source",
+                "status",
+                "cluster",
+                "role",
+                "tags",
+                "description",
+                "user",
+                "port",
+                "platform",
+            ],
             "operational": ["name", "ip", "status", "role", "cluster", "source"],
             "inventory": ["name", "ip", "site", "platform", "env", "role", "status"],
         }
@@ -397,11 +623,132 @@ class ConfigEditorScreen(ModalScreen[bool]):
         if detected:
             sample = ", ".join(detected[:10])
             return (
-                "Presets available. Common: " + ", ".join(common) +
+                "Use 'Choose Columns' for grouped picker. Common: " + ", ".join(common) +
                 f" | Detected from live/cache/imports: {sample}"
             )
 
-        return "Presets available. Common columns: " + ", ".join(common)
+        return "Use 'Choose Columns' for grouped picker. Common columns: " + ", ".join(common)
+
+    @staticmethod
+    def _parse_columns_csv(columns_value: str) -> List[str]:
+        """Parse comma-separated columns with stable dedup order."""
+        parsed: List[str] = []
+        for raw in str(columns_value or "").split(","):
+            column = raw.strip()
+            if not column or column in parsed:
+                continue
+            parsed.append(column)
+        return parsed
+
+    def _get_available_table_columns(self) -> List[str]:
+        """Build the available column list for picker from presets/current/detected."""
+        preferred = [
+            "name", "ip", "cluster", "role", "tags", "status", "source", "site", "platform", "env",
+            "description", "alias", "user", "port", "key_path",
+            "ansible_group", "ansible_user", "ansible_port", "ansible_connection", "inventory_file",
+            "git_repo", "git_branch", "git_commit", "git_file", "git_inventory_format",
+            "netbox_site", "netbox_tenant", "netbox_device_role", "netbox_device_type", "netbox_platform",
+            "consul_service", "consul_node", "consul_dc", "consul_tags",
+            "provider", "sources",
+        ]
+
+        available: List[str] = []
+
+        def _append(columns: List[str]) -> None:
+            for column in columns:
+                c = str(column).strip()
+                if c and c not in available:
+                    available.append(c)
+
+        _append(preferred)
+        _append(self.config.ui.table_columns)
+        detected = self._detect_columns_from_cache_and_imports()
+        _append(detected)
+
+        return available
+
+    @staticmethod
+    def _categorize_table_columns(columns: List[str]) -> Dict[str, List[str]]:
+        """Group table columns into UX categories by SoT and origin."""
+        category_order = [
+            "Common",
+            "Origin / Source Tracking",
+            "Static / SSH Overrides",
+            "Ansible SoT",
+            "Git SoT",
+            "NetBox SoT",
+            "Consul SoT",
+            "Other",
+        ]
+        categorized: Dict[str, List[str]] = {category: [] for category in category_order}
+
+        common = {
+            "name", "ip", "cluster", "role", "tags", "status", "site", "platform", "env", "description"
+        }
+        origin = {"source", "provider", "sources", "inventory_file"}
+        static_ssh = {"alias", "user", "port", "key_path", "ssh_alias", "ssh_user", "ssh_port", "ssh_key_path"}
+        ansible_fixed = {"ansible_group", "ansible_user", "ansible_port", "ansible_connection"}
+        git_fixed = {"git_repo", "git_branch", "git_commit", "git_file", "git_inventory_format"}
+
+        for column in columns:
+            c = str(column).strip()
+            if not c:
+                continue
+
+            if c in common:
+                categorized["Common"].append(c)
+            elif c in origin:
+                categorized["Origin / Source Tracking"].append(c)
+            elif c in static_ssh:
+                categorized["Static / SSH Overrides"].append(c)
+            elif c in ansible_fixed or c.startswith("ansible_"):
+                categorized["Ansible SoT"].append(c)
+            elif c in git_fixed or c.startswith("git_"):
+                categorized["Git SoT"].append(c)
+            elif c.startswith("netbox_"):
+                categorized["NetBox SoT"].append(c)
+            elif c.startswith("consul_"):
+                categorized["Consul SoT"].append(c)
+            else:
+                categorized["Other"].append(c)
+
+        for key, values in categorized.items():
+            seen: set[str] = set()
+            unique_values: List[str] = []
+            for value in values:
+                if value in seen:
+                    continue
+                unique_values.append(value)
+                seen.add(value)
+            categorized[key] = unique_values
+
+        return categorized
+
+    def _open_table_columns_picker(self) -> None:
+        """Open grouped table-columns picker modal."""
+        columns_input = self.query_one("#cfg-ui-table_columns", Input)
+        selected = self._parse_columns_csv(columns_input.value)
+        detected = self._detect_columns_from_cache_and_imports()
+        available = self._get_available_table_columns()
+        categorized = self._categorize_table_columns(available)
+        picker = TableColumnsPickerScreen(
+            categorized_columns=categorized,
+            selected_columns=selected,
+            detected_columns=detected,
+        )
+        self.app.push_screen(picker, callback=self._on_table_columns_picked)
+
+    def _on_table_columns_picked(self, selected_columns: List[str] | None) -> None:
+        """Apply selected columns returned from picker modal."""
+        if selected_columns is None:
+            return
+
+        columns_input = self.query_one("#cfg-ui-table_columns", Input)
+        columns_input.value = ", ".join(selected_columns)
+        with contextlib.suppress(Exception):
+            preset = self.query_one("#cfg-ui-table_columns_preset", Select)
+            preset.value = "custom"
+        self._update_status("Table columns updated from picker")
 
     def _detect_columns_from_cache_and_imports(self) -> List[str]:
         """Detect columns from live hosts, cache, imports, and edited rows."""
@@ -604,6 +951,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         self._table_columns_hint,
                     )
                     with Horizontal(classes="list-buttons"):
+                        yield Button("Choose Columns", id="btn-columns-picker", variant="primary")
                         yield Button("Detect from Data", id="btn-detect-columns", variant="primary")
                         yield Button("Apply Standard", id="btn-columns-standard", variant="default")
                     yield Static("Logging", classes="section-header")
@@ -657,13 +1005,13 @@ class ConfigEditorScreen(ModalScreen[bool]):
                             "cfg-ssh-username",
                             "Username",
                             Input(value=self.config.ssh.username),
-                            "Default SSH username",
+                            "Default user when a host has no ssh_user override",
                         ),
                         _form_field(
                             "cfg-ssh-port",
                             "Port",
                             Input(value=str(self.config.ssh.port)),
-                            "Default SSH port",
+                            "Default SSH port when host has no ssh_port",
                         ),
                     )
                     yield _form_row(
@@ -671,13 +1019,13 @@ class ConfigEditorScreen(ModalScreen[bool]):
                             "cfg-ssh-key_path",
                             "Key Path",
                             Input(value=self.config.ssh.key_path),
-                            "Path to SSH private key",
+                            "Default key path when host has no ssh_key_path",
                         ),
                         _form_field(
                             "cfg-ssh-timeout",
                             "Timeout",
                             Input(value=str(self.config.ssh.timeout)),
-                            "Connection timeout in seconds",
+                            "Connection timeout in seconds per SSH attempt",
                         ),
                     )
                     yield _form_row(
@@ -685,6 +1033,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
                             "cfg-ssh-strict_host_key_checking",
                             "Strict Host Key Checking",
                             Switch(value=self.config.ssh.strict_host_key_checking),
+                            "ON: verify host keys strictly | OFF: less secure, easier lab setup",
                         ),
                         _form_field(
                             "cfg-ssh-user_known_hosts_file",
@@ -699,11 +1048,13 @@ class ConfigEditorScreen(ModalScreen[bool]):
                             "cfg-ssh-retry-enabled",
                             "Retry Enabled",
                             Switch(value=self.config.ssh.retry.enabled),
+                            "Retry transient SSH connection failures",
                         ),
                         _form_field(
                             "cfg-ssh-retry-exponential_backoff",
                             "Exponential Backoff",
                             Switch(value=self.config.ssh.retry.exponential_backoff),
+                            "ON: delay grows each retry | OFF: fixed delay",
                         ),
                     )
                     yield _form_row(
@@ -711,11 +1062,13 @@ class ConfigEditorScreen(ModalScreen[bool]):
                             "cfg-ssh-retry-max_attempts",
                             "Max Attempts",
                             Input(value=str(self.config.ssh.retry.max_attempts)),
+                            "Total attempts including first try",
                         ),
                         _form_field(
                             "cfg-ssh-retry-delay_seconds",
                             "Delay Seconds",
                             Input(value=str(self.config.ssh.retry.delay_seconds)),
+                            "Base wait time between retries",
                         ),
                     )
                     yield Static("SSH Proxies", classes="section-header")
@@ -796,6 +1149,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         yield Checkbox("NetBox", value="netbox" in self.config.sot.providers, id="cfg-sot-provider-netbox", compact=True)
                         yield Checkbox("Ansible", value="ansible" in self.config.sot.providers, id="cfg-sot-provider-ansible", compact=True)
                         yield Checkbox("Consul", value="consul" in self.config.sot.providers, id="cfg-sot-provider-consul", compact=True)
+                        yield Checkbox("Git", value="git" in self.config.sot.providers, id="cfg-sot-provider-git", compact=True)
                     with Horizontal(classes="list-buttons"):
                         yield Button("All", id="btn-providers-all", variant="default")
                         yield Button("None", id="btn-providers-none", variant="default")
@@ -1042,7 +1396,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
         name = imp.name if imp else ""
         imp_type = self._safe_select_initial(
             str(getattr(imp, "type", "static")) if imp else "static",
-            ["static", "netbox", "ansible", "consul"],
+            ["static", "netbox", "ansible", "consul", "git"],
             "static",
         )
         self._import_types[str(idx)] = imp_type
@@ -1050,7 +1404,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
         header = Horizontal(
             Input(value=name, placeholder="Import name", id=f"import-{idx}-name", classes="import-name"),
             Select(
-                [(v, v) for v in ["static", "netbox", "ansible", "consul"]],
+                [(v, v) for v in ["static", "netbox", "ansible", "consul", "git"]],
                 value=imp_type,
                 id=f"import-{idx}-type",
                 classes="import-type",
@@ -1073,6 +1427,52 @@ class ConfigEditorScreen(ModalScreen[bool]):
             id=f"import-item-{idx}",
             classes="import-collapsible",
         )
+
+    def _import_form_field(self, field_id: str, label: str, description: str, widget: Any) -> Vertical:
+        """Build an import field with label + helper text above input."""
+        return _form_field(field_id, label, widget, description)
+
+    @staticmethod
+    def _compose_git_source_pattern(path: str, file_glob: str) -> str:
+        """Build a single source pattern from legacy path + glob values."""
+        clean_path = str(path or "").strip().strip("/")
+        clean_glob = str(file_glob or "").strip().strip("/")
+
+        if clean_path.endswith((".yml", ".yaml")):
+            return clean_path
+        if clean_path and clean_glob:
+            return f"{clean_path}/{clean_glob}"
+        if clean_path:
+            return clean_path
+        if clean_glob:
+            return clean_glob
+        return "hosts/**/*.y*ml"
+
+    @staticmethod
+    def _split_git_source_pattern(source_pattern: str) -> tuple[str, str]:
+        """Split a source pattern into legacy path + glob fields."""
+        normalized = str(source_pattern or "").strip().lstrip("/")
+        if not normalized:
+            return "hosts", "**/*.y*ml"
+
+        if normalized.endswith((".yml", ".yaml")):
+            return normalized, "**/*.y*ml"
+
+        wildcard_chars = {"*", "?", "["}
+        parts = normalized.split("/")
+        wildcard_index = -1
+        for idx, part in enumerate(parts):
+            if any(char in part for char in wildcard_chars):
+                wildcard_index = idx
+                break
+
+        if wildcard_index == -1:
+            return normalized, "**/*.y*ml"
+
+        if wildcard_index == 0:
+            return ".", normalized
+
+        return "/".join(parts[:wildcard_index]), "/".join(parts[wildcard_index:])
 
     def _make_import_type_fields(self, idx: int, imp_type: str, imp: Any = None) -> list:
         """Generate type-specific fields for an import item."""
@@ -1104,98 +1504,224 @@ class ConfigEditorScreen(ModalScreen[bool]):
             fields.append(host_list)
         elif imp_type == "netbox":
             fields.append(Static("NetBox settings", classes="form-label"))
-            fields.append(
-                Horizontal(
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-url",
+                    "NetBox URL",
+                    "NetBox API endpoint (https://netbox.example.com)",
                     Input(
                         value=(imp.url or "") if imp else "",
-                        placeholder="NetBox URL",
-                        id=f"import-{idx}-url",
+                        placeholder="https://netbox.example.com",
                         classes="import-netbox-url",
                     ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-token",
+                    "API Token",
+                    "Read token used to query inventory",
                     Input(
                         value=(imp.token or "") if imp else "",
-                        placeholder="API token",
-                        id=f"import-{idx}-token",
+                        placeholder="NetBox token",
                         password=True,
                         classes="import-netbox-token",
                     ),
-                    classes="import-row",
-                )
-            )
+                ),
+            ))
             filters_str = ""
             if imp and imp.default_filters:
                 filters_str = ", ".join(f"{k}={v}" for k, v in imp.default_filters.items())
-            fields.append(
-                Horizontal(
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-filters",
+                    "Default Filters",
+                    "Optional query filters (key=value, key2=value2)",
                     Input(
                         value=filters_str,
-                        placeholder="Filters: key=value, key2=value2",
-                        id=f"import-{idx}-filters",
+                        placeholder="status=active, role=server",
                         classes="import-netbox-filters",
                     ),
-                    classes="import-row",
                 )
-            )
+            ))
         elif imp_type == "ansible":
             fields.append(Static("Ansible settings", classes="form-label"))
             paths = ""
             if imp and imp.inventory_paths:
                 paths = ", ".join(imp.inventory_paths)
-            fields.append(
-                Horizontal(
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-inventory_paths",
+                    "Inventory Paths",
+                    "Comma-separated local inventory files",
                     Input(
                         value=paths,
-                        placeholder="Inventory paths (comma-separated)",
-                        id=f"import-{idx}-inventory_paths",
+                        placeholder="inventory/prod.yml, inventory/staging.yml",
                         classes="import-ansible-paths",
                     ),
-                    classes="import-row",
                 )
-            )
+            ))
         elif imp_type == "consul":
             fields.append(Static("Consul settings", classes="form-label"))
             cfg = imp.config if imp else None
-            fields.append(
-                Horizontal(
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-consul_host",
+                    "Consul Host",
+                    "Consul server hostname",
                     Input(
                         value=(cfg.host if cfg else ""),
-                        placeholder="Consul host",
-                        id=f"import-{idx}-consul_host",
+                        placeholder="consul.example.com",
                         classes="import-consul-host",
                     ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-consul_port",
+                    "Port",
+                    "Consul API port",
                     Input(
                         value=str(cfg.port if cfg else 443),
-                        placeholder="Port",
-                        id=f"import-{idx}-consul_port",
+                        placeholder="443",
                         classes="import-consul-port",
                     ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-consul_scheme",
+                    "Scheme",
+                    "http or https",
                     Input(
                         value=(cfg.scheme if cfg else "https"),
-                        placeholder="Scheme",
-                        id=f"import-{idx}-consul_scheme",
+                        placeholder="https",
                         classes="import-consul-scheme",
                     ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-consul_dc",
+                    "Datacenter",
+                    "Consul datacenter name",
                     Input(
                         value=(cfg.dc if cfg else "dc1"),
-                        placeholder="Datacenter",
-                        id=f"import-{idx}-consul_dc",
+                        placeholder="dc1",
                         classes="import-consul-dc",
                     ),
-                    classes="import-row",
-                )
-            )
-            fields.append(
-                Horizontal(
+                ),
+            ))
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-consul_token",
+                    "Token",
+                    "Read token for catalog queries",
                     Input(
                         value=(cfg.token if cfg else ""),
-                        placeholder="Token",
-                        id=f"import-{idx}-consul_token",
+                        placeholder="Consul token",
                         password=True,
                         classes="import-consul-token",
                     ),
-                    classes="import-row",
                 )
+            ))
+        elif imp_type == "git":
+            fields.append(Static("Git settings", classes="form-label"))
+            source_pattern = "hosts/**/*.y*ml"
+            if imp is not None:
+                source_pattern = str(getattr(imp, "source_pattern", "") or "").strip()
+                if not source_pattern:
+                    source_pattern = self._compose_git_source_pattern(
+                        str(getattr(imp, "path", "hosts") or "hosts"),
+                        str(getattr(imp, "file_glob", "**/*.y*ml") or "**/*.y*ml"),
+                    )
+
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-git_repo_url",
+                    "Repository URL",
+                    "Git repository URL (ssh or https)",
+                    Input(
+                        value=(getattr(imp, "repo_url", "") or "") if imp else "",
+                        placeholder="git@github.com:org/repo.git",
+                        classes="import-git-repo",
+                    ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-git_branch",
+                    "Branch",
+                    "Branch to track for updates",
+                    Input(
+                        value=(getattr(imp, "branch", "main") or "main") if imp else "main",
+                        placeholder="main",
+                        classes="import-git-branch",
+                    ),
+                ),
+            ))
+
+            inventory_format_value = self._safe_select_initial(
+                str(getattr(imp, "inventory_format", "static") or "static") if imp else "static",
+                ["static", "ansible"],
+                "static",
             )
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-git_source_pattern",
+                    "Source Pattern",
+                    "Repo path + glob in one value (e.g. hosts/**/*.y*ml)",
+                    Input(
+                        value=source_pattern,
+                        placeholder="hosts/**/*.y*ml",
+                        classes="import-git-source",
+                    ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-git_inventory_format",
+                    "Inventory Format",
+                    "Static hosts or Ansible inventory YAML",
+                    Select(
+                        [("Static", "static"), ("Ansible", "ansible")],
+                        value=inventory_format_value,
+                        classes="import-git-format",
+                    ),
+                ),
+            ))
+
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-git_priority",
+                    "Priority",
+                    "Higher value wins on duplicates",
+                    Input(
+                        value=str(getattr(imp, "priority", 100) if imp else 100),
+                        placeholder="100",
+                        classes="import-git-priority",
+                    ),
+                ),
+            ))
+
+            auto_pull_value = "true"
+            if imp is not None and not bool(getattr(imp, "auto_pull", True)):
+                auto_pull_value = "false"
+            auto_pull_value = self._safe_select_initial(
+                auto_pull_value,
+                ["true", "false"],
+                "true",
+            )
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-git_auto_pull",
+                    "Auto Pull",
+                    "Auto checks remote changes before refresh",
+                    Select(
+                        [("Auto", "true"), ("Manual", "false")],
+                        value=auto_pull_value,
+                        classes="import-git-auto-pull",
+                    ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-git_pull_interval",
+                    "Pull Interval (s)",
+                    "Seconds between automatic pull attempts",
+                    Input(
+                        value=str(getattr(imp, "pull_interval_seconds", 300) if imp else 300),
+                        placeholder="300",
+                        classes="import-git-interval",
+                    ),
+                ),
+            ))
 
         return fields
 
@@ -1264,6 +1790,8 @@ class ConfigEditorScreen(ModalScreen[bool]):
             self._load_yaml_editor_from_file()
         elif btn_id == "btn-yaml-save":
             self._save_from_yaml_editor()
+        elif btn_id == "btn-columns-picker":
+            self._open_table_columns_picker()
         elif btn_id == "btn-detect-columns":
             self._apply_detected_columns_from_cache()
         elif btn_id == "btn-columns-standard":
@@ -1272,7 +1800,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
     def _set_all_providers(self, enabled: bool) -> None:
         """Toggle all provider checkboxes on/off."""
-        for provider in ["static", "netbox", "ansible", "consul"]:
+        for provider in ["static", "netbox", "ansible", "consul", "git"]:
             with contextlib.suppress(Exception):
                 checkbox = self.query_one(f"#cfg-sot-provider-{provider}", Checkbox)
                 checkbox.value = enabled
@@ -1324,6 +1852,13 @@ class ConfigEditorScreen(ModalScreen[bool]):
     def on_input_changed(self, event: Input.Changed) -> None:
         """Keep compact import headers in sync with import name edits."""
         input_id = event.input.id or ""
+        if input_id == "cfg-ui-table_columns":
+            with contextlib.suppress(Exception):
+                preset = self.query_one("#cfg-ui-table_columns_preset", Select)
+                if preset.value != "custom":
+                    preset.value = "custom"
+            return
+
         if not input_id.startswith("import-") or not input_id.endswith("-name"):
             return
 
@@ -1635,7 +2170,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
     def _collect_enabled_providers(self) -> List[str]:
         """Collect enabled SoT providers from checkbox controls."""
         enabled: List[str] = []
-        for provider in ["static", "netbox", "ansible", "consul"]:
+        for provider in ["static", "netbox", "ansible", "consul", "git"]:
             try:
                 if self.query_one(f"#cfg-sot-provider-{provider}", Checkbox).value:
                     enabled.append(provider)
@@ -1721,6 +2256,31 @@ class ConfigEditorScreen(ModalScreen[bool]):
                     "scheme": self._get_input_value(f"import-{i}-consul_scheme", "https"),
                     "dc": self._get_input_value(f"import-{i}-consul_dc", "dc1"),
                 }
+            elif imp_type == "git":
+                entry["repo_url"] = self._get_input_value(f"import-{i}-git_repo_url")
+                entry["branch"] = self._get_input_value(f"import-{i}-git_branch", "main")
+                entry["source_pattern"] = self._get_input_value(
+                    f"import-{i}-git_source_pattern",
+                    "hosts/**/*.y*ml",
+                )
+                legacy_path, legacy_glob = self._split_git_source_pattern(entry["source_pattern"])
+                entry["path"] = legacy_path
+                entry["file_glob"] = legacy_glob
+                entry["inventory_format"] = self._get_select_value(f"import-{i}-git_inventory_format", "static")
+                entry["pull_strategy"] = "ff-only"
+                entry["auto_pull"] = self._get_select_value(f"import-{i}-git_auto_pull", "true") == "true"
+
+                pull_interval_raw = self._get_input_value(f"import-{i}-git_pull_interval", "300")
+                try:
+                    entry["pull_interval_seconds"] = int(pull_interval_raw)
+                except ValueError as e:
+                    raise ValueError(f"git import #{i}: pull interval must be an integer") from e
+
+                priority_raw = self._get_input_value(f"import-{i}-git_priority", "100")
+                try:
+                    entry["priority"] = int(priority_raw)
+                except ValueError as e:
+                    raise ValueError(f"git import #{i}: priority must be an integer") from e
 
             imports.append(entry)
         return imports
@@ -1760,6 +2320,9 @@ class ConfigEditorScreen(ModalScreen[bool]):
         try:
             columns_input = self.query_one("#cfg-ui-table_columns", Input)
             columns_input.value = ", ".join(detected)
+            with contextlib.suppress(Exception):
+                preset = self.query_one("#cfg-ui-table_columns_preset", Select)
+                preset.value = "custom"
             self._update_status("Detected columns from live data/cache/imports")
         except Exception as e:
             self._update_status(f"Could not apply detected columns: {e}", error=True)

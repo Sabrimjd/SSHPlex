@@ -4,7 +4,7 @@ sshplex:
 
 # Source of Truth configuration
 sot:
-  providers: ["static", "netbox", "ansible", "consul"]  # Available: static, netbox, ansible, consul
+  providers: ["static", "netbox", "ansible", "consul", "git"]  # Available: static, netbox, ansible, consul, git
   import:
     - name: "production-servers"
       type: static
@@ -71,6 +71,28 @@ sot:
         verify: false
         dc: "lisbon"
         cert: ""  # Path to SSL certificate (optional)
+    - name: "personal-git-hosts"
+      type: git
+      repo_url: "git@github.com:your-user/sshplex-hosts.git"
+      branch: "main"
+      source_pattern: "hosts/**/*.y*ml"
+      inventory_format: "static" # static, ansible
+      auto_pull: true
+      pull_interval_seconds: 300
+      priority: 100
+      pull_strategy: "ff-only"
+    - name: "git-ansible-inventory"
+      type: git
+      repo_url: "git@github.com:your-org/ansible-inventory.git"
+      branch: "main"
+      source_pattern: "inventory/**/*.y*ml"
+      inventory_format: "ansible"
+      default_filters:
+        groups: ["webservers", "databases"]
+      auto_pull: true
+      pull_interval_seconds: 300
+      priority: 50
+      pull_strategy: "ff-only"
 
 ssh:
   username: "admin"

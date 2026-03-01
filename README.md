@@ -57,8 +57,11 @@ sshplex
 | **NetBox** | `netbox` | None (included in base install) | Inventory-driven infrastructure with metadata |
 | **Ansible** | `ansible` | None | Reusing existing Ansible inventory files |
 | **Consul** | `consul` | `pip install "sshplex[consul]"` | Service discovery and dynamic node catalogs |
+| **Git** | `git` | `git` binary in PATH | Git-backed inventories with auto-pull (`static` or `ansible` YAML) |
 
 Provider activation is controlled by `sot.providers`, and each source is configured as an item in `sot.import`.
+
+Use multiple `git` imports and tune `priority` for deterministic overrides.
 
 
 ## Local Demo (Consul + Ansible)

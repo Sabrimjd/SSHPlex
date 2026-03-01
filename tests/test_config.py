@@ -243,6 +243,29 @@ class TestSoTImportConfig:
         assert config.type == "netbox"
         assert config.url == "https://netbox.example.com"
 
+    def test_git_provider(self):
+        """Test git provider configuration."""
+        config = SoTImportConfig(
+            name="test-git",
+            type="git",
+            repo_url="git@github.com:acme/hosts.git",
+            branch="main",
+            source_pattern="hosts/**/*.y*ml",
+            path="hosts",
+            file_glob="**/*.y*ml",
+            auto_pull=True,
+            pull_interval_seconds=120,
+            priority=100,
+            pull_strategy="ff-only",
+            inventory_format="static",
+        )
+        assert config.name == "test-git"
+        assert config.type == "git"
+        assert config.repo_url == "git@github.com:acme/hosts.git"
+        assert config.source_pattern == "hosts/**/*.y*ml"
+        assert config.priority == 100
+        assert config.inventory_format == "static"
+
 
 class TestConfig:
     """Tests for main Config model."""

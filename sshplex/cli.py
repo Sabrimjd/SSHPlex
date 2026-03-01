@@ -127,6 +127,8 @@ def list_providers(config: Any, logger: Any) -> int:
             status_icon = "📝"
         elif provider.type == "consul":
             status_icon = "🔍"
+        elif provider.type == "git":
+            status_icon = "🔄"
         
         print(f"{i}. {status_icon} {provider.name}")
         print(f"   Type: {provider.type}")
@@ -137,6 +139,12 @@ def list_providers(config: Any, logger: Any) -> int:
             print(f"   Paths: {', '.join(provider.inventory_paths)}")
         elif provider.type == "consul" and provider.config:
             print(f"   Host: {provider.config.host}:{provider.config.port}")
+        elif provider.type == "git" and provider.repo_url:
+            branch = provider.branch or "main"
+            inventory_format = provider.inventory_format or "static"
+            print(f"   Repo: {provider.repo_url} [{branch}, {inventory_format}]")
+            source_pattern = provider.source_pattern or f"{provider.path}/{provider.file_glob}"
+            print(f"   Source: {source_pattern}")
         elif provider.type == "static" and provider.hosts:
             print(f"   Hosts: {len(provider.hosts)} defined")
         

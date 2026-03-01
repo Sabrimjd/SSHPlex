@@ -6,7 +6,8 @@ SSHplex configuration is stored at `~/.config/sshplex/sshplex.yaml`. You can edi
 
 Run `sshplex --onboarding` for an interactive setup wizard that will:
 - Auto-detect your SSH keys and system dependencies
-- Guide you through configuring inventory sources
+- Guide you through configuring inventory sources (including Git)
+- Let you choose backend on macOS (tmux or iTerm2 native)
 - Test connections before saving
 
 ## Config Editor (Built-in)
@@ -80,12 +81,13 @@ tmux:
 | NetBox | `netbox` | Add `netbox` to `sot.providers` | `url`, `token` |
 | Ansible | `ansible` | Add `ansible` to `sot.providers` | `inventory_paths` |
 | Consul | `consul` | Add `consul` to `sot.providers` | `config.host`, `config.token` |
+| Git | `git` | Add `git` to `sot.providers` | `repo_url` |
 
 Only imports whose `type` is listed in `sot.providers` are loaded.
 
 ```yaml
 sot:
-  providers: ["static", "netbox", "ansible", "consul"]
+  providers: ["static", "netbox", "ansible", "consul", "git"]
 ```
 
 #### Static Hosts
@@ -154,6 +156,55 @@ sot:
         verify: true
         dc: "dc1"
 ```
+
+#### Git
+
+Use git-backed inventory catalogs. SSHplex keeps a local mirror under `~/.cache/sshplex/git` and can auto-pull updates.
+
+`source_pattern` combines path + glob in one field, for example `hosts/**/*.y*ml`.
+
+`inventory_format` supports:
+- `static` (default): static host rows (`name` + `ip`)
+- `ansible`: Ansible YAML inventory trees (`all/children/hosts`)
+
+```yaml
+sot:
+  providers: ["git", "static"]
+  import:
+    - name: "personal-hosts"
+      type: git
+      repo_url: "git@github.com:your-user/sshplex-hosts.git"
+      branch: "main"
+      source_pattern: "hosts/**/*.y*ml"
+      inventory_format: "static"
+      auto_pull: true
+      pull_interval_seconds: 300
+      priority: 100
+      pull_strategy: "ff-only"
+```
+
+Git + Ansible remote inventory example (read-only):
+
+```yaml
+sot:
+  providers: ["git"]
+  import:
+    - name: "git-ansible"
+      type: git
+      repo_url: "git@github.com:org/ansible-inventory.git"
+      branch: "main"
+      source_pattern: "inventory/**/*.y*ml"
+      inventory_format: "ansible"
+      default_filters:
+        groups: ["webservers", "databases"]
+      auto_pull: true
+      pull_interval_seconds: 300
+      priority: 50
+      pull_strategy: "ff-only"
+```
+
+In host selector:
+- `r` forces git pull for git imports, then refreshes all providers
 
 ### SSH Proxy / Jump Host
 

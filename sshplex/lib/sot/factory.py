@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Any
 
 from ..cache import HostCache
 from ..logger import get_logger
 from .ansible import AnsibleProvider
 from .base import Host, SoTProvider
+from .git import GitProvider
 from .netbox import NetBoxProvider
 from .static import StaticProvider
 
@@ -112,6 +114,8 @@ class SoTFactory:
                     provider = self._create_ansible_provider_from_import(import_config)
                 elif import_type == "consul":
                     provider = self._create_consul_provider(import_config)
+                elif import_type == "git":
+                    provider = self._create_git_provider(import_config)
                 else:
                     self.logger.error(f"Unknown SoT provider type: {import_type}")
                     continue
@@ -170,6 +174,18 @@ class SoTFactory:
         return ConsulProvider(
             import_config=import_config
         )
+
+    def _create_git_provider(self, import_config: Any) -> GitProvider | None:
+        """Create Git provider instance from import configuration."""
+        repo_url = str(getattr(import_config, "repo_url", "") or "").strip()
+        if not repo_url:
+            self.logger.error(f"Git provider '{import_config.name}' missing required repo_url")
+            return None
+
+        cache_root = Path(getattr(self.config.cache, "cache_dir", "~/.cache/sshplex")).expanduser()
+        git_cache_dir = cache_root / "git"
+
+        return GitProvider(import_config=import_config, cache_dir=str(git_cache_dir))
 
     def _create_netbox_provider_from_import(self, import_config: Any) -> NetBoxProvider | None:
         """Create NetBox provider instance from import configuration.
@@ -551,3 +567,72 @@ class SoTFactory:
             True if cache is valid, False otherwise
         """
         return self.cache.is_cache_valid()
+
+    def sync_git_sources(self, force: bool = False) -> list[dict[str, Any]]:
+        """Sync configured git providers and return per-provider statuses."""
+        results: list[dict[str, Any]] = []
+        providers_to_sync = [provider for provider in self.providers if isinstance(provider, GitProvider)]
+
+        if not providers_to_sync:
+            providers_to_sync = self._initialize_git_providers_for_sync()
+
+        for provider in providers_to_sync:
+            if not isinstance(provider, GitProvider):
+                continue
+            try:
+                status = provider.sync(force=force)
+                results.append(status)
+            except Exception as e:
+                provider_name = getattr(provider, "provider_name", type(provider).__name__)
+                self.logger.error(f"Git sync failed for {provider_name}: {e}")
+                results.append(
+                    {
+                        "provider": provider_name,
+                        "status": "error",
+                        "message": str(e),
+                        "old_commit": None,
+                        "new_commit": None,
+                        "changed_files": 0,
+                    }
+                )
+        return results
+
+    def _initialize_git_providers_for_sync(self) -> list[GitProvider]:
+        """Initialize git providers directly from config for sync-only operations."""
+        initialized: list[GitProvider] = []
+        configured_imports = list(getattr(self.config.sot, "import_", []) or [])
+        if not configured_imports:
+            return initialized
+
+        enabled_provider_types = {
+            str(provider_type).strip()
+            for provider_type in (getattr(self.config.sot, "providers", []) or [])
+            if str(provider_type).strip()
+        }
+
+        providers_explicitly_set = True
+        if hasattr(self.config.sot, "model_fields_set"):
+            providers_explicitly_set = "providers" in getattr(self.config.sot, "model_fields_set", set())
+
+        if not providers_explicitly_set:
+            enabled_provider_types = {
+                str(getattr(import_config, "type", "")).strip()
+                for import_config in configured_imports
+                if str(getattr(import_config, "type", "")).strip()
+            }
+
+        for import_config in configured_imports:
+            import_type = str(getattr(import_config, "type", "")).strip()
+            if import_type != "git":
+                continue
+
+            if enabled_provider_types and import_type not in enabled_provider_types:
+                continue
+
+            provider = self._create_git_provider(import_config)
+            if provider is None:
+                continue
+            if provider.connect():
+                initialized.append(provider)
+
+        return initialized
