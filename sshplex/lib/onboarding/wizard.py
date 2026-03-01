@@ -1,7 +1,9 @@
 """Interactive onboarding wizard for SSHplex."""
 
 import os
+import platform
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -62,6 +64,12 @@ class OnboardingWizard:
         
         # Generate configuration
         config = self._generate_config()
+
+        # Review before saving
+        self._show_configuration_summary(config)
+        if not Confirm.ask("\nSave this configuration?", default=True):
+            self.console.print("\n[yellow]Onboarding cancelled. Configuration was not saved.[/yellow]")
+            return False
         
         # Save configuration
         if self._save_config(config):
@@ -79,7 +87,7 @@ class OnboardingWizard:
         welcome_text.append("Let's configure SSHplex for your environment.")
         welcome_text.append("\nThis wizard will help you:")
         welcome_text.append("\n  • Detect SSH keys and system dependencies")
-        welcome_text.append("\n  • Configure inventory sources (NetBox, Ansible, Consul, etc.)")
+        welcome_text.append("\n  • Configure inventory sources (Static, NetBox, Ansible, Consul, Git)")
         welcome_text.append("\n  • Test connections before saving")
         welcome_text.append("\n  • Generate a working configuration file")
         
@@ -90,6 +98,8 @@ class OnboardingWizard:
     def _detect_environment(self) -> None:
         """Detect system environment and dependencies."""
         self.console.print("\n🔍 [bold]Detecting Environment[/bold]\n")
+        platform_name = platform.system()
+        self.detected_info['platform'] = platform_name
         
         # Detect SSH keys
         ssh_dir = Path.home() / ".ssh"
@@ -106,11 +116,22 @@ class OnboardingWizard:
         tmux_path = shutil.which("tmux")
         self.detected_info['tmux_installed'] = tmux_path is not None
         self.detected_info['tmux_path'] = tmux_path
+
+        # Detect git
+        git_path = shutil.which("git")
+        self.detected_info['git_installed'] = git_path is not None
+        self.detected_info['git_path'] = git_path
+
+        # Detect iTerm2 app (macOS only)
+        iterm_app_exists = platform_name.lower() == "darwin" and Path("/Applications/iTerm.app").exists()
+        self.detected_info['iterm2_installed'] = iterm_app_exists
         
         # Display detected info
         table = Table(show_header=False, box=None)
         table.add_column("Item", style="cyan")
         table.add_column("Status")
+
+        table.add_row("Platform", f"✅ {platform_name}")
         
         # SSH keys
         if ssh_keys:
@@ -124,7 +145,20 @@ class OnboardingWizard:
         if tmux_path:
             table.add_row("tmux", f"✅ {tmux_path}")
         else:
-            table.add_row("tmux", "❌ Not found (required for SSHplex)")
+            table.add_row("tmux", "⚠️  Not found (required for tmux backend)")
+
+        # git
+        if git_path:
+            table.add_row("git", f"✅ {git_path}")
+        else:
+            table.add_row("git", "⚠️  Not found (required for git inventory source)")
+
+        # iTerm2
+        if platform_name.lower() == "darwin":
+            if iterm_app_exists:
+                table.add_row("iTerm2", "✅ /Applications/iTerm.app")
+            else:
+                table.add_row("iTerm2", "ℹ️  Not found (optional, only for native iTerm2 backend)")
         
         self.console.print(table)
     
@@ -154,6 +188,7 @@ class OnboardingWizard:
             ("netbox", "NetBox (infrastructure source of truth)"),
             ("ansible", "Ansible inventory file"),
             ("consul", "HashiCorp Consul (service discovery)"),
+            ("git", "Git repository inventory (static or ansible YAML)"),
         ]
         
         self.console.print("\n[bold]Select inventory source type:[/bold]")
@@ -172,6 +207,8 @@ class OnboardingWizard:
             return self._configure_ansible()
         elif provider_type == "consul":
             return self._configure_consul()
+        elif provider_type == "git":
+            return self._configure_git()
         
         return None
     
@@ -333,6 +370,112 @@ class OnboardingWizard:
                     return None
         
         return config
+
+    def _configure_git(self) -> Optional[Dict[str, Any]]:
+        """Configure read-only git inventory provider."""
+        self.console.print("\n[bold cyan]Git Inventory Configuration[/bold cyan]")
+
+        if not self.detected_info.get('git_installed'):
+            self.console.print("[yellow]⚠️  git was not detected on this machine.[/yellow]")
+            if not Confirm.ask("Continue configuring git provider anyway?", default=False):
+                return None
+
+        name = Prompt.ask("Provider name", default="git-hosts")
+        repo_url = Prompt.ask("Repository URL", default="git@github.com:org/hosts.git")
+        branch = Prompt.ask("Branch", default="main")
+        source_pattern = Prompt.ask(
+            "Source pattern (path + glob)",
+            default="hosts/**/*.y*ml",
+        )
+        inventory_format = Prompt.ask(
+            "Inventory format",
+            choices=["static", "ansible"],
+            default="static",
+        )
+        profile = Prompt.ask("Profile", choices=["solo", "team"], default="solo")
+
+        while True:
+            priority_input = Prompt.ask("Priority", default="100")
+            try:
+                priority = int(priority_input)
+                break
+            except ValueError:
+                self.console.print(f"[red]Invalid priority: {priority_input}[/red]")
+
+        auto_pull = Confirm.ask("Enable auto pull", default=True)
+        pull_interval_seconds = 300
+        if auto_pull:
+            while True:
+                interval_input = Prompt.ask("Auto pull interval (seconds)", default="300")
+                try:
+                    pull_interval_seconds = int(interval_input)
+                    if pull_interval_seconds >= 0:
+                        break
+                    self.console.print("[red]Interval must be >= 0[/red]")
+                except ValueError:
+                    self.console.print(f"[red]Invalid interval: {interval_input}[/red]")
+
+        path, file_glob = self._split_source_pattern_legacy(source_pattern)
+
+        config: Dict[str, Any] = {
+            "name": name,
+            "type": "git",
+            "repo_url": repo_url,
+            "branch": branch,
+            "source_pattern": source_pattern,
+            "path": path,
+            "file_glob": file_glob,
+            "inventory_format": inventory_format,
+            "profile": profile,
+            "priority": priority,
+            "auto_pull": auto_pull,
+            "pull_interval_seconds": pull_interval_seconds,
+            "pull_strategy": "ff-only",
+        }
+
+        if inventory_format == "ansible":
+            groups_str = Prompt.ask(
+                "Ansible groups filter (comma-separated, optional)",
+                default="",
+            )
+            if groups_str.strip():
+                groups = [group.strip() for group in groups_str.split(",") if group.strip()]
+                if groups:
+                    config["default_filters"] = {"groups": groups}
+
+        if Confirm.ask("\nTest repository access?", default=True):
+            if self._test_git_connection(config):
+                self.console.print("✅ Repository access successful!")
+            else:
+                self.console.print("❌ Could not read remote branch/source. Check URL/auth/branch.")
+                if not Confirm.ask("Keep this configuration anyway?", default=False):
+                    return None
+
+        return config
+
+    @staticmethod
+    def _split_source_pattern_legacy(source_pattern: str) -> tuple[str, str]:
+        """Split source pattern into path/glob compatibility fields."""
+        normalized = str(source_pattern or "").strip().lstrip("/")
+        if not normalized:
+            return "hosts", "**/*.y*ml"
+
+        if normalized.endswith((".yml", ".yaml")):
+            return normalized, "**/*.y*ml"
+
+        wildcard_chars = {"*", "?", "["}
+        parts = normalized.split("/")
+        wildcard_index = -1
+        for idx, part in enumerate(parts):
+            if any(char in part for char in wildcard_chars):
+                wildcard_index = idx
+                break
+
+        if wildcard_index == -1:
+            return normalized, "**/*.y*ml"
+        if wildcard_index == 0:
+            return ".", normalized
+        return "/".join(parts[:wildcard_index]), "/".join(parts[wildcard_index:])
     
     def _test_netbox_connection(self, config: Dict[str, Any]) -> bool:
         """Test NetBox connection."""
@@ -393,11 +536,67 @@ class OnboardingWizard:
         except Exception as e:
             self.logger.error(f"Consul connection failed: {e}")
             return False
+
+    def _test_git_connection(self, config: Dict[str, Any]) -> bool:
+        """Test git repository access and branch visibility."""
+        repo_url = str(config.get("repo_url", "")).strip()
+        branch = str(config.get("branch", "main")).strip() or "main"
+        self.logger.info(f"Testing git source access: {repo_url}@{branch}")
+        self.console.print("\n🔄 Testing repository access...")
+
+        if not repo_url:
+            self.logger.error("Git repository URL is empty")
+            return False
+
+        git_bin = shutil.which("git")
+        if not git_bin:
+            self.logger.error("git binary not found in PATH")
+            return False
+
+        try:
+            result = subprocess.run(
+                [git_bin, "ls-remote", "--heads", repo_url, branch],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            if result.returncode != 0:
+                self.logger.error(f"git ls-remote failed: {result.stderr.strip()}")
+                return False
+
+            if not (result.stdout or "").strip():
+                self.logger.warning(
+                    f"Repository reachable but no matching branch found for '{branch}'"
+                )
+                return False
+
+            return True
+        except Exception as e:
+            self.logger.error(f"Git repository check failed: {e}")
+            return False
+
+    def _select_backend(self) -> str:
+        """Choose backend based on detected environment."""
+        platform_name = str(self.detected_info.get('platform', platform.system()))
+        tmux_installed = bool(self.detected_info.get('tmux_installed', False))
+        iterm2_installed = bool(self.detected_info.get('iterm2_installed', False))
+
+        if platform_name.lower() == "darwin" and iterm2_installed:
+            default_backend = "tmux" if tmux_installed else "iterm2-native"
+            backend = Prompt.ask(
+                "Backend",
+                choices=["tmux", "iterm2-native"],
+                default=default_backend,
+            )
+            return backend
+
+        return "tmux"
     
     def _generate_config(self) -> Dict[str, Any]:
         """Generate configuration dictionary."""
         # Use detected SSH key as default, fallback to common default if none found
         default_key = self.detected_info.get('default_ssh_key') or '~/.ssh/id_ed25519'
+        backend = self._select_backend()
         
         # Validate SSH port input
         while True:
@@ -431,6 +630,7 @@ class OnboardingWizard:
                 "file": "logs/sshplex.log"
             },
             "tmux": {
+                "backend": backend,
                 "control_with_iterm2": False
             },
             "ui": {
@@ -438,8 +638,60 @@ class OnboardingWizard:
                 "table_columns": ["name", "ip", "cluster", "role", "tags", "description", "provider"]
             }
         }
+
+        if backend == "tmux" and not self.detected_info.get('tmux_installed'):
+            self.console.print(
+                "\n[yellow]⚠️  tmux backend selected but tmux was not detected. "
+                "Install tmux or switch to iTerm2 native backend on macOS.[/yellow]"
+            )
         
         return config
+
+    def _show_configuration_summary(self, config: Dict[str, Any]) -> None:
+        """Display final config summary before save."""
+        self.console.print("\n🧾 [bold]Configuration Summary[/bold]\n")
+
+        ssh = config.get("ssh", {})
+        tmux = config.get("tmux", {})
+        imports = list((config.get("sot", {}) or {}).get("import", []) or [])
+
+        summary = Table(show_header=False, box=None)
+        summary.add_column("Item", style="cyan")
+        summary.add_column("Value")
+        summary.add_row("Config Path", str(self.config_path))
+        summary.add_row("Backend", str(tmux.get("backend", "tmux")))
+        summary.add_row("SSH Username", str(ssh.get("username", "")))
+        summary.add_row("SSH Port", str(ssh.get("port", 22)))
+        summary.add_row("SSH Key", str(ssh.get("key_path", "")))
+        summary.add_row("Sources", str(len(imports)))
+        self.console.print(summary)
+
+        if imports:
+            provider_table = Table(show_header=True, box=None)
+            provider_table.add_column("Name", style="bold")
+            provider_table.add_column("Type", style="magenta")
+            provider_table.add_column("Details", style="dim")
+
+            for provider in imports:
+                provider_name = str(provider.get("name", "unnamed"))
+                provider_type = str(provider.get("type", "unknown"))
+                details = ""
+                if provider_type == "static":
+                    details = f"hosts: {len(provider.get('hosts', []) or [])}"
+                elif provider_type == "ansible":
+                    details = f"paths: {len(provider.get('inventory_paths', []) or [])}"
+                elif provider_type == "netbox":
+                    details = str(provider.get("url", ""))
+                elif provider_type == "consul":
+                    cfg = provider.get("config", {}) or {}
+                    details = f"{cfg.get('scheme', 'http')}://{cfg.get('host', 'localhost')}:{cfg.get('port', 8500)}"
+                elif provider_type == "git":
+                    details = str(provider.get("source_pattern", provider.get("path", "")))
+
+                provider_table.add_row(provider_name, provider_type, details)
+
+            self.console.print()
+            self.console.print(provider_table)
     
     def _save_config(self, config: Dict[str, Any]) -> bool:
         """Save configuration to file."""

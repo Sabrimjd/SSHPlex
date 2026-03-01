@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from sshplex.lib.sot.base import Host
 from sshplex.lib.sot.factory import SoTFactory
+from sshplex.lib.sot.git import GitProvider
 
 
 class InMemoryCache:
@@ -103,6 +104,38 @@ def test_initialize_providers_respects_enabled_provider_types() -> None:
     assert factory.providers == [static_provider]
 
 
+def test_initialize_providers_includes_git_when_enabled() -> None:
+    """Git imports should initialize when git provider type is enabled."""
+    imports = [
+        SimpleNamespace(
+            name="git-src",
+            type="git",
+            repo_url="git@github.com:acme/hosts.git",
+            branch="main",
+            path="hosts",
+            file_glob="**/*.y*ml",
+            auto_pull=True,
+            pull_interval_seconds=300,
+            profile="solo",
+            priority=100,
+            pull_strategy="ff-only",
+        )
+    ]
+    config = _make_config(imports=imports, providers=["git"], providers_field_set=True)
+
+    git_provider = MagicMock()
+    git_provider.connect.return_value = True
+
+    with patch("sshplex.lib.sot.factory.HostCache", InMemoryCache):
+        factory = SoTFactory(config)
+
+    with patch.object(factory, "_create_git_provider", return_value=git_provider) as create_git:
+        assert factory.initialize_providers() is True
+
+    create_git.assert_called_once()
+    assert factory.providers == [git_provider]
+
+
 def test_initialize_providers_infers_enabled_types_when_providers_not_set() -> None:
     """Missing sot.providers should behave as enable-all configured imports."""
     imports = [
@@ -184,3 +217,47 @@ def test_get_all_hosts_merge_is_consistent_between_modes() -> None:
     assert isinstance(factory.cache, InMemoryCache)
     assert factory.cache.saved_info is not None
     assert factory.cache.saved_info["fetch_mode"] == "parallel"
+
+
+def test_sync_git_sources_initializes_git_providers_without_full_init(tmp_path) -> None:
+    """sync_git_sources should work even when non-git providers are not initialized."""
+    imports = [
+        SimpleNamespace(
+            name="git-src",
+            type="git",
+            repo_url="git@github.com:acme/hosts.git",
+            branch="main",
+            path="hosts",
+            file_glob="**/*.y*ml",
+            auto_pull=True,
+            pull_interval_seconds=300,
+            profile="solo",
+            priority=100,
+            pull_strategy="ff-only",
+        )
+    ]
+    config = _make_config(imports=imports, providers=["git"], providers_field_set=True)
+
+    with patch("sshplex.lib.sot.factory.HostCache", InMemoryCache):
+        factory = SoTFactory(config)
+
+    provider = GitProvider(imports[0], cache_dir=str(tmp_path / "git-cache"))
+    provider.connect = MagicMock(return_value=True)  # type: ignore[method-assign]
+    provider.sync = MagicMock(  # type: ignore[method-assign]
+        return_value={
+            "provider": "git-src",
+            "profile": "solo",
+            "status": "updated",
+            "message": "updated from remote",
+            "old_commit": "aaaa111",
+            "new_commit": "bbbb222",
+            "changed_files": 2,
+        }
+    )
+
+    with patch.object(factory, "_create_git_provider", return_value=provider):
+        results = factory.sync_git_sources(force=True)
+
+    assert results and results[0]["status"] == "updated"
+    provider.connect.assert_called_once()
+    provider.sync.assert_called_once_with(force=True)

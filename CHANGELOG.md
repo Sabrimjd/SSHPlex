@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0] - 2026-03-01
+
+### Added
+- New read-only Git Source of Truth provider with repository sync status reporting and per-source pull summaries.
+- Git source parsing now supports both static host YAML and remote Ansible inventory YAML via `inventory_format`.
+- Config editor now adds field-level helper descriptions for all source providers (NetBox, Ansible, Consul, Git) to improve discoverability.
+- Onboarding wizard now supports Git provider setup, backend selection guidance on macOS, and a final configuration summary before save.
+- New regression tests for Git provider sync/parse flows (including Ansible mode) and provider initialization behavior.
+
+### Changed
+- Git source selection is simplified to one parameter, `source_pattern`, combining path and glob (for example `hosts/**/*.y*ml`).
+- Host selector refresh (`r`) now performs git source sync first, then reloads providers, removing the separate git-update key path.
+- Config editor source forms now use the same top-of-field description pattern as the General pane for clearer UX on smaller screens.
+
+### Fixed
+- Improved provider setup defaults and compatibility by preserving legacy `path`/`file_glob` fallback when `source_pattern` is not set.
+- Prevented accidental source-setting ambiguity by enforcing read-only git sync strategy (`ff-only`) in saved config shape.
+
 ## [1.6.4] - 2026-03-01
 
 ### Added

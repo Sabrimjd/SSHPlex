@@ -63,6 +63,9 @@ logging:
 | Import configured but hosts never appear | Ensure import `type` is enabled in `sot.providers` |
 | No hosts found | Remove filters temporarily, check provider logs |
 | Consul import error | Install with `pip install "sshplex[consul]"` |
+| Git import clone/pull fails | Verify `git` is installed, repo URL/auth, and branch exists |
+| Git source is stale | Press `r` in the TUI to sync git and refresh providers |
+| Git + Ansible repo loads no hosts | Set `inventory_format: ansible` and ensure hosts define `ansible_host` |
 
 ### SSH Issues
 

@@ -253,6 +253,23 @@ class ConfigEditorScreen(ModalScreen[bool]):
         width: 12;
     }
 
+    .import-git-repo,
+    .import-git-source {
+        width: 1fr;
+    }
+
+    .import-git-branch,
+    .import-git-profile,
+    .import-git-format,
+    .import-git-auto-pull {
+        width: 18;
+    }
+
+    .import-git-priority,
+    .import-git-interval {
+        width: 14;
+    }
+
     #sources-providers {
         layout: horizontal;
         height: auto;
@@ -657,13 +674,13 @@ class ConfigEditorScreen(ModalScreen[bool]):
                             "cfg-ssh-username",
                             "Username",
                             Input(value=self.config.ssh.username),
-                            "Default SSH username",
+                            "Default user when a host has no ssh_user override",
                         ),
                         _form_field(
                             "cfg-ssh-port",
                             "Port",
                             Input(value=str(self.config.ssh.port)),
-                            "Default SSH port",
+                            "Default SSH port when host has no ssh_port",
                         ),
                     )
                     yield _form_row(
@@ -671,13 +688,13 @@ class ConfigEditorScreen(ModalScreen[bool]):
                             "cfg-ssh-key_path",
                             "Key Path",
                             Input(value=self.config.ssh.key_path),
-                            "Path to SSH private key",
+                            "Default key path when host has no ssh_key_path",
                         ),
                         _form_field(
                             "cfg-ssh-timeout",
                             "Timeout",
                             Input(value=str(self.config.ssh.timeout)),
-                            "Connection timeout in seconds",
+                            "Connection timeout in seconds per SSH attempt",
                         ),
                     )
                     yield _form_row(
@@ -685,6 +702,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
                             "cfg-ssh-strict_host_key_checking",
                             "Strict Host Key Checking",
                             Switch(value=self.config.ssh.strict_host_key_checking),
+                            "ON: verify host keys strictly | OFF: less secure, easier lab setup",
                         ),
                         _form_field(
                             "cfg-ssh-user_known_hosts_file",
@@ -699,11 +717,13 @@ class ConfigEditorScreen(ModalScreen[bool]):
                             "cfg-ssh-retry-enabled",
                             "Retry Enabled",
                             Switch(value=self.config.ssh.retry.enabled),
+                            "Retry transient SSH connection failures",
                         ),
                         _form_field(
                             "cfg-ssh-retry-exponential_backoff",
                             "Exponential Backoff",
                             Switch(value=self.config.ssh.retry.exponential_backoff),
+                            "ON: delay grows each retry | OFF: fixed delay",
                         ),
                     )
                     yield _form_row(
@@ -711,11 +731,13 @@ class ConfigEditorScreen(ModalScreen[bool]):
                             "cfg-ssh-retry-max_attempts",
                             "Max Attempts",
                             Input(value=str(self.config.ssh.retry.max_attempts)),
+                            "Total attempts including first try",
                         ),
                         _form_field(
                             "cfg-ssh-retry-delay_seconds",
                             "Delay Seconds",
                             Input(value=str(self.config.ssh.retry.delay_seconds)),
+                            "Base wait time between retries",
                         ),
                     )
                     yield Static("SSH Proxies", classes="section-header")
@@ -796,6 +818,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         yield Checkbox("NetBox", value="netbox" in self.config.sot.providers, id="cfg-sot-provider-netbox", compact=True)
                         yield Checkbox("Ansible", value="ansible" in self.config.sot.providers, id="cfg-sot-provider-ansible", compact=True)
                         yield Checkbox("Consul", value="consul" in self.config.sot.providers, id="cfg-sot-provider-consul", compact=True)
+                        yield Checkbox("Git", value="git" in self.config.sot.providers, id="cfg-sot-provider-git", compact=True)
                     with Horizontal(classes="list-buttons"):
                         yield Button("All", id="btn-providers-all", variant="default")
                         yield Button("None", id="btn-providers-none", variant="default")
@@ -1042,7 +1065,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
         name = imp.name if imp else ""
         imp_type = self._safe_select_initial(
             str(getattr(imp, "type", "static")) if imp else "static",
-            ["static", "netbox", "ansible", "consul"],
+            ["static", "netbox", "ansible", "consul", "git"],
             "static",
         )
         self._import_types[str(idx)] = imp_type
@@ -1050,7 +1073,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
         header = Horizontal(
             Input(value=name, placeholder="Import name", id=f"import-{idx}-name", classes="import-name"),
             Select(
-                [(v, v) for v in ["static", "netbox", "ansible", "consul"]],
+                [(v, v) for v in ["static", "netbox", "ansible", "consul", "git"]],
                 value=imp_type,
                 id=f"import-{idx}-type",
                 classes="import-type",
@@ -1073,6 +1096,52 @@ class ConfigEditorScreen(ModalScreen[bool]):
             id=f"import-item-{idx}",
             classes="import-collapsible",
         )
+
+    def _import_form_field(self, field_id: str, label: str, description: str, widget: Any) -> Vertical:
+        """Build an import field with label + helper text above input."""
+        return _form_field(field_id, label, widget, description)
+
+    @staticmethod
+    def _compose_git_source_pattern(path: str, file_glob: str) -> str:
+        """Build a single source pattern from legacy path + glob values."""
+        clean_path = str(path or "").strip().strip("/")
+        clean_glob = str(file_glob or "").strip().strip("/")
+
+        if clean_path.endswith((".yml", ".yaml")):
+            return clean_path
+        if clean_path and clean_glob:
+            return f"{clean_path}/{clean_glob}"
+        if clean_path:
+            return clean_path
+        if clean_glob:
+            return clean_glob
+        return "hosts/**/*.y*ml"
+
+    @staticmethod
+    def _split_git_source_pattern(source_pattern: str) -> tuple[str, str]:
+        """Split a source pattern into legacy path + glob fields."""
+        normalized = str(source_pattern or "").strip().lstrip("/")
+        if not normalized:
+            return "hosts", "**/*.y*ml"
+
+        if normalized.endswith((".yml", ".yaml")):
+            return normalized, "**/*.y*ml"
+
+        wildcard_chars = {"*", "?", "["}
+        parts = normalized.split("/")
+        wildcard_index = -1
+        for idx, part in enumerate(parts):
+            if any(char in part for char in wildcard_chars):
+                wildcard_index = idx
+                break
+
+        if wildcard_index == -1:
+            return normalized, "**/*.y*ml"
+
+        if wildcard_index == 0:
+            return ".", normalized
+
+        return "/".join(parts[:wildcard_index]), "/".join(parts[wildcard_index:])
 
     def _make_import_type_fields(self, idx: int, imp_type: str, imp: Any = None) -> list:
         """Generate type-specific fields for an import item."""
@@ -1104,98 +1173,239 @@ class ConfigEditorScreen(ModalScreen[bool]):
             fields.append(host_list)
         elif imp_type == "netbox":
             fields.append(Static("NetBox settings", classes="form-label"))
-            fields.append(
-                Horizontal(
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-url",
+                    "NetBox URL",
+                    "NetBox API endpoint (https://netbox.example.com)",
                     Input(
                         value=(imp.url or "") if imp else "",
-                        placeholder="NetBox URL",
-                        id=f"import-{idx}-url",
+                        placeholder="https://netbox.example.com",
                         classes="import-netbox-url",
                     ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-token",
+                    "API Token",
+                    "Read token used to query inventory",
                     Input(
                         value=(imp.token or "") if imp else "",
-                        placeholder="API token",
-                        id=f"import-{idx}-token",
+                        placeholder="NetBox token",
                         password=True,
                         classes="import-netbox-token",
                     ),
-                    classes="import-row",
-                )
-            )
+                ),
+            ))
             filters_str = ""
             if imp and imp.default_filters:
                 filters_str = ", ".join(f"{k}={v}" for k, v in imp.default_filters.items())
-            fields.append(
-                Horizontal(
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-filters",
+                    "Default Filters",
+                    "Optional query filters (key=value, key2=value2)",
                     Input(
                         value=filters_str,
-                        placeholder="Filters: key=value, key2=value2",
-                        id=f"import-{idx}-filters",
+                        placeholder="status=active, role=server",
                         classes="import-netbox-filters",
                     ),
-                    classes="import-row",
                 )
-            )
+            ))
         elif imp_type == "ansible":
             fields.append(Static("Ansible settings", classes="form-label"))
             paths = ""
             if imp and imp.inventory_paths:
                 paths = ", ".join(imp.inventory_paths)
-            fields.append(
-                Horizontal(
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-inventory_paths",
+                    "Inventory Paths",
+                    "Comma-separated local inventory files",
                     Input(
                         value=paths,
-                        placeholder="Inventory paths (comma-separated)",
-                        id=f"import-{idx}-inventory_paths",
+                        placeholder="inventory/prod.yml, inventory/staging.yml",
                         classes="import-ansible-paths",
                     ),
-                    classes="import-row",
                 )
-            )
+            ))
         elif imp_type == "consul":
             fields.append(Static("Consul settings", classes="form-label"))
             cfg = imp.config if imp else None
-            fields.append(
-                Horizontal(
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-consul_host",
+                    "Consul Host",
+                    "Consul server hostname",
                     Input(
                         value=(cfg.host if cfg else ""),
-                        placeholder="Consul host",
-                        id=f"import-{idx}-consul_host",
+                        placeholder="consul.example.com",
                         classes="import-consul-host",
                     ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-consul_port",
+                    "Port",
+                    "Consul API port",
                     Input(
                         value=str(cfg.port if cfg else 443),
-                        placeholder="Port",
-                        id=f"import-{idx}-consul_port",
+                        placeholder="443",
                         classes="import-consul-port",
                     ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-consul_scheme",
+                    "Scheme",
+                    "http or https",
                     Input(
                         value=(cfg.scheme if cfg else "https"),
-                        placeholder="Scheme",
-                        id=f"import-{idx}-consul_scheme",
+                        placeholder="https",
                         classes="import-consul-scheme",
                     ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-consul_dc",
+                    "Datacenter",
+                    "Consul datacenter name",
                     Input(
                         value=(cfg.dc if cfg else "dc1"),
-                        placeholder="Datacenter",
-                        id=f"import-{idx}-consul_dc",
+                        placeholder="dc1",
                         classes="import-consul-dc",
                     ),
-                    classes="import-row",
-                )
-            )
-            fields.append(
-                Horizontal(
+                ),
+            ))
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-consul_token",
+                    "Token",
+                    "Read token for catalog queries",
                     Input(
                         value=(cfg.token if cfg else ""),
-                        placeholder="Token",
-                        id=f"import-{idx}-consul_token",
+                        placeholder="Consul token",
                         password=True,
                         classes="import-consul-token",
                     ),
-                    classes="import-row",
                 )
+            ))
+        elif imp_type == "git":
+            fields.append(Static("Git settings", classes="form-label"))
+            source_pattern = "hosts/**/*.y*ml"
+            if imp is not None:
+                source_pattern = str(getattr(imp, "source_pattern", "") or "").strip()
+                if not source_pattern:
+                    source_pattern = self._compose_git_source_pattern(
+                        str(getattr(imp, "path", "hosts") or "hosts"),
+                        str(getattr(imp, "file_glob", "**/*.y*ml") or "**/*.y*ml"),
+                    )
+
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-git_repo_url",
+                    "Repository URL",
+                    "Git repository URL (ssh or https)",
+                    Input(
+                        value=(getattr(imp, "repo_url", "") or "") if imp else "",
+                        placeholder="git@github.com:org/repo.git",
+                        classes="import-git-repo",
+                    ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-git_branch",
+                    "Branch",
+                    "Branch to track for updates",
+                    Input(
+                        value=(getattr(imp, "branch", "main") or "main") if imp else "main",
+                        placeholder="main",
+                        classes="import-git-branch",
+                    ),
+                ),
+            ))
+
+            profile_value = self._safe_select_initial(
+                str(getattr(imp, "profile", "solo") or "solo") if imp else "solo",
+                ["solo", "team"],
+                "solo",
             )
+            inventory_format_value = self._safe_select_initial(
+                str(getattr(imp, "inventory_format", "static") or "static") if imp else "static",
+                ["static", "ansible"],
+                "static",
+            )
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-git_source_pattern",
+                    "Source Pattern",
+                    "Repo path + glob in one value (e.g. hosts/**/*.y*ml)",
+                    Input(
+                        value=source_pattern,
+                        placeholder="hosts/**/*.y*ml",
+                        classes="import-git-source",
+                    ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-git_inventory_format",
+                    "Inventory Format",
+                    "Static hosts or Ansible inventory YAML",
+                    Select(
+                        [("Static hosts", "static"), ("Ansible inventory", "ansible")],
+                        value=inventory_format_value,
+                        classes="import-git-format",
+                    ),
+                ),
+            ))
+
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-git_profile",
+                    "Profile",
+                    "Label for solo/team layering",
+                    Select(
+                        [("solo", "solo"), ("team", "team")],
+                        value=profile_value,
+                        classes="import-git-profile",
+                    ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-git_priority",
+                    "Priority",
+                    "Higher value wins on duplicates",
+                    Input(
+                        value=str(getattr(imp, "priority", 100) if imp else 100),
+                        placeholder="100",
+                        classes="import-git-priority",
+                    ),
+                ),
+            ))
+
+            auto_pull_value = "true"
+            if imp is not None and not bool(getattr(imp, "auto_pull", True)):
+                auto_pull_value = "false"
+            auto_pull_value = self._safe_select_initial(
+                auto_pull_value,
+                ["true", "false"],
+                "true",
+            )
+            fields.append(_form_row(
+                self._import_form_field(
+                    f"import-{idx}-git_auto_pull",
+                    "Auto Pull",
+                    "Auto checks remote changes before refresh",
+                    Select(
+                        [("Auto", "true"), ("Manual", "false")],
+                        value=auto_pull_value,
+                        classes="import-git-auto-pull",
+                    ),
+                ),
+                self._import_form_field(
+                    f"import-{idx}-git_pull_interval",
+                    "Pull Interval (s)",
+                    "Seconds between automatic pull attempts",
+                    Input(
+                        value=str(getattr(imp, "pull_interval_seconds", 300) if imp else 300),
+                        placeholder="300",
+                        classes="import-git-interval",
+                    ),
+                ),
+            ))
 
         return fields
 
@@ -1272,7 +1482,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
     def _set_all_providers(self, enabled: bool) -> None:
         """Toggle all provider checkboxes on/off."""
-        for provider in ["static", "netbox", "ansible", "consul"]:
+        for provider in ["static", "netbox", "ansible", "consul", "git"]:
             with contextlib.suppress(Exception):
                 checkbox = self.query_one(f"#cfg-sot-provider-{provider}", Checkbox)
                 checkbox.value = enabled
@@ -1635,7 +1845,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
     def _collect_enabled_providers(self) -> List[str]:
         """Collect enabled SoT providers from checkbox controls."""
         enabled: List[str] = []
-        for provider in ["static", "netbox", "ansible", "consul"]:
+        for provider in ["static", "netbox", "ansible", "consul", "git"]:
             try:
                 if self.query_one(f"#cfg-sot-provider-{provider}", Checkbox).value:
                     enabled.append(provider)
@@ -1721,6 +1931,32 @@ class ConfigEditorScreen(ModalScreen[bool]):
                     "scheme": self._get_input_value(f"import-{i}-consul_scheme", "https"),
                     "dc": self._get_input_value(f"import-{i}-consul_dc", "dc1"),
                 }
+            elif imp_type == "git":
+                entry["repo_url"] = self._get_input_value(f"import-{i}-git_repo_url")
+                entry["branch"] = self._get_input_value(f"import-{i}-git_branch", "main")
+                entry["source_pattern"] = self._get_input_value(
+                    f"import-{i}-git_source_pattern",
+                    "hosts/**/*.y*ml",
+                )
+                legacy_path, legacy_glob = self._split_git_source_pattern(entry["source_pattern"])
+                entry["path"] = legacy_path
+                entry["file_glob"] = legacy_glob
+                entry["inventory_format"] = self._get_select_value(f"import-{i}-git_inventory_format", "static")
+                entry["profile"] = self._get_select_value(f"import-{i}-git_profile", "solo")
+                entry["pull_strategy"] = "ff-only"
+                entry["auto_pull"] = self._get_select_value(f"import-{i}-git_auto_pull", "true") == "true"
+
+                pull_interval_raw = self._get_input_value(f"import-{i}-git_pull_interval", "300")
+                try:
+                    entry["pull_interval_seconds"] = int(pull_interval_raw)
+                except ValueError as e:
+                    raise ValueError(f"git import #{i}: pull interval must be an integer") from e
+
+                priority_raw = self._get_input_value(f"import-{i}-git_priority", "100")
+                try:
+                    entry["priority"] = int(priority_raw)
+                except ValueError as e:
+                    raise ValueError(f"git import #{i}: priority must be an integer") from e
 
             imports.append(entry)
         return imports

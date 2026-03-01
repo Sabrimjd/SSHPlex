@@ -164,7 +164,7 @@ class ConsulConfig(BaseModel):
 class SoTImportConfig(BaseModel):
     """Individual SoT import configuration."""
     name: str = Field(..., description="Unique name for this import")
-    type: str = Field(..., description="Provider type: static, netbox, ansible, consul")
+    type: str = Field(..., description="Provider type: static, netbox, ansible, consul, git")
 
     # Static provider fields
     hosts: Optional[List[Dict[str, Any]]] = None
@@ -182,9 +182,25 @@ class SoTImportConfig(BaseModel):
     # Consul provider fields
     config: Optional[ConsulConfig] = None
 
+    # Git provider fields
+    repo_url: Optional[str] = None
+    branch: Optional[str] = "main"
+    source_pattern: Optional[str] = None
+    path: Optional[str] = "hosts"
+    file_glob: Optional[str] = "**/*.y*ml"
+    auto_pull: Optional[bool] = True
+    pull_interval_seconds: Optional[int] = 300
+    profile: Optional[str] = "solo"
+    priority: Optional[int] = 100
+    pull_strategy: Optional[str] = "ff-only"
+    inventory_format: Optional[str] = "static"
+
 class SoTConfig(BaseModel):
     """Source of Truth configuration."""
-    providers: List[str] = Field(default_factory=lambda: ["static"], description="List of SoT providers to use: static, netbox, ansible")
+    providers: List[str] = Field(
+        default_factory=lambda: ["static"],
+        description="List of SoT providers to use: static, netbox, ansible, consul, git",
+    )
     import_: List[SoTImportConfig] = Field(alias='import', default_factory=list, description="List of import configurations")
 
 

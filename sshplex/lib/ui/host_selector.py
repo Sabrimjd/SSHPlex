@@ -370,8 +370,7 @@ class HostSelector(App):
         """Add SSHplex commands to command palette while keeping built-ins."""
         yield from super().get_system_commands(screen)
         yield SystemCommand("Connect Selected", "Connect to selected hosts", self.action_connect_selected)
-        yield SystemCommand("Refresh Hosts", "Reload hosts from sources", self.action_refresh_hosts)
-        yield SystemCommand("Force Refresh Hosts", "Bypass cache and reload hosts", lambda: self.run_worker(self.load_hosts(force_refresh=True), name="cmd_force_refresh"))
+        yield SystemCommand("Refresh Hosts", "Sync git sources and reload hosts", self.action_refresh_hosts)
         yield SystemCommand("Sessions", "Open session manager", self.action_show_sessions)
         yield SystemCommand("Settings", "Open configuration editor", self.action_edit_config)
         yield SystemCommand("Reload Config", "Reload config from disk", lambda: self.run_worker(self._reload_config_runtime(), name="cmd_reload_config"))
@@ -923,9 +922,74 @@ class HostSelector(App):
         self.update_status_with_mode()
 
     def action_refresh_hosts(self) -> None:
-        """Refresh hosts by fetching fresh data from all SoT providers."""
-        self.log_message("Refreshing hosts from SoT providers...")
-        self.run_worker(self.load_hosts(force_refresh=True), name="refresh_hosts")
+        """Refresh hosts and force git sync before provider reload."""
+        self.run_worker(self._refresh_hosts_with_git_sync(), name="refresh_hosts")
+
+    async def _refresh_hosts_with_git_sync(self) -> None:
+        """Force-update git sources, then reload provider data."""
+
+        def _sync_blocking() -> tuple[list[dict[str, Any]], str]:
+            factory = SoTFactory(self.config)
+            return factory.sync_git_sources(force=True), ""
+
+        self.log_message("Refreshing sources (forcing git pull, then provider reload)...")
+        self.update_status("Refreshing sources...")
+
+        try:
+            results, error = await asyncio.to_thread(_sync_blocking)
+            if error:
+                self.log_message(f"Update failed: {error}", level="error")
+                self.notify(f"Sources update failed: {error}", title="Sources", timeout=4)
+                return
+
+            if not results:
+                self.log_message("No git providers configured", level="warning")
+                self.notify("No git providers configured", title="Sources", timeout=3)
+            else:
+                for result in results:
+                    message, level = self._format_git_sync_result(result)
+                    self.log_message(message, level=level)
+                self.notify(self._summarize_git_sync(results), title="Sources", timeout=4)
+        except Exception as e:
+            self.log_message(f"Unexpected source update error: {e}", level="error")
+            self.notify(f"Update error: {e}", title="Sources", timeout=4)
+        finally:
+            await self.load_hosts(force_refresh=True)
+
+    @staticmethod
+    def _short_commit(commit: Any) -> str:
+        text = str(commit or "").strip()
+        return text[:7] if text else "-"
+
+    def _format_git_sync_result(self, result: dict[str, Any]) -> tuple[str, str]:
+        """Convert git sync result payload into user-facing message + level."""
+        provider = str(result.get("provider", "git"))
+        profile = str(result.get("profile", "solo"))
+        status = str(result.get("status", "error"))
+        message = str(result.get("message", ""))
+        old_commit = self._short_commit(result.get("old_commit"))
+        new_commit = self._short_commit(result.get("new_commit"))
+        changed_files = int(result.get("changed_files", 0) or 0)
+
+        prefix = f"Git[{provider}/{profile}]"
+        if status == "updated":
+            return f"{prefix} updated {old_commit} -> {new_commit} ({changed_files} files)", "info"
+        if status == "up_to_date":
+            return f"{prefix} up to date at {new_commit}", "info"
+        if status == "skipped":
+            return f"{prefix} skipped: {message}", "warning"
+        return f"{prefix} error: {message}", "error"
+
+    @staticmethod
+    def _summarize_git_sync(results: list[dict[str, Any]]) -> str:
+        updated = sum(1 for result in results if result.get("status") == "updated")
+        unchanged = sum(1 for result in results if result.get("status") == "up_to_date")
+        skipped = sum(1 for result in results if result.get("status") == "skipped")
+        errors = sum(1 for result in results if result.get("status") == "error")
+        return (
+            f"Git sources: {updated} updated, {unchanged} up-to-date, "
+            f"{skipped} skipped, {errors} errors"
+        )
 
     def action_clear_logs(self) -> None:
         """Clear in-app log panel content."""
@@ -1056,7 +1120,7 @@ class HostSelector(App):
 | Key | Action |
 |-----|--------|
 | `/` | Open search input |
-| `r` | Refresh from sources (bypass cache) |
+| `r` | Sync git sources, then refresh hosts from providers |
 | `Escape` | Focus table / clear search |
 
 ## Connection Modes
