@@ -230,3 +230,79 @@ all:
     hosts = provider.get_hosts(filters={"groups": ["databases"]})
     assert len(hosts) == 1
     assert hosts[0].name == "db1"
+
+
+def test_get_hosts_ansible_inventory_respects_exclude_groups(tmp_path, monkeypatch) -> None:
+    repo_dir = tmp_path / "repo"
+    inv_dir = repo_dir / "inventory"
+    inv_dir.mkdir(parents=True)
+    (inv_dir / "prod.yml").write_text(
+        """
+all:
+  children:
+    webservers:
+      hosts:
+        web1:
+          ansible_host: 10.10.1.11
+    databases:
+      hosts:
+        db1:
+          ansible_host: 10.10.2.21
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    provider = GitProvider(
+        _git_import(
+            path="inventory",
+            source_pattern="inventory/**/*.y*ml",
+            inventory_format="ansible",
+        ),
+        cache_dir=str(tmp_path / "cache"),
+    )
+    _bind_repo(provider, repo_dir)
+
+    monkeypatch.setattr(provider, "_ensure_repository", lambda: True)
+    monkeypatch.setattr(provider, "_git_output", lambda args: "cafef00")
+
+    hosts = provider.get_hosts(filters={"exclude_groups": ["databases"]})
+    assert len(hosts) == 1
+    assert hosts[0].name == "web1"
+
+
+def test_get_hosts_ansible_inventory_applies_host_patterns(tmp_path, monkeypatch) -> None:
+    repo_dir = tmp_path / "repo"
+    inv_dir = repo_dir / "inventory"
+    inv_dir.mkdir(parents=True)
+    (inv_dir / "prod.yml").write_text(
+        """
+all:
+  children:
+    app:
+      hosts:
+        app-01:
+          ansible_host: 10.10.1.11
+        app-02:
+          ansible_host: 10.10.1.12
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    provider = GitProvider(
+        _git_import(
+            path="inventory",
+            source_pattern="inventory/**/*.y*ml",
+            inventory_format="ansible",
+        ),
+        cache_dir=str(tmp_path / "cache"),
+    )
+    _bind_repo(provider, repo_dir)
+
+    monkeypatch.setattr(provider, "_ensure_repository", lambda: True)
+    monkeypatch.setattr(provider, "_git_output", lambda args: "cafef00")
+
+    hosts = provider.get_hosts(filters={"host_patterns": [r"app-02$"]})
+    assert len(hosts) == 1
+    assert hosts[0].name == "app-02"

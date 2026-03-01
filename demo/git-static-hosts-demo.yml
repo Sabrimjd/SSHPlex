@@ -1,0 +1,24 @@
+hosts:
+  - name: demo-git-static-app-01
+    ip: 192.168.31.216
+    ssh_alias: git-app1
+    ssh_user: demo
+    ssh_port: 22
+    ssh_key_path: ~/.ssh/id_rsa
+    cluster: demo-git
+    role: app
+    tags:
+      - git
+      - static
+
+  - name: demo-git-static-db-01
+    ip: 192.168.31.216
+    ssh_alias: git-db1
+    ssh_user: demo
+    ssh_port: 22
+    ssh_key_path: ~/.ssh/id_rsa
+    cluster: demo-git
+    role: database
+    tags:
+      - git
+      - static
