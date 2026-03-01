@@ -71,7 +71,7 @@ sot:
           - demo_db
       auto_pull: true
       pull_interval_seconds: 300
-      profile: team
+      profile: solo
       priority: 50
       pull_strategy: ff-only
 
@@ -83,7 +83,7 @@ sot:
       inventory_format: static
       auto_pull: true
       pull_interval_seconds: 300
-      profile: team
+      profile: solo
       priority: 55
       pull_strategy: ff-only
 
