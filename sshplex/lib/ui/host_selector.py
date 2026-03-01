@@ -12,7 +12,7 @@ from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
 from textual.containers import Container, Vertical
 from textual.reactive import reactive
-from textual.screen import Screen
+from textual.screen import ModalScreen, Screen
 from textual.widgets import (
     DataTable,
     Footer,
@@ -37,7 +37,7 @@ from .config_editor import ConfigEditorScreen
 from .session_manager import ITerm2SessionManager, TmuxSessionManager
 
 
-class LoadingScreen(Screen):
+class LoadingScreen(ModalScreen[None]):
     """Modal screen that displays loading progress while refreshing data sources."""
 
     CSS = """
@@ -274,6 +274,7 @@ class HostSelector(App):
         self.latest_native_session_name: Optional[str] = None
         self.native_sessions_created_count = 0
         self._log_max_lines = 1000
+        self._host_load_lock = asyncio.Lock()
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -409,14 +410,19 @@ class HostSelector(App):
 
     def show_loading_screen(self, message: str = "🔄 Refreshing Data Sources", status: str = "Initializing...") -> None:
         """Show the loading screen modal."""
+        if self.loading_screen is not None:
+            self.hide_loading_screen()
         self.loading_screen = LoadingScreen(message=message, status=status)
         self.push_screen(self.loading_screen)
 
     def hide_loading_screen(self) -> None:
         """Hide the loading screen modal."""
-        if self.loading_screen:
-            self.pop_screen()
-            self.loading_screen = None
+        if self.loading_screen is None:
+            return
+        loading_screen = self.loading_screen
+        self.loading_screen = None
+        with contextlib.suppress(Exception):
+            loading_screen.dismiss(None)
 
     def update_cache_display(self) -> None:
         """Update the cache display with current cache information."""
@@ -464,6 +470,11 @@ class HostSelector(App):
                 self.log_message(f"Warning: Could not update loading status: {e}", level="warning")
 
     async def load_hosts(self, force_refresh: bool = False) -> None:
+        """Load hosts from all configured SoT providers with single-flight protection."""
+        async with self._host_load_lock:
+            await self._load_hosts_impl(force_refresh=force_refresh)
+
+    async def _load_hosts_impl(self, force_refresh: bool = False) -> None:
         """Load hosts from all configured SoT providers with caching support.
 
         Args:

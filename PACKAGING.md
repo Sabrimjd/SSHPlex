@@ -179,7 +179,7 @@ Use [Semantic Versioning](https://semver.org/):
 ### Continuous Integration (`ci.yml`)
 
 Runs on every push and pull request:
-- Tests across Python 3.8-3.12
+- Tests across Python 3.10-3.13
 - Linting with flake8
 - Type checking with mypy
 - Code coverage reporting

@@ -487,25 +487,20 @@ class TmuxSessionManager(ModalScreen):
         self.table.add_column("Windows", width=7)
         self.table.add_column("Panes", width=6)
 
-        # Load sessions first
-        self.load_sessions()
+        # Load sessions in background to keep UI responsive
+        self.run_worker(self.load_sessions(), name="tmux_load_sessions")
 
         # Focus on the table after loading data
         self.table.focus()
 
-        # Move cursor to first row if we have sessions
-        if self.sessions:
-            self.table.move_cursor(row=0)
+        # Cursor is moved after async load completes
 
-    def load_sessions(self) -> None:
-        """Load tmux sessions from the server."""
+    def _load_sessions_blocking(self) -> tuple[list[TmuxSession], str | None]:
+        """Collect tmux sessions using blocking libtmux calls."""
         try:
-            # Initialize tmux server
-            self.tmux_server = libtmux.Server()
-
-            # Get all sessions (list_sessions is removed in newer libtmux)
-            tmux_sessions = list(getattr(self.tmux_server, "sessions", []))
-            self.sessions.clear()
+            tmux_server = libtmux.Server()
+            tmux_sessions = list(getattr(tmux_server, "sessions", []))
+            sessions: list[TmuxSession] = []
 
             for session in tmux_sessions:
                 # Get window count safely
@@ -545,6 +540,7 @@ class TmuxSessionManager(ModalScreen):
                     result = session.cmd('display-message', '-p', '#{session_created}')
                     if result and hasattr(result, 'stdout') and result.stdout:
                         import datetime
+
                         timestamp = int(result.stdout[0])
                         created_dt = datetime.datetime.fromtimestamp(timestamp)
                         created = created_dt.strftime("%Y-%m-%d %H:%M:%S")
@@ -586,30 +582,42 @@ class TmuxSessionManager(ModalScreen):
                 else:
                     active_cmd = "-"
 
-                tmux_session = TmuxSession(
-                    name=session.session_name or "Unknown",
-                    session_id=session.session_id or "Unknown",
-                    created=created,
-                    age=age,
-                    windows=window_count,
-                    panes=pane_count,
-                    clients=clients,
-                    active_cmd=active_cmd,
-                    broadcast=broadcast_on
+                sessions.append(
+                    TmuxSession(
+                        name=session.session_name or "Unknown",
+                        session_id=session.session_id or "Unknown",
+                        created=created,
+                        age=age,
+                        windows=window_count,
+                        panes=pane_count,
+                        clients=clients,
+                        active_cmd=active_cmd,
+                        broadcast=broadcast_on,
+                    )
                 )
-                self.sessions.append(tmux_session)
 
-            # Populate table
-            self.populate_table()
-
-            self.logger.info(f"SSHplex: Loaded {len(self.sessions)} tmux sessions")
+            return sessions, None
 
         except Exception as e:
-            self.logger.error(f"SSHplex: Failed to load tmux sessions: {e}")
-            # Show error in table
+            return [], str(e)
+
+    async def load_sessions(self) -> None:
+        """Load tmux sessions from the server without blocking the UI thread."""
+        sessions, error = await asyncio.to_thread(self._load_sessions_blocking)
+        self.sessions = sessions
+
+        if error:
+            self.logger.error(f"SSHplex: Failed to load tmux sessions: {error}")
             if self.table is not None:
                 self.table.clear()
-                self.table.add_row("-", "tmux error", "-", "-", "-", str(e), "0", "0")
+                self.table.add_row("-", "tmux error", "-", "-", "-", error, "0", "0")
+            return
+
+        self.populate_table()
+        if self.table and self.sessions and self.table.cursor_row < 0:
+            self.table.move_cursor(row=0)
+
+        self.logger.info(f"SSHplex: Loaded {len(self.sessions)} tmux sessions")
 
     def populate_table(self) -> None:
         """Populate the table with session data."""
@@ -759,7 +767,7 @@ class TmuxSessionManager(ModalScreen):
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to kill session: {e}")
         finally:
-            self.load_sessions()
+            self.run_worker(self.load_sessions(), name="tmux_reload_after_kill")
 
     def on_key(self, event: Any) -> None:
         """Ensure key shortcuts work while table has focus."""
@@ -780,9 +788,7 @@ class TmuxSessionManager(ModalScreen):
     def action_refresh_sessions(self) -> None:
         """Refresh the session list."""
         self.logger.info("SSHplex: Refreshing tmux sessions")
-        self.load_sessions()
-        if self.table and self.sessions and self.table.cursor_row < 0:
-            self.table.move_cursor(row=0)
+        self.run_worker(self.load_sessions(), name="tmux_refresh_sessions")
 
     def action_close_manager(self) -> None:
         """Close the session manager."""
@@ -834,7 +840,7 @@ class TmuxSessionManager(ModalScreen):
                     status_widget.update("📡 Broadcast: OFF")
 
                 # Refresh table to update per-session broadcast column
-                self.load_sessions()
+                self.run_worker(self.load_sessions(), name="tmux_reload_after_broadcast")
 
             except Exception as e:
                 self.logger.error(f"SSHplex: Failed to toggle broadcast for session '{session.name}': {e}")
@@ -853,11 +859,8 @@ class TmuxSessionManager(ModalScreen):
 
             try:
                 # Find the tmux session
-                if self.tmux_server is None:
-                    self.logger.error("SSHplex: tmux server not initialized")
-                    return
-
-                tmux_session = self.tmux_server.find_where({"session_name": session.name})
+                self.tmux_server = libtmux.Server()
+                tmux_session = self._find_tmux_session(session.name)
                 if not tmux_session:
                     self.logger.error(f"SSHplex: Session '{session.name}' not found")
                     return
@@ -879,7 +882,7 @@ class TmuxSessionManager(ModalScreen):
                         self.logger.info(f"SSHplex: Created new pane in session '{session.name}'")
 
                         # Refresh session list to update window/pane count
-                        self.load_sessions()
+                        self.run_worker(self.load_sessions(), name="tmux_reload_after_create_pane")
                     else:
                         self.logger.error(f"SSHplex: Failed to create pane in session '{session.name}'")
                 else:
@@ -902,11 +905,8 @@ class TmuxSessionManager(ModalScreen):
 
             try:
                 # Find the tmux session
-                if self.tmux_server is None:
-                    self.logger.error("SSHplex: tmux server not initialized")
-                    return
-
-                tmux_session = self.tmux_server.find_where({"session_name": session.name})
+                self.tmux_server = libtmux.Server()
+                tmux_session = self._find_tmux_session(session.name)
                 if not tmux_session:
                     self.logger.error(f"SSHplex: Session '{session.name}' not found")
                     return
@@ -927,7 +927,7 @@ class TmuxSessionManager(ModalScreen):
                     self.logger.info(f"SSHplex: Created new window in session '{session.name}'")
 
                     # Refresh session list to update window count
-                    self.load_sessions()
+                    self.run_worker(self.load_sessions(), name="tmux_reload_after_create_window")
                 else:
                     self.logger.error(f"SSHplex: Failed to create window in session '{session.name}'")
 

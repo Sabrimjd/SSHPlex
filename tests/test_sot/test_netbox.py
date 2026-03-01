@@ -13,8 +13,9 @@ class TestNetBoxProvider:
     @pytest.fixture
     def mock_pynetbox(self):
         """Mock pynetbox module."""
-        with patch('sshplex.lib.sot.netbox.pynetbox') as mock:
-            yield mock
+        mock_module = MagicMock()
+        with patch('sshplex.lib.sot.netbox._import_pynetbox', return_value=mock_module):
+            yield mock_module
 
     @pytest.fixture
     def mock_vm(self):
@@ -82,8 +83,13 @@ class TestNetBoxProvider:
         mock_pynetbox.api.side_effect = Exception('Connection failed')
         
         result = provider.connect()
-        
+
         assert result is False
+
+    def test_connect_fails_when_pynetbox_missing(self, provider):
+        """Provider should fail gracefully when pynetbox is unavailable."""
+        with patch('sshplex.lib.sot.netbox._import_pynetbox', return_value=None):
+            assert provider.connect() is False
 
     def test_test_connection_success(self, provider, mock_pynetbox):
         """Test connection test when connected."""

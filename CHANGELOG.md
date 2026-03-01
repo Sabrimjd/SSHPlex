@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- Simplified SoT activation flow: when `sot.providers` is empty, enabled provider types are inferred from configured imports.
+- Standardized provider and mux backend catalogs via shared config constants to reduce cross-file edits for future extensions.
+- Removed git-import compatibility plumbing around legacy `path`/`file_glob`; git imports now rely on canonical `source_pattern`.
+- Updated packaging metadata to match runtime reality: Python `>=3.10`.
+
+### Fixed
+- Made host cache writes atomic to prevent partial cache corruption on interrupted writes.
+- Fixed cache path handling to always expand `~` and normalized cache-key behavior for filtered host loads.
+- Fixed SoTFactory in-memory cache collisions so different filters do not reuse the wrong host sets.
+- Moved NetBox dependency loading to runtime (`pynetbox` lazy import) for cleaner optional-dependency failure handling.
+- Hardened SSH command building for key/known_hosts paths with spaces and normalized proxy key path expansion.
+- Prevented host-loading modal pop mismatches by using modal dismissal instead of generic `pop_screen()`.
+- Moved tmux session list refresh operations off the UI thread to keep the TUI responsive during session scans.
+
 ## [1.7.0] - 2026-03-01
 
 ### Added

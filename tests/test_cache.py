@@ -53,6 +53,12 @@ class TestHostCache:
         cache = HostCache(cache_dir=str(cache_dir), cache_ttl_hours=48)
         assert cache.cache_ttl == timedelta(hours=48)
 
+    def test_cache_dir_expands_user_home(self, cache_dir, monkeypatch):
+        """HostCache should expand user-home cache directory values."""
+        monkeypatch.setenv("HOME", str(cache_dir))
+        cache = HostCache(cache_dir="~/.cache/sshplex-test")
+        assert str(cache.cache_dir).startswith(str(cache_dir))
+
     def test_save_hosts(self, cache, sample_hosts):
         """Test saving hosts to cache."""
         provider_info = {
@@ -65,6 +71,7 @@ class TestHostCache:
         assert result is True
         assert cache.cache_file.exists()
         assert cache.metadata_file.exists()
+        assert not list(cache.cache_dir.glob("*.tmp"))
 
     def test_load_hosts(self, cache, sample_hosts):
         """Test loading hosts from cache."""

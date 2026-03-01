@@ -143,7 +143,7 @@ def list_providers(config: Any, logger: Any) -> int:
             branch = provider.branch or "main"
             inventory_format = provider.inventory_format or "static"
             print(f"   Repo: {provider.repo_url} [{branch}, {inventory_format}]")
-            source_pattern = provider.source_pattern or f"{provider.path}/{provider.file_glob}"
+            source_pattern = provider.source_pattern or "hosts/**/*.y*ml"
             print(f"   Source: {source_pattern}")
         elif provider.type == "static" and provider.hosts:
             print(f"   Hosts: {len(provider.hosts)} defined")

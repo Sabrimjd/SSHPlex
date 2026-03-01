@@ -5,24 +5,32 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .. import __version__
+
+SUPPORTED_SOT_PROVIDER_TYPES = ("static", "netbox", "ansible", "consul", "git")
+SOT_PROVIDER_LABELS = {
+    "static": "Static",
+    "netbox": "NetBox",
+    "ansible": "Ansible",
+    "consul": "Consul",
+    "git": "Git",
+}
+
+SUPPORTED_MUX_BACKENDS = ("tmux", "iterm2-native")
+MUX_BACKEND_LABELS = {
+    "tmux": "tmux",
+    "iterm2-native": "iTerm2 Native",
+}
+
+SUPPORTED_GIT_INVENTORY_FORMATS = ("static", "ansible")
 
 
 class SSHplexConfig(BaseModel):
     """SSHplex main configuration."""
     version: str = __version__
     session_prefix: str = "sshplex"
-
-
-class NetBoxConfig(BaseModel):
-    """NetBox connection configuration."""
-    url: str = Field(..., description="NetBox instance URL")
-    token: str = Field(..., description="NetBox API token")
-    verify_ssl: bool = True
-    timeout: int = 30
-    default_filters: Dict[str, str] = Field(default_factory=dict)
 
 
 class LoggingConfig(BaseModel):
@@ -42,7 +50,7 @@ class UIConfig(BaseModel):
 class Proxy(BaseModel):
     """ImportProxies configuration with defaults."""
     name: str = Field("", description="Proxy name")
-    imports: list = Field([], description="List of imports that will use this proxy")
+    imports: list = Field(default_factory=list, description="List of imports that will use this proxy")
     host: str = Field("", description="Proxy host or ip")
     username: str = Field("", description="Proxy username")
     key_path: str = Field("", description="Proxy key")
@@ -109,6 +117,16 @@ class TmuxConfig(BaseModel):
         description="Split pattern for iTerm2 native: alternate, vertical, horizontal"
     )
 
+    @field_validator("backend")
+    @classmethod
+    def validate_backend_value(cls, value: str) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized not in SUPPORTED_MUX_BACKENDS:
+            raise ValueError(
+                f"Invalid backend: {value}. Must be one of: {list(SUPPORTED_MUX_BACKENDS)}"
+            )
+        return normalized
+
     def validate_backend_config(self) -> bool:
         """Validate backend configuration.
 
@@ -118,10 +136,9 @@ class TmuxConfig(BaseModel):
         import platform
 
         # Validate backend option
-        valid_backends = ["tmux", "iterm2-native"]
-        if self.backend not in valid_backends:
+        if self.backend not in SUPPORTED_MUX_BACKENDS:
             raise ValueError(
-                f"Invalid backend: {self.backend}. Must be one of: {valid_backends}"
+                f"Invalid backend: {self.backend}. Must be one of: {list(SUPPORTED_MUX_BACKENDS)}"
             )
 
         # Validate iTerm2 native mode on macOS only
@@ -146,11 +163,6 @@ class TmuxConfig(BaseModel):
         return True
 
 
-class AnsibleConfig(BaseModel):
-    """Ansible inventory configuration."""
-    inventory_paths: List[str] = Field(default_factory=list, description="List of paths to Ansible inventory YAML files")
-    default_filters: Dict[str, Any] = Field(default_factory=dict)
-
 class ConsulConfig(BaseModel):
     """Consul-specific configuration with defaults."""
     host: str = Field("consul.example.com", description="Consul host address")
@@ -164,7 +176,7 @@ class ConsulConfig(BaseModel):
 class SoTImportConfig(BaseModel):
     """Individual SoT import configuration."""
     name: str = Field(..., description="Unique name for this import")
-    type: str = Field(..., description="Provider type: static, netbox, ansible, consul, git")
+    type: str = Field(..., description=f"Provider type: {', '.join(SUPPORTED_SOT_PROVIDER_TYPES)}")
 
     # Static provider fields
     hosts: Optional[List[Dict[str, Any]]] = None
@@ -185,22 +197,71 @@ class SoTImportConfig(BaseModel):
     # Git provider fields
     repo_url: Optional[str] = None
     branch: Optional[str] = "main"
-    source_pattern: Optional[str] = None
-    path: Optional[str] = "hosts"
-    file_glob: Optional[str] = "**/*.y*ml"
+    source_pattern: Optional[str] = "hosts/**/*.y*ml"
     auto_pull: Optional[bool] = True
     pull_interval_seconds: Optional[int] = 300
     priority: Optional[int] = 100
     pull_strategy: Optional[str] = "ff-only"
     inventory_format: Optional[str] = "static"
 
+    @field_validator("type")
+    @classmethod
+    def validate_provider_type(cls, value: str) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized not in SUPPORTED_SOT_PROVIDER_TYPES:
+            raise ValueError(
+                f"Unsupported provider type '{value}'. "
+                f"Supported values: {list(SUPPORTED_SOT_PROVIDER_TYPES)}"
+            )
+        return normalized
+
+    @field_validator("pull_strategy")
+    @classmethod
+    def validate_pull_strategy(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        normalized = str(value).strip().lower()
+        if normalized and normalized != "ff-only":
+            raise ValueError("git pull_strategy only supports 'ff-only'")
+        return normalized or "ff-only"
+
+    @field_validator("inventory_format")
+    @classmethod
+    def validate_inventory_format(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        normalized = str(value).strip().lower()
+        if normalized not in SUPPORTED_GIT_INVENTORY_FORMATS:
+            raise ValueError(
+                f"Unsupported git inventory format '{value}'. "
+                f"Supported values: {list(SUPPORTED_GIT_INVENTORY_FORMATS)}"
+            )
+        return normalized
+
 class SoTConfig(BaseModel):
     """Source of Truth configuration."""
     providers: List[str] = Field(
-        default_factory=lambda: ["static"],
+        default_factory=list,
         description="List of SoT providers to use: static, netbox, ansible, consul, git",
     )
     import_: List[SoTImportConfig] = Field(alias='import', default_factory=list, description="List of import configurations")
+
+    @field_validator("providers")
+    @classmethod
+    def validate_enabled_providers(cls, value: List[str]) -> List[str]:
+        normalized: List[str] = []
+        for provider in value or []:
+            provider_name = str(provider or "").strip().lower()
+            if not provider_name:
+                continue
+            if provider_name not in SUPPORTED_SOT_PROVIDER_TYPES:
+                raise ValueError(
+                    f"Unsupported provider '{provider_name}'. "
+                    f"Supported values: {list(SUPPORTED_SOT_PROVIDER_TYPES)}"
+                )
+            if provider_name not in normalized:
+                normalized.append(provider_name)
+        return normalized
 
 
 class CacheConfig(BaseModel):
@@ -214,8 +275,6 @@ class Config(BaseModel):
     """Main SSHplex configuration model."""
     sshplex: SSHplexConfig = Field(default_factory=SSHplexConfig)
     sot: SoTConfig = Field(default_factory=SoTConfig)
-    netbox: Optional[NetBoxConfig] = None
-    ansible_inventory: Optional[AnsibleConfig] = None
     ssh: SSHConfig = Field(default_factory=SSHConfig)
     tmux: TmuxConfig = Field(default_factory=TmuxConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)

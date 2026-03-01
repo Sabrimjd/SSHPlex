@@ -24,7 +24,14 @@ from textual.widgets import (
     TextArea,
 )
 
-from ..config import Config, get_default_config_path
+from ..config import (
+    MUX_BACKEND_LABELS,
+    SOT_PROVIDER_LABELS,
+    SUPPORTED_MUX_BACKENDS,
+    SUPPORTED_SOT_PROVIDER_TYPES,
+    Config,
+    get_default_config_path,
+)
 
 
 def _form_field(
@@ -863,6 +870,18 @@ class ConfigEditorScreen(ModalScreen[bool]):
         return ordered + extras
 
     def compose(self) -> ComposeResult:
+        enabled_provider_values = {
+            str(provider).strip()
+            for provider in (getattr(self.config.sot, "providers", []) or [])
+            if str(provider).strip()
+        }
+        if not enabled_provider_values:
+            enabled_provider_values = {
+                str(getattr(imp, "type", "")).strip()
+                for imp in (getattr(self.config.sot, "import_", []) or [])
+                if str(getattr(imp, "type", "")).strip()
+            }
+
         with Vertical(id="config-editor-dialog"):
             yield Static("SSHplex Configuration Editor", id="editor-title")
 
@@ -1081,10 +1100,13 @@ class ConfigEditorScreen(ModalScreen[bool]):
                             "cfg-mux-backend",
                             "Backend",
                             Select(
-                                [("tmux", "tmux"), ("iTerm2 Native", "iterm2-native")],
+                                [
+                                    (MUX_BACKEND_LABELS.get(backend, backend), backend)
+                                    for backend in SUPPORTED_MUX_BACKENDS
+                                ],
                                 value=self._safe_select_initial(
                                     str(getattr(self.config.tmux, "backend", "tmux")),
-                                    ["tmux", "iterm2-native"],
+                                    list(SUPPORTED_MUX_BACKENDS),
                                     "tmux",
                                 ),
                             ),
@@ -1145,11 +1167,13 @@ class ConfigEditorScreen(ModalScreen[bool]):
                     yield Static("Providers", classes="section-header")
                     yield Static("Enable the data sources SSHplex should load.", classes="form-description")
                     with Horizontal(id="sources-providers"):
-                        yield Checkbox("Static", value="static" in self.config.sot.providers, id="cfg-sot-provider-static", compact=True)
-                        yield Checkbox("NetBox", value="netbox" in self.config.sot.providers, id="cfg-sot-provider-netbox", compact=True)
-                        yield Checkbox("Ansible", value="ansible" in self.config.sot.providers, id="cfg-sot-provider-ansible", compact=True)
-                        yield Checkbox("Consul", value="consul" in self.config.sot.providers, id="cfg-sot-provider-consul", compact=True)
-                        yield Checkbox("Git", value="git" in self.config.sot.providers, id="cfg-sot-provider-git", compact=True)
+                        for provider in SUPPORTED_SOT_PROVIDER_TYPES:
+                            yield Checkbox(
+                                SOT_PROVIDER_LABELS.get(provider, provider.title()),
+                                value=provider in enabled_provider_values,
+                                id=f"cfg-sot-provider-{provider}",
+                                compact=True,
+                            )
                     with Horizontal(classes="list-buttons"):
                         yield Button("All", id="btn-providers-all", variant="default")
                         yield Button("None", id="btn-providers-none", variant="default")
@@ -1254,7 +1278,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
         container = self.query_one("#mux-backend-fields", Vertical)
         backend = self._safe_select_initial(
             str(getattr(self.config.tmux, "backend", "tmux")),
-            ["tmux", "iterm2-native"],
+            list(SUPPORTED_MUX_BACKENDS),
             "tmux",
         )
         self._mux_backend = backend
@@ -1396,7 +1420,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
         name = imp.name if imp else ""
         imp_type = self._safe_select_initial(
             str(getattr(imp, "type", "static")) if imp else "static",
-            ["static", "netbox", "ansible", "consul", "git"],
+            list(SUPPORTED_SOT_PROVIDER_TYPES),
             "static",
         )
         self._import_types[str(idx)] = imp_type
@@ -1404,7 +1428,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
         header = Horizontal(
             Input(value=name, placeholder="Import name", id=f"import-{idx}-name", classes="import-name"),
             Select(
-                [(v, v) for v in ["static", "netbox", "ansible", "consul", "git"]],
+                [(v, v) for v in SUPPORTED_SOT_PROVIDER_TYPES],
                 value=imp_type,
                 id=f"import-{idx}-type",
                 classes="import-type",
@@ -1431,48 +1455,6 @@ class ConfigEditorScreen(ModalScreen[bool]):
     def _import_form_field(self, field_id: str, label: str, description: str, widget: Any) -> Vertical:
         """Build an import field with label + helper text above input."""
         return _form_field(field_id, label, widget, description)
-
-    @staticmethod
-    def _compose_git_source_pattern(path: str, file_glob: str) -> str:
-        """Build a single source pattern from legacy path + glob values."""
-        clean_path = str(path or "").strip().strip("/")
-        clean_glob = str(file_glob or "").strip().strip("/")
-
-        if clean_path.endswith((".yml", ".yaml")):
-            return clean_path
-        if clean_path and clean_glob:
-            return f"{clean_path}/{clean_glob}"
-        if clean_path:
-            return clean_path
-        if clean_glob:
-            return clean_glob
-        return "hosts/**/*.y*ml"
-
-    @staticmethod
-    def _split_git_source_pattern(source_pattern: str) -> tuple[str, str]:
-        """Split a source pattern into legacy path + glob fields."""
-        normalized = str(source_pattern or "").strip().lstrip("/")
-        if not normalized:
-            return "hosts", "**/*.y*ml"
-
-        if normalized.endswith((".yml", ".yaml")):
-            return normalized, "**/*.y*ml"
-
-        wildcard_chars = {"*", "?", "["}
-        parts = normalized.split("/")
-        wildcard_index = -1
-        for idx, part in enumerate(parts):
-            if any(char in part for char in wildcard_chars):
-                wildcard_index = idx
-                break
-
-        if wildcard_index == -1:
-            return normalized, "**/*.y*ml"
-
-        if wildcard_index == 0:
-            return ".", normalized
-
-        return "/".join(parts[:wildcard_index]), "/".join(parts[wildcard_index:])
 
     def _make_import_type_fields(self, idx: int, imp_type: str, imp: Any = None) -> list:
         """Generate type-specific fields for an import item."""
@@ -1621,12 +1603,9 @@ class ConfigEditorScreen(ModalScreen[bool]):
             fields.append(Static("Git settings", classes="form-label"))
             source_pattern = "hosts/**/*.y*ml"
             if imp is not None:
-                source_pattern = str(getattr(imp, "source_pattern", "") or "").strip()
-                if not source_pattern:
-                    source_pattern = self._compose_git_source_pattern(
-                        str(getattr(imp, "path", "hosts") or "hosts"),
-                        str(getattr(imp, "file_glob", "**/*.y*ml") or "**/*.y*ml"),
-                    )
+                source_pattern = str(
+                    getattr(imp, "source_pattern", "hosts/**/*.y*ml") or "hosts/**/*.y*ml"
+                ).strip()
 
             fields.append(_form_row(
                 self._import_form_field(
@@ -1800,7 +1779,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
     def _set_all_providers(self, enabled: bool) -> None:
         """Toggle all provider checkboxes on/off."""
-        for provider in ["static", "netbox", "ansible", "consul", "git"]:
+        for provider in SUPPORTED_SOT_PROVIDER_TYPES:
             with contextlib.suppress(Exception):
                 checkbox = self.query_one(f"#cfg-sot-provider-{provider}", Checkbox)
                 checkbox.value = enabled
@@ -2170,7 +2149,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
     def _collect_enabled_providers(self) -> List[str]:
         """Collect enabled SoT providers from checkbox controls."""
         enabled: List[str] = []
-        for provider in ["static", "netbox", "ansible", "consul", "git"]:
+        for provider in SUPPORTED_SOT_PROVIDER_TYPES:
             try:
                 if self.query_one(f"#cfg-sot-provider-{provider}", Checkbox).value:
                     enabled.append(provider)
@@ -2263,9 +2242,6 @@ class ConfigEditorScreen(ModalScreen[bool]):
                     f"import-{i}-git_source_pattern",
                     "hosts/**/*.y*ml",
                 )
-                legacy_path, legacy_glob = self._split_git_source_pattern(entry["source_pattern"])
-                entry["path"] = legacy_path
-                entry["file_glob"] = legacy_glob
                 entry["inventory_format"] = self._get_select_value(f"import-{i}-git_inventory_format", "static")
                 entry["pull_strategy"] = "ff-only"
                 entry["auto_pull"] = self._get_select_value(f"import-{i}-git_auto_pull", "true") == "true"

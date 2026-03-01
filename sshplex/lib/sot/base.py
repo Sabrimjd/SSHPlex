@@ -7,14 +7,65 @@ from typing import Any, Dict, List, Optional
 class Host:
     """Simple host data structure."""
 
-    def __init__(self, name: str, ip: str, **kwargs: Any) -> None:
+    _RESERVED_METADATA_KEYS = {"name", "ip", "metadata"}
+
+    def __init__(
+        self,
+        name: str,
+        ip: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> None:
         self.name = name
         self.ip = ip
-        self.metadata = kwargs
+        self.metadata: Dict[str, Any] = {}
 
-        # Set additional attributes from kwargs for easy access
-        for key, value in kwargs.items():
+        if metadata:
+            self.update_metadata(metadata)
+        if kwargs:
+            self.update_metadata(kwargs)
+
+    def update_metadata(self, values: Dict[str, Any]) -> None:
+        """Merge metadata values and mirror them as instance attributes."""
+        for raw_key, value in values.items():
+            key = str(raw_key)
+            if key in self._RESERVED_METADATA_KEYS:
+                continue
+            self.metadata[key] = value
             setattr(self, key, value)
+
+    def merge_metadata(self, values: Dict[str, Any]) -> None:
+        """Compatibility helper to merge metadata values in-place."""
+        self.update_metadata(values)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize host object to cache-friendly dictionary."""
+        return {
+            "name": self.name,
+            "ip": self.ip,
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Dict[str, Any]) -> "Host":
+        """Create host object from serialized dictionary payload."""
+        metadata = payload.get("metadata", {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+
+        extras = {
+            key: value
+            for key, value in payload.items()
+            if key not in cls._RESERVED_METADATA_KEYS
+        }
+        merged_metadata = dict(metadata)
+        merged_metadata.update(extras)
+
+        return cls(
+            name=str(payload["name"]),
+            ip=str(payload["ip"]),
+            metadata=merged_metadata,
+        )
 
     def __str__(self) -> str:
         return f"{self.name} ({self.ip})"

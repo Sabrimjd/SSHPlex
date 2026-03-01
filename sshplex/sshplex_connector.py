@@ -1,11 +1,11 @@
 """SSHplex Connector - SSH connections and multiplexer session management."""
 
-import os
 import platform
 import re
 import shlex
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any, List, Optional
 
 from .lib.logger import get_logger
@@ -61,6 +61,28 @@ class SSHplexConnector:
         redacted = re.sub(r"(\s-i\s+)\S+", r"\1<redacted-key>", command)
         redacted = re.sub(r"(IdentityFile=)\S+", r"\1<redacted-key>", redacted)
         return redacted
+
+    @staticmethod
+    def _first_identity_file(identity_value: str) -> str:
+        """Extract first identity file path from ssh -G identityfile output."""
+        text = str(identity_value or "").strip()
+        if not text:
+            return ""
+        try:
+            parts = shlex.split(text)
+            if parts:
+                return parts[0]
+        except ValueError:
+            pass
+        return text.split()[0]
+
+    @staticmethod
+    def _expand_path(path_value: str) -> str:
+        """Normalize path by expanding user home and trimming whitespace."""
+        text = str(path_value or "").strip()
+        if not text:
+            return ""
+        return str(Path(text).expanduser())
 
     def connect_to_hosts(self, hosts: List[Host], username: str, key_path: Optional[str] = None, port: int = 22, use_panes: bool = True, use_broadcast: bool = False) -> bool:
         """Establish SSH connections to the specified hosts using shell SSH with retry support.
@@ -253,7 +275,8 @@ class SSHplexConnector:
         if not hostname:
             raise ValueError(f"Host missing both ip and name: {host}")
 
-        cmd_parts = ["TERM=xterm-256color", "/usr/bin/ssh"]
+        env_prefix = "TERM=xterm-256color"
+        ssh_args = ["/usr/bin/ssh"]
 
         host_alias = str(getattr(host, "ssh_alias", "") or host.metadata.get("ssh_alias", "")).strip()
         target_override = str(getattr(host, "ssh_hostname", "") or host.metadata.get("ssh_hostname", "")).strip()
@@ -273,7 +296,7 @@ class SSHplexConnector:
             if not port_override and resolved.get("port"):
                 port_override = resolved["port"]
             if not key_override and resolved.get("identityfile"):
-                key_override = resolved["identityfile"].split()[0]
+                key_override = self._first_identity_file(resolved["identityfile"])
 
         # Try to configure proxy if available
         try:
@@ -288,16 +311,18 @@ class SSHplexConnector:
                         # Sanitize proxy credentials to prevent injection
                         proxy_host = proxy.host or ''
                         proxy_user = proxy.username or ''
-                        proxy_key = proxy.key_path or ''
+                        proxy_key = self._expand_path(proxy.key_path or '')
                         
                         # Validate proxy values format
                         if (re.match(r'^[a-zA-Z0-9.-]+$', proxy_host) and
                             re.match(r'^[a-zA-Z0-9._-]+$', proxy_user) and
-                            os.path.isabs(proxy_key) and '..' not in proxy_key):
-                            # Use shlex.quote for safe shell escaping
-                            cmd_parts.extend([
-                                "-o", f"ProxyCommand=/usr/bin/ssh -i {shlex.quote(proxy_key)} -W %h:%p {shlex.quote(proxy_user)}@{shlex.quote(proxy_host)}"
-                            ])
+                            proxy_key):
+                            proxy_command = (
+                                "/usr/bin/ssh "
+                                f"-i {shlex.quote(proxy_key)} "
+                                f"-W %h:%p {shlex.quote(proxy_user)}@{shlex.quote(proxy_host)}"
+                            )
+                            ssh_args.extend(["-o", f"ProxyCommand={proxy_command}"])
                         else:
                             self.logger.warning("Proxy configuration contains invalid values, skipping proxy")
         except Exception:
@@ -308,26 +333,26 @@ class SSHplexConnector:
         if self.config is not None:
             strict_mode = self.config.ssh.strict_host_key_checking
             if strict_mode:
-                cmd_parts.extend(["-o", "StrictHostKeyChecking=yes"])
+                ssh_args.extend(["-o", "StrictHostKeyChecking=yes"])
             else:
                 # Less strict but still reasonable
-                cmd_parts.extend(["-o", "StrictHostKeyChecking=accept-new"])
+                ssh_args.extend(["-o", "StrictHostKeyChecking=accept-new"])
 
             # Configure known_hosts file
-            known_hosts = self.config.ssh.user_known_hosts_file
+            known_hosts = self._expand_path(self.config.ssh.user_known_hosts_file)
             if known_hosts:
-                cmd_parts.extend(["-o", f"UserKnownHostsFile={known_hosts}"])
+                ssh_args.extend(["-o", f"UserKnownHostsFile={known_hosts}"])
             # If empty, SSH uses default ~/.ssh/known_hosts
         else:
             # Use reasonable defaults when config is None
-            cmd_parts.extend(["-o", "StrictHostKeyChecking=accept-new"])
+            ssh_args.extend(["-o", "StrictHostKeyChecking=accept-new"])
 
-        cmd_parts.extend(["-o", "LogLevel=ERROR"])
+        ssh_args.extend(["-o", "LogLevel=ERROR"])
 
         # Add key file if provided
-        effective_key = key_override or (key_path or "")
+        effective_key = self._expand_path(key_override or (key_path or ""))
         if effective_key:
-            cmd_parts.extend(["-i", effective_key])
+            ssh_args.extend(["-i", effective_key])
 
         # Add port if not default
         effective_port = port
@@ -337,17 +362,17 @@ class SSHplexConnector:
             except ValueError:
                 effective_port = port
         if effective_port != 22:
-            cmd_parts.extend(["-p", str(effective_port)])
+            ssh_args.extend(["-p", str(effective_port)])
 
         # Add connection timeout
         timeout = getattr(self.config.ssh, 'timeout', 10) if self.config else 10
-        cmd_parts.extend(["-o", f"ConnectTimeout={timeout}"])
+        ssh_args.extend(["-o", f"ConnectTimeout={timeout}"])
 
         # Add user@hostname with proper escaping
         effective_user = user_override or username
-        cmd_parts.append(f"{shlex.quote(effective_user)}@{shlex.quote(ssh_target)}")
+        ssh_args.append(f"{effective_user}@{ssh_target}")
 
-        return " ".join(cmd_parts)
+        return f"{env_prefix} " + " ".join(shlex.quote(part) for part in ssh_args)
 
     def get_session_name(self) -> str:
         """Get the tmux session name."""

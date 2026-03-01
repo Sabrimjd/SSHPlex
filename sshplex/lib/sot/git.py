@@ -32,9 +32,10 @@ class GitProvider(SoTProvider):
         self.provider_name = self.name
         self.repo_url = str(getattr(import_config, "repo_url", "") or "").strip()
         self.branch = str(getattr(import_config, "branch", "main") or "main").strip() or "main"
-        self.source_pattern = str(getattr(import_config, "source_pattern", "") or "").strip()
-        self.source_path = str(getattr(import_config, "path", "hosts") or "hosts").strip() or "hosts"
-        self.file_glob = str(getattr(import_config, "file_glob", "**/*.y*ml") or "**/*.y*ml").strip() or "**/*.y*ml"
+        self.source_pattern = (
+            str(getattr(import_config, "source_pattern", "hosts/**/*.y*ml") or "hosts/**/*.y*ml")
+            .strip()
+        )
         self.auto_pull = bool(getattr(import_config, "auto_pull", True))
         self.pull_interval_seconds = int(getattr(import_config, "pull_interval_seconds", 300) or 300)
         self.priority = int(getattr(import_config, "priority", 100) or 100)
@@ -191,16 +192,10 @@ class GitProvider(SoTProvider):
         if not self._ensure_repository():
             return []
 
-        if self.source_pattern:
-            files = self._resolve_source_pattern_files(self.source_pattern)
-        else:
-            root = self.repo_dir / self.source_path
-            files = self._resolve_source_files(root)
+        files = self._resolve_source_pattern_files(self.source_pattern)
         if not files:
-            location = self.source_pattern if self.source_pattern else self.source_path
-            selection = self.source_pattern if self.source_pattern else self.file_glob
             self.logger.warning(
-                f"Git provider '{self.name}' found no host files for source '{location}' matching '{selection}'"
+                f"Git provider '{self.name}' found no host files for source pattern '{self.source_pattern}'"
             )
             return []
 
@@ -320,16 +315,6 @@ class GitProvider(SoTProvider):
         if completed.returncode != 0:
             return ""
         return (completed.stdout or "").strip()
-
-    def _resolve_source_files(self, root: Path) -> list[Path]:
-        """Resolve YAML files to parse for host data."""
-        if root.is_file():
-            return [root]
-        if not root.exists() or not root.is_dir():
-            return []
-
-        matched = [path for path in root.glob(self.file_glob) if path.is_file()]
-        return sorted(matched)
 
     def _resolve_source_pattern_files(self, source_pattern: str) -> list[Path]:
         """Resolve source pattern directly from repository root."""
@@ -474,9 +459,7 @@ class GitProvider(SoTProvider):
                 unique[key] = host
                 continue
 
-            existing.metadata.update(host.metadata)
-            for metadata_key, metadata_value in host.metadata.items():
-                setattr(existing, metadata_key, metadata_value)
+            existing.merge_metadata(host.metadata)
 
             existing_sources = existing.metadata.get("sources", []) or []
             incoming_sources = host.metadata.get("sources", []) or []
@@ -485,7 +468,7 @@ class GitProvider(SoTProvider):
                 for source in [*existing_sources, *incoming_sources]:
                     if source not in merged_sources:
                         merged_sources.append(source)
-                existing.metadata["sources"] = merged_sources
+                existing.merge_metadata({"sources": merged_sources})
 
         return list(unique.values())
 

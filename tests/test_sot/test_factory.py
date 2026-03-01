@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from sshplex.lib.sot.base import Host
+from sshplex.lib.sot.base import Host, SoTProvider
 from sshplex.lib.sot.factory import SoTFactory
 from sshplex.lib.sot.git import GitProvider
 
@@ -32,7 +32,7 @@ class InMemoryCache:
         return True
 
 
-class DummyProvider:
+class DummyProvider(SoTProvider):
     """Minimal provider stub for deterministic host-return tests."""
 
     def __init__(self, provider_name: str, hosts: list[Host]) -> None:
@@ -53,12 +53,9 @@ class DummyProvider:
 def _make_config(
     imports: list[SimpleNamespace],
     providers: list[str],
-    providers_field_set: bool | None = None,
 ) -> SimpleNamespace:
     """Build a minimal config object for SoTFactory tests."""
     sot_config = SimpleNamespace(import_=imports, providers=providers)
-    if providers_field_set is not None:
-        sot_config.model_fields_set = {"providers"} if providers_field_set else set()
 
     return SimpleNamespace(
         sot=sot_config,
@@ -112,15 +109,13 @@ def test_initialize_providers_includes_git_when_enabled() -> None:
             type="git",
             repo_url="git@github.com:acme/hosts.git",
             branch="main",
-            path="hosts",
-            file_glob="**/*.y*ml",
             auto_pull=True,
             pull_interval_seconds=300,
             priority=100,
             pull_strategy="ff-only",
         )
     ]
-    config = _make_config(imports=imports, providers=["git"], providers_field_set=True)
+    config = _make_config(imports=imports, providers=["git"])
 
     git_provider = MagicMock()
     git_provider.connect.return_value = True
@@ -149,8 +144,8 @@ def test_initialize_providers_infers_enabled_types_when_providers_not_set() -> N
             default_filters={},
         ),
     ]
-    # Emulate pydantic model where providers is defaulted but not present in input.
-    config = _make_config(imports=imports, providers=["static"], providers_field_set=False)
+    # Empty providers means infer enabled types from configured imports.
+    config = _make_config(imports=imports, providers=[])
 
     static_provider = MagicMock()
     static_provider.connect.return_value = True
@@ -218,6 +213,45 @@ def test_get_all_hosts_merge_is_consistent_between_modes() -> None:
     assert factory.cache.saved_info["fetch_mode"] == "parallel"
 
 
+def test_get_all_hosts_uses_filter_aware_memory_cache() -> None:
+    """Different filters should not reuse each other's in-memory cache entries."""
+    config = _make_config(imports=[], providers=[])
+
+    with patch("sshplex.lib.sot.factory.HostCache", InMemoryCache):
+        factory = SoTFactory(config)
+
+    class FilterAwareProvider(DummyProvider):
+        def __init__(self) -> None:
+            super().__init__("dynamic", [])
+            self.calls: list[dict[str, str]] = []
+
+        def get_hosts(self, filters=None):  # noqa: ANN001
+            active_filters = dict(filters or {})
+            self.calls.append({str(k): str(v) for k, v in active_filters.items()})
+            role = str(active_filters.get("role", "unknown"))
+            return [
+                Host(
+                    name=f"node-{role}",
+                    ip="10.0.0.10" if role == "web" else "10.0.0.20",
+                    provider="dynamic",
+                    role=role,
+                    sources=["dynamic"],
+                )
+            ]
+
+    provider = FilterAwareProvider()
+    factory.providers = [provider]
+
+    web_hosts = factory.get_all_hosts(additional_filters={"role": "web"}, force_refresh=False)
+    db_hosts = factory.get_all_hosts(additional_filters={"role": "db"}, force_refresh=False)
+    cached_web_hosts = factory.get_all_hosts(additional_filters={"role": "web"}, force_refresh=False)
+
+    assert web_hosts[0].metadata["role"] == "web"
+    assert db_hosts[0].metadata["role"] == "db"
+    assert cached_web_hosts[0].metadata["role"] == "web"
+    assert len(provider.calls) == 2
+
+
 def test_sync_git_sources_initializes_git_providers_without_full_init(tmp_path) -> None:
     """sync_git_sources should work even when non-git providers are not initialized."""
     imports = [
@@ -226,15 +260,13 @@ def test_sync_git_sources_initializes_git_providers_without_full_init(tmp_path) 
             type="git",
             repo_url="git@github.com:acme/hosts.git",
             branch="main",
-            path="hosts",
-            file_glob="**/*.y*ml",
             auto_pull=True,
             pull_interval_seconds=300,
             priority=100,
             pull_strategy="ff-only",
         )
     ]
-    config = _make_config(imports=imports, providers=["git"], providers_field_set=True)
+    config = _make_config(imports=imports, providers=["git"])
 
     with patch("sshplex.lib.sot.factory.HostCache", InMemoryCache):
         factory = SoTFactory(config)
