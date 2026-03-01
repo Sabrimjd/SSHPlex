@@ -116,7 +116,6 @@ def test_initialize_providers_includes_git_when_enabled() -> None:
             file_glob="**/*.y*ml",
             auto_pull=True,
             pull_interval_seconds=300,
-            profile="solo",
             priority=100,
             pull_strategy="ff-only",
         )
@@ -231,7 +230,6 @@ def test_sync_git_sources_initializes_git_providers_without_full_init(tmp_path) 
             file_glob="**/*.y*ml",
             auto_pull=True,
             pull_interval_seconds=300,
-            profile="solo",
             priority=100,
             pull_strategy="ff-only",
         )
@@ -246,7 +244,6 @@ def test_sync_git_sources_initializes_git_providers_without_full_init(tmp_path) 
     provider.sync = MagicMock(  # type: ignore[method-assign]
         return_value={
             "provider": "git-src",
-            "profile": "solo",
             "status": "updated",
             "message": "updated from remote",
             "old_commit": "aaaa111",

@@ -964,14 +964,13 @@ class HostSelector(App):
     def _format_git_sync_result(self, result: dict[str, Any]) -> tuple[str, str]:
         """Convert git sync result payload into user-facing message + level."""
         provider = str(result.get("provider", "git"))
-        profile = str(result.get("profile", "solo"))
         status = str(result.get("status", "error"))
         message = str(result.get("message", ""))
         old_commit = self._short_commit(result.get("old_commit"))
         new_commit = self._short_commit(result.get("new_commit"))
         changed_files = int(result.get("changed_files", 0) or 0)
 
-        prefix = f"Git[{provider}/{profile}]"
+        prefix = f"Git[{provider}]"
         if status == "updated":
             return f"{prefix} updated {old_commit} -> {new_commit} ({changed_files} files)", "info"
         if status == "up_to_date":

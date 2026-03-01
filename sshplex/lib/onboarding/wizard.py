@@ -392,7 +392,6 @@ class OnboardingWizard:
             choices=["static", "ansible"],
             default="static",
         )
-        profile = Prompt.ask("Profile", choices=["solo", "team"], default="solo")
 
         while True:
             priority_input = Prompt.ask("Priority", default="100")
@@ -426,7 +425,6 @@ class OnboardingWizard:
             "path": path,
             "file_glob": file_glob,
             "inventory_format": inventory_format,
-            "profile": profile,
             "priority": priority,
             "auto_pull": auto_pull,
             "pull_interval_seconds": pull_interval_seconds,

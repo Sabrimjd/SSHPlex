@@ -20,7 +20,6 @@ def _git_import(**overrides):
         "file_glob": "**/*.y*ml",
         "auto_pull": True,
         "pull_interval_seconds": 300,
-        "profile": "solo",
         "priority": 100,
         "pull_strategy": "ff-only",
         "inventory_format": "static",
@@ -68,7 +67,6 @@ def test_get_hosts_reads_yaml_and_populates_git_metadata(tmp_path, monkeypatch) 
     assert host.name == "web-01"
     assert host.ip == "10.0.0.10"
     assert host.metadata["provider"] == "git-source"
-    assert host.metadata["git_profile"] == "solo"
     assert host.metadata["git_priority"] == 100
     assert host.metadata["git_commit"] == "deadbee"
     assert host.metadata["git_file"] == "hosts/servers.yaml"

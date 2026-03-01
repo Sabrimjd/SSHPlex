@@ -455,7 +455,6 @@ class ConfigEditorScreen(ModalScreen[bool]):
     }
 
     .import-git-branch,
-    .import-git-profile,
     .import-git-format,
     .import-git-auto-pull {
         width: 18;
@@ -647,7 +646,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
             "name", "ip", "cluster", "role", "tags", "status", "source", "site", "platform", "env",
             "description", "alias", "user", "port", "key_path",
             "ansible_group", "ansible_user", "ansible_port", "ansible_connection", "inventory_file",
-            "git_repo", "git_branch", "git_profile", "git_commit", "git_file", "git_inventory_format",
+            "git_repo", "git_branch", "git_commit", "git_file", "git_inventory_format",
             "netbox_site", "netbox_tenant", "netbox_device_role", "netbox_device_type", "netbox_platform",
             "consul_service", "consul_node", "consul_dc", "consul_tags",
             "provider", "sources",
@@ -689,7 +688,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
         origin = {"source", "provider", "sources", "inventory_file"}
         static_ssh = {"alias", "user", "port", "key_path", "ssh_alias", "ssh_user", "ssh_port", "ssh_key_path"}
         ansible_fixed = {"ansible_group", "ansible_user", "ansible_port", "ansible_connection"}
-        git_fixed = {"git_repo", "git_branch", "git_profile", "git_commit", "git_file", "git_inventory_format"}
+        git_fixed = {"git_repo", "git_branch", "git_commit", "git_file", "git_inventory_format"}
 
         for column in columns:
             c = str(column).strip()
@@ -1652,11 +1651,6 @@ class ConfigEditorScreen(ModalScreen[bool]):
                 ),
             ))
 
-            profile_value = self._safe_select_initial(
-                str(getattr(imp, "profile", "solo") or "solo") if imp else "solo",
-                ["solo", "team"],
-                "solo",
-            )
             inventory_format_value = self._safe_select_initial(
                 str(getattr(imp, "inventory_format", "static") or "static") if imp else "static",
                 ["static", "ansible"],
@@ -1686,16 +1680,6 @@ class ConfigEditorScreen(ModalScreen[bool]):
             ))
 
             fields.append(_form_row(
-                self._import_form_field(
-                    f"import-{idx}-git_profile",
-                    "Profile",
-                    "Label for solo/team layering",
-                    Select(
-                        [("solo", "solo"), ("team", "team")],
-                        value=profile_value,
-                        classes="import-git-profile",
-                    ),
-                ),
                 self._import_form_field(
                     f"import-{idx}-git_priority",
                     "Priority",
@@ -2283,7 +2267,6 @@ class ConfigEditorScreen(ModalScreen[bool]):
                 entry["path"] = legacy_path
                 entry["file_glob"] = legacy_glob
                 entry["inventory_format"] = self._get_select_value(f"import-{i}-git_inventory_format", "static")
-                entry["profile"] = self._get_select_value(f"import-{i}-git_profile", "solo")
                 entry["pull_strategy"] = "ff-only"
                 entry["auto_pull"] = self._get_select_value(f"import-{i}-git_auto_pull", "true") == "true"
 

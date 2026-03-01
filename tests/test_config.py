@@ -255,7 +255,6 @@ class TestSoTImportConfig:
             file_glob="**/*.y*ml",
             auto_pull=True,
             pull_interval_seconds=120,
-            profile="solo",
             priority=100,
             pull_strategy="ff-only",
             inventory_format="static",
@@ -264,7 +263,6 @@ class TestSoTImportConfig:
         assert config.type == "git"
         assert config.repo_url == "git@github.com:acme/hosts.git"
         assert config.source_pattern == "hosts/**/*.y*ml"
-        assert config.profile == "solo"
         assert config.priority == 100
         assert config.inventory_format == "static"
 

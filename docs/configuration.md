@@ -159,7 +159,7 @@ sot:
 
 #### Git
 
-Use git-backed inventory for solo or shared host catalogs. SSHplex keeps a local mirror under `~/.cache/sshplex/git` and can auto-pull updates.
+Use git-backed inventory catalogs. SSHplex keeps a local mirror under `~/.cache/sshplex/git` and can auto-pull updates.
 
 `source_pattern` combines path + glob in one field, for example `hosts/**/*.y*ml`.
 
@@ -179,7 +179,6 @@ sot:
       inventory_format: "static"
       auto_pull: true
       pull_interval_seconds: 300
-      profile: "solo"
       priority: 100
       pull_strategy: "ff-only"
 ```
@@ -190,7 +189,7 @@ Git + Ansible remote inventory example (read-only):
 sot:
   providers: ["git"]
   import:
-    - name: "team-ansible"
+    - name: "git-ansible"
       type: git
       repo_url: "git@github.com:org/ansible-inventory.git"
       branch: "main"
@@ -200,27 +199,8 @@ sot:
         groups: ["webservers", "databases"]
       auto_pull: true
       pull_interval_seconds: 300
-      profile: "team"
       priority: 50
       pull_strategy: "ff-only"
-```
-
-Team-ready layering example (same provider type, different imports):
-
-```yaml
-sot:
-  providers: ["git"]
-  import:
-    - name: "team-hosts"
-      type: git
-      repo_url: "git@github.com:org/team-hosts.git"
-      profile: "team"
-      priority: 50
-    - name: "my-overrides"
-      type: git
-      repo_url: "git@github.com:you/my-hosts.git"
-      profile: "solo"
-      priority: 100
 ```
 
 In host selector:

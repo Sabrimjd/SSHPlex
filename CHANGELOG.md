@@ -21,6 +21,7 @@ All notable changes to this project will be documented in this file.
 - Config editor spacing is compacted across source/provider forms while keeping button labels readable on laptop-sized terminals.
 - Standard table-column preset now defaults to cross-SoT fields (`source`, `status`, `description`, `user`, `port`, `platform`) in addition to core host fields.
 - Static host row editor list height was increased to show more host rows without scrolling.
+- Removed git `profile` selection from configuration/UI and simplified git imports to use only source, format, and priority controls.
 
 ### Fixed
 - Improved provider setup defaults and compatibility by preserving legacy `path`/`file_glob` fallback when `source_pattern` is not set.

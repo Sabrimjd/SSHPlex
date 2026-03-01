@@ -79,10 +79,9 @@ sot:
       inventory_format: "static" # static, ansible
       auto_pull: true
       pull_interval_seconds: 300
-      profile: "solo"  # Use "team" for shared inventories
       priority: 100
       pull_strategy: "ff-only"
-    - name: "team-git-ansible"
+    - name: "git-ansible-inventory"
       type: git
       repo_url: "git@github.com:your-org/ansible-inventory.git"
       branch: "main"
@@ -92,7 +91,6 @@ sot:
         groups: ["webservers", "databases"]
       auto_pull: true
       pull_interval_seconds: 300
-      profile: "team"
       priority: 50
       pull_strategy: "ff-only"
 

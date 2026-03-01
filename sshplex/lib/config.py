@@ -190,7 +190,6 @@ class SoTImportConfig(BaseModel):
     file_glob: Optional[str] = "**/*.y*ml"
     auto_pull: Optional[bool] = True
     pull_interval_seconds: Optional[int] = 300
-    profile: Optional[str] = "solo"
     priority: Optional[int] = 100
     pull_strategy: Optional[str] = "ff-only"
     inventory_format: Optional[str] = "static"

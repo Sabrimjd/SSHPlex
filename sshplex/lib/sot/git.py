@@ -37,7 +37,6 @@ class GitProvider(SoTProvider):
         self.file_glob = str(getattr(import_config, "file_glob", "**/*.y*ml") or "**/*.y*ml").strip() or "**/*.y*ml"
         self.auto_pull = bool(getattr(import_config, "auto_pull", True))
         self.pull_interval_seconds = int(getattr(import_config, "pull_interval_seconds", 300) or 300)
-        self.profile = str(getattr(import_config, "profile", "solo") or "solo").strip() or "solo"
         self.priority = int(getattr(import_config, "priority", 100) or 100)
         self.pull_strategy = str(getattr(import_config, "pull_strategy", "ff-only") or "ff-only").strip() or "ff-only"
         self.inventory_format = self._normalize_inventory_format(
@@ -83,7 +82,6 @@ class GitProvider(SoTProvider):
         """
         result: dict[str, Any] = {
             "provider": self.name,
-            "profile": self.profile,
             "status": "error",
             "message": "sync failed",
             "old_commit": None,
@@ -461,7 +459,6 @@ class GitProvider(SoTProvider):
         """Attach git metadata to an extracted host object."""
         host.metadata["git_repo"] = self.repo_url
         host.metadata["git_branch"] = self.branch
-        host.metadata["git_profile"] = self.profile
         host.metadata["git_priority"] = self.priority
         host.metadata["git_commit"] = current_commit
         host.metadata["git_file"] = rel_file

@@ -588,7 +588,6 @@ class SoTFactory:
                 results.append(
                     {
                         "provider": provider_name,
-                        "profile": getattr(provider, "profile", "solo"),
                         "status": "error",
                         "message": str(e),
                         "old_commit": None,

@@ -141,9 +141,8 @@ def list_providers(config: Any, logger: Any) -> int:
             print(f"   Host: {provider.config.host}:{provider.config.port}")
         elif provider.type == "git" and provider.repo_url:
             branch = provider.branch or "main"
-            profile = provider.profile or "solo"
             inventory_format = provider.inventory_format or "static"
-            print(f"   Repo: {provider.repo_url} [{branch}, {profile}, {inventory_format}]")
+            print(f"   Repo: {provider.repo_url} [{branch}, {inventory_format}]")
             source_pattern = provider.source_pattern or f"{provider.path}/{provider.file_glob}"
             print(f"   Source: {source_pattern}")
         elif provider.type == "static" and provider.hosts:
