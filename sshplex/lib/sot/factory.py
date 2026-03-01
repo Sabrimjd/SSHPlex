@@ -56,15 +56,38 @@ class SoTFactory:
             self.logger.error("No import configurations found in sot.import")
             return False
 
+        sot_config = self.config.sot
+        providers_explicitly_set = True
+        if hasattr(sot_config, "model_fields_set"):
+            providers_explicitly_set = "providers" in getattr(
+                sot_config,
+                "model_fields_set",
+                set(),
+            )
+
+        provider_types_source = "config"
         enabled_provider_types = {
             str(provider_type).strip()
-            for provider_type in (getattr(self.config.sot, 'providers', []) or [])
+            for provider_type in (getattr(sot_config, "providers", []) or [])
             if str(provider_type).strip()
         }
 
+        if not providers_explicitly_set:
+            provider_types_source = "imports"
+            enabled_provider_types = {
+                str(getattr(import_config, "type", "")).strip()
+                for import_config in configured_imports
+                if str(getattr(import_config, "type", "")).strip()
+            }
+            if enabled_provider_types:
+                self.logger.info(
+                    "No explicit sot.providers configured; inferred enabled provider "
+                    f"types from imports: {sorted(enabled_provider_types)}"
+                )
+
         if enabled_provider_types:
             self.logger.info(
-                f"Enabled provider types from config: {sorted(enabled_provider_types)}"
+                f"Enabled provider types from {provider_types_source}: {sorted(enabled_provider_types)}"
             )
 
         for import_config in configured_imports:

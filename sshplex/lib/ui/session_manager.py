@@ -116,6 +116,7 @@ class ITerm2SessionManager(ModalScreen):
         self.logger = get_logger()
         self.config = config
         self.tabs: List[ITerm2ManagedTab] = []
+        self.visible_tabs: List[ITerm2ManagedTab] = []
         self.table: Optional[DataTable] = None
         self.current_session_name = current_session_name
         self.show_current_only = bool(current_session_name)
@@ -198,11 +199,12 @@ class ITerm2SessionManager(ModalScreen):
         try:
             self.tabs = await asyncio.to_thread(self._fetch_tabs_blocking)
             self.populate_table()
-            if self.table and self.tabs:
+            if self.table and self.visible_tabs:
                 self.table.move_cursor(row=0)
             self.logger.info(f"SSHplex: Loaded {len(self.tabs)} managed iTerm2 tabs")
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to load iTerm2 managed tabs: {e}")
+            self.visible_tabs = []
             if self.table is not None:
                 self.table.clear()
                 self.table.add_row("Error loading tabs", str(e), "-", "-")
@@ -212,15 +214,17 @@ class ITerm2SessionManager(ModalScreen):
             return
 
         self.table.clear()
-        visible_tabs = self.tabs
+        self.visible_tabs = list(self.tabs)
         if self.show_current_only and self.current_session_name:
-            visible_tabs = [tab for tab in self.tabs if tab.session_name == self.current_session_name]
+            self.visible_tabs = [
+                tab for tab in self.tabs if tab.session_name == self.current_session_name
+            ]
 
-        if not visible_tabs:
+        if not self.visible_tabs:
             self.table.add_row("No SSHplex iTerm2 tabs", "-", "-", "-")
             return
 
-        for tab in visible_tabs:
+        for tab in self.visible_tabs:
             self.table.add_row(
                 tab.hostname,
                 tab.session_name,
@@ -230,26 +234,26 @@ class ITerm2SessionManager(ModalScreen):
             )
 
     def action_move_up(self) -> None:
-        if self.table and self.tabs:
+        if self.table and self.visible_tabs:
             current_row = self.table.cursor_row
             if current_row > 0:
                 self.table.move_cursor(row=current_row - 1)
 
     def action_move_down(self) -> None:
-        if self.table and self.tabs:
+        if self.table and self.visible_tabs:
             current_row = self.table.cursor_row
-            if current_row < len(self.tabs) - 1:
+            if current_row < len(self.visible_tabs) - 1:
                 self.table.move_cursor(row=current_row + 1)
 
     def action_kill_session(self) -> None:
-        if not self.table or not self.tabs:
+        if not self.table or not self.visible_tabs:
             return
 
         cursor_row = self.table.cursor_row
-        if cursor_row < 0 or cursor_row >= len(self.tabs):
+        if cursor_row < 0 or cursor_row >= len(self.visible_tabs):
             return
 
-        tab = self.tabs[cursor_row]
+        tab = self.visible_tabs[cursor_row]
         self._do_kill_tab(tab)
 
     def _do_kill_tab(self, tab_item: ITerm2ManagedTab) -> None:
@@ -341,6 +345,8 @@ class ITerm2SessionManager(ModalScreen):
         )
         self.app.notify(f"Showing {mode}", timeout=2)
         self.populate_table()
+        if self.table and self.visible_tabs:
+            self.table.move_cursor(row=0)
 
     def action_close_manager(self) -> None:
         self.dismiss()

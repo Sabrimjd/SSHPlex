@@ -45,7 +45,6 @@ def clear_cache(config: Any, logger: Any, no_cache_message: str = "No cache to c
         )
     else:
         print(f"🗑️  {no_cache_message}")
-        return 0
 
     if cache.clear_cache():
         print("✅ Cache cleared successfully")

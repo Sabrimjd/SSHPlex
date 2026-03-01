@@ -49,10 +49,18 @@ class DummyProvider:
         return [Host(name=host.name, ip=host.ip, **dict(host.metadata)) for host in self._hosts]
 
 
-def _make_config(imports: list[SimpleNamespace], providers: list[str]) -> SimpleNamespace:
+def _make_config(
+    imports: list[SimpleNamespace],
+    providers: list[str],
+    providers_field_set: bool | None = None,
+) -> SimpleNamespace:
     """Build a minimal config object for SoTFactory tests."""
+    sot_config = SimpleNamespace(import_=imports, providers=providers)
+    if providers_field_set is not None:
+        sot_config.model_fields_set = {"providers"} if providers_field_set else set()
+
     return SimpleNamespace(
-        sot=SimpleNamespace(import_=imports, providers=providers),
+        sot=sot_config,
         cache=SimpleNamespace(enabled=True, cache_dir="~/.cache/sshplex", ttl_hours=24),
         netbox=None,
         ansible_inventory=None,
@@ -93,6 +101,43 @@ def test_initialize_providers_respects_enabled_provider_types() -> None:
     create_static.assert_called_once()
     create_netbox.assert_not_called()
     assert factory.providers == [static_provider]
+
+
+def test_initialize_providers_infers_enabled_types_when_providers_not_set() -> None:
+    """Missing sot.providers should behave as enable-all configured imports."""
+    imports = [
+        SimpleNamespace(name="static-src", type="static", hosts=[{"name": "h1", "ip": "10.0.0.1"}]),
+        SimpleNamespace(
+            name="nb-src",
+            type="netbox",
+            url="https://netbox.example.com",
+            token="token",
+            verify_ssl=True,
+            timeout=30,
+            default_filters={},
+        ),
+    ]
+    # Emulate pydantic model where providers is defaulted but not present in input.
+    config = _make_config(imports=imports, providers=["static"], providers_field_set=False)
+
+    static_provider = MagicMock()
+    static_provider.connect.return_value = True
+    netbox_provider = MagicMock()
+    netbox_provider.connect.return_value = True
+
+    with patch("sshplex.lib.sot.factory.HostCache", InMemoryCache):
+        factory = SoTFactory(config)
+
+    with patch.object(factory, "_create_static_provider", return_value=static_provider) as create_static, patch.object(
+        factory,
+        "_create_netbox_provider_from_import",
+        return_value=netbox_provider,
+    ) as create_netbox:
+        assert factory.initialize_providers() is True
+
+    create_static.assert_called_once()
+    create_netbox.assert_called_once()
+    assert factory.providers == [static_provider, netbox_provider]
 
 
 def test_get_all_hosts_merge_is_consistent_between_modes() -> None:
