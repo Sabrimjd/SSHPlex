@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sshplex"
-version = "1.6.2"
+version = "1.6.3"
 description = "Multiplex your SSH connections with style"
 authors = [{name = "MJAHED Sabri", email = "contact@sabrimjahed.com"}]
 readme = "README.md"
@@ -110,6 +110,11 @@ min_confidence = 80
 
 [[tool.mypy.overrides]]
 module = ["consul"]
+ignore_missing_imports = true
+
+
+[[tool.mypy.overrides]]
+module = ["pynetbox", "pynetbox.*", "pyperclip", "pyperclip.*"]
 ignore_missing_imports = true
 
 

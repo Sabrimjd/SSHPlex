@@ -60,6 +60,7 @@ logging:
 |-------|----------|
 | NetBox connection failed | Check URL, token, and network connectivity |
 | Ansible inventory not loading | Verify file paths exist and YAML syntax is valid |
+| Import configured but hosts never appear | Ensure import `type` is enabled in `sot.providers` |
 | No hosts found | Remove filters temporarily, check provider logs |
 | Consul import error | Install with `pip install "sshplex[consul]"` |
 

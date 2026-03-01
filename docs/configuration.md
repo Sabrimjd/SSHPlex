@@ -12,7 +12,7 @@ Run `sshplex --onboarding` for an interactive setup wizard that will:
 ## Config Editor (Built-in)
 
 Press `e` in the TUI to open the configuration editor with:
-- **4 tabbed sections**: General, SSH, Mux, Sources
+- **5 tabbed sections**: General, SSH, Mux, Sources, Config YAML
 - **Grouped sections in General**: SSHplex, UI, Logging, Cache
 - **Dynamic lists**: Add/remove proxies and imports
 - **Validation**: Pydantic validation before saving
@@ -71,6 +71,22 @@ tmux:
 ```
 
 ### Sources of Truth
+
+#### Provider Overview
+
+| Provider | `type` | Activation | Required Fields |
+|----------|--------|------------|-----------------|
+| Static | `static` | Add `static` to `sot.providers` | `hosts` |
+| NetBox | `netbox` | Add `netbox` to `sot.providers` | `url`, `token` |
+| Ansible | `ansible` | Add `ansible` to `sot.providers` | `inventory_paths` |
+| Consul | `consul` | Add `consul` to `sot.providers` | `config.host`, `config.token` |
+
+Only imports whose `type` is listed in `sot.providers` are loaded.
+
+```yaml
+sot:
+  providers: ["static", "netbox", "ansible", "consul"]
+```
 
 #### Static Hosts
 

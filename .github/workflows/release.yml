@@ -83,43 +83,46 @@ jobs:
         name: dist
         path: dist/
 
-    - name: Build Changelog
+    - name: Extract Release Notes from CHANGELOG.md
       id: changelog
-      uses: mikepenz/release-changelog-builder-action@v5
-      with:
-        mode: "COMMIT"
-        configurationJson: |
-          {
-            "template": "#{{CHANGELOG}}",
-            "categories": [
-              {
-                  "title": "## Feature",
-                  "labels": ["feat", "feature"]
-              },
-              {
-                  "title": "## Fix",
-                  "labels": ["fix", "bug"]
-              },
-              {
-                  "title": "## Other",
-                  "labels": []
-              }
-            ],
-            "label_extractor": [
-              {
-                "pattern": "^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test){1}(\\([\\w\\-\\.]+\\))?(!)?: ([\\w ])+([\\s\\S]*)",
-                "on_property": "title",
-                "target": "$1"
-              }
-            ]
-          }
-      env:
-        GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
+      shell: bash
+      run: |
+        python - <<'PY'
+        import os
+        import re
+        from pathlib import Path
+
+        changelog_path = Path("CHANGELOG.md")
+        if not changelog_path.exists():
+            raise SystemExit("CHANGELOG.md not found")
+
+        tag_name = os.environ.get("GITHUB_REF_NAME", "")
+        version = tag_name[1:] if tag_name.startswith("v") else tag_name
+        if not version:
+            raise SystemExit("Unable to resolve release version from GITHUB_REF_NAME")
+
+        changelog = changelog_path.read_text(encoding="utf-8")
+        section_start_re = re.compile(rf"^## \\[{re.escape(version)}\\].*$", re.MULTILINE)
+        section_start_match = section_start_re.search(changelog)
+        if not section_start_match:
+            raise SystemExit(f"No changelog section found for version {version}")
+
+        next_section_re = re.compile(r"^## \\[", re.MULTILINE)
+        next_section_match = next_section_re.search(changelog, section_start_match.end())
+        section_end = next_section_match.start() if next_section_match else len(changelog)
+
+        section_text = changelog[section_start_match.start():section_end].strip() + "\\n"
+        notes_path = Path("release-notes.md")
+        notes_path.write_text(section_text, encoding="utf-8")
+
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+            output.write(f"body_path={notes_path}\\n")
+        PY
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        body: ${{steps.changelog.outputs.changelog}}
+        body_path: ${{ steps.changelog.outputs.body_path }}
         files: dist/*
       env:
         GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}

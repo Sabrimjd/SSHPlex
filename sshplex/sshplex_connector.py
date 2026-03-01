@@ -10,11 +10,7 @@ from typing import Any, List, Optional
 
 from .lib.logger import get_logger
 from .lib.sot.base import Host
-
-
-class SSHConnectionError(Exception):
-    """Raised when SSH connection fails after all retries."""
-    pass
+from .lib.utils.ssh_config import resolve_ssh_effective_config
 
 
 class SSHplexConnector:
@@ -259,6 +255,26 @@ class SSHplexConnector:
 
         cmd_parts = ["TERM=xterm-256color", "/usr/bin/ssh"]
 
+        host_alias = str(getattr(host, "ssh_alias", "") or host.metadata.get("ssh_alias", "")).strip()
+        target_override = str(getattr(host, "ssh_hostname", "") or host.metadata.get("ssh_hostname", "")).strip()
+        target_resolved = target_override or hostname
+        ssh_target = host_alias or target_resolved
+
+        user_override = str(getattr(host, "ssh_user", "") or host.metadata.get("ssh_user", "")).strip()
+        port_override = str(getattr(host, "ssh_port", "") or host.metadata.get("ssh_port", "")).strip()
+        key_override = str(getattr(host, "ssh_key_path", "") or host.metadata.get("ssh_key_path", "")).strip()
+
+        if host_alias:
+            resolved = resolve_ssh_effective_config(host_alias)
+            if resolved.get("hostname"):
+                target_resolved = resolved["hostname"]
+            if not user_override and resolved.get("user"):
+                user_override = resolved["user"]
+            if not port_override and resolved.get("port"):
+                port_override = resolved["port"]
+            if not key_override and resolved.get("identityfile"):
+                key_override = resolved["identityfile"].split()[0]
+
         # Try to configure proxy if available
         try:
             if self.config is not None:
@@ -309,19 +325,27 @@ class SSHplexConnector:
         cmd_parts.extend(["-o", "LogLevel=ERROR"])
 
         # Add key file if provided
-        if key_path:
-            cmd_parts.extend(["-i", key_path])
+        effective_key = key_override or (key_path or "")
+        if effective_key:
+            cmd_parts.extend(["-i", effective_key])
 
         # Add port if not default
-        if port != 22:
-            cmd_parts.extend(["-p", str(port)])
+        effective_port = port
+        if port_override:
+            try:
+                effective_port = int(port_override)
+            except ValueError:
+                effective_port = port
+        if effective_port != 22:
+            cmd_parts.extend(["-p", str(effective_port)])
 
         # Add connection timeout
         timeout = getattr(self.config.ssh, 'timeout', 10) if self.config else 10
         cmd_parts.extend(["-o", f"ConnectTimeout={timeout}"])
 
         # Add user@hostname with proper escaping
-        cmd_parts.append(f"{shlex.quote(username)}@{shlex.quote(hostname)}")
+        effective_user = user_override or username
+        cmd_parts.append(f"{shlex.quote(effective_user)}@{shlex.quote(ssh_target)}")
 
         return " ".join(cmd_parts)
 
@@ -332,8 +356,3 @@ class SSHplexConnector:
     def attach_to_session(self, auto_attach: bool = True) -> None:
         """Prepare session for attachment or auto-attach."""
         self.multiplexer.attach_to_session(auto_attach=auto_attach)
-
-    def close_connections(self) -> None:
-        """Close all SSH connections and tmux session."""
-        self.logger.info("SSHplex: Closing all connections")
-        self.multiplexer.close_session()

@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.3] - 2026-03-01
+
+### Added
+- Static host management in the Config Editor now uses row-based CRUD fields (`name`, `ip`, `alias`, `user`, `port`, `key_path`) with inline add/remove and SSH preview actions.
+- Host selector adds SSH resolution preview action (`o`) to display effective connection settings for the host under cursor.
+- New `Config YAML` tab includes side-by-side editing and rich syntax preview for full configuration review.
+- Added shared command helpers used by both `sshplex` and `sshplex-cli` to keep debug/cache/config output behavior consistent.
+- Demo configuration now includes a static provider (`demo-static`) with bundled static hosts for local testing.
+
+### Changed
+- Sources tab was redesigned for compact workflows with provider checkboxes (`static`, `netbox`, `ansible`, `consul`) and collapsible import cards.
+- Column detection now uses live host data, cache, imports, and unsaved static rows; detection includes SSH-related fields when present.
+- SSH command construction now honors per-host static overrides and `ssh_alias` resolution for user/port/key targeting.
+- Config editor fields across General/SSH/Mux/Sources now use denser horizontal layouts and compact row controls for better small-screen usability.
+- Documentation now includes Sources of Truth provider tables and troubleshooting notes for `sot.providers` activation.
+
+### Fixed
+- Prevented static import UI mount-time crashes while adding imports/hosts dynamically.
+- Improved table/search/copy rendering so normalized columns (for example `source`, `alias`, `user`, `port`, `key_path`) resolve consistently.
+- Backend dependency checks now skip tmux requirements when `tmux.backend: iterm2-native` is selected.
+- SoT initialization now respects `sot.providers`, and host dedup/source-merge behavior is aligned between sequential and parallel fetch modes.
+- First-run config initialization no longer exits early, and cache defaults are now consistently `~/.cache/sshplex`.
+
 ## [1.6.2] - 2026-02-27
 
 ### Added

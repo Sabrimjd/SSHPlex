@@ -5,9 +5,9 @@ import sys
 from typing import Any
 
 from . import __version__
-from .lib.config import get_config_info, load_config
+from .lib.commands import clear_cache, run_debug_mode, show_config_info
+from .lib.config import load_config
 from .lib.logger import get_logger, setup_logging
-from .lib.sot.factory import SoTFactory
 
 
 def main() -> int:
@@ -62,11 +62,15 @@ Examples:
             logger.info("SSHplex CLI started")
 
             if args.clear_cache:
-                return clear_cache(config, logger)
+                return clear_cache(config, logger, no_cache_message="Clearing cache...")
             elif args.list_providers:
                 return list_providers(config, logger)
             else:
-                return debug_mode(config, logger)
+                return run_debug_mode(
+                    config,
+                    logger,
+                    footer_note="Note: For the full TUI interface, run the main application",
+                )
         else:
             # Default to debug mode if no specific action
             print("SSHplex CLI - Loading configuration...")
@@ -81,7 +85,11 @@ Examples:
             logger = get_logger()
             logger.info("SSHplex CLI debug mode started")
 
-            return debug_mode(config, logger)
+            return run_debug_mode(
+                config,
+                logger,
+                footer_note="Note: For the full TUI interface, run the main application",
+            )
 
     except FileNotFoundError as e:
         print(f"Error: {e}")
@@ -97,25 +105,6 @@ Examples:
     except Exception as e:
         print(f"Unexpected error: {e}")
         return 1
-
-
-def show_config_info() -> int:
-    """Show configuration file paths and status."""
-    info = get_config_info()
-    
-    print("📁 SSHplex Configuration Information")
-    print("=" * 50)
-    print(f"Config Directory:    {info['default_config_path'].rsplit('/', 1)[0]}")
-    print(f"Config File:         {info['default_config_path']}")
-    print(f"Config Exists:       {'✅ Yes' if info['default_config_exists'] else '❌ No'}")
-    print(f"Template File:       {info['template_path']}")
-    print(f"Template Exists:     {'✅ Yes' if info['template_exists'] else '❌ No'}")
-    print()
-    
-    if not info['default_config_exists']:
-        print("💡 Run 'sshplex' to create a default configuration file")
-    
-    return 0
 
 
 def list_providers(config: Any, logger: Any) -> int:
@@ -153,89 +142,6 @@ def list_providers(config: Any, logger: Any) -> int:
         
         print()
     
-    return 0
-
-
-def clear_cache(config: Any, logger: Any) -> int:
-    """Clear the host cache."""
-    logger.info("Clearing host cache")
-    
-    from .lib.cache import HostCache
-    
-    cache = HostCache(
-        cache_dir=config.cache.cache_dir,
-        cache_ttl_hours=config.cache.ttl_hours
-    )
-    
-    cache_info = cache.get_cache_info()
-    if cache_info:
-        print(f"🗑️  Clearing cache ({cache_info.get('host_count', 0)} hosts, age: {cache_info.get('age_hours', 0):.1f}h)")
-    else:
-        print("🗑️  Clearing cache...")
-    
-    if cache.clear_cache():
-        print("✅ Cache cleared successfully")
-        return 0
-    else:
-        print("❌ Failed to clear cache")
-        return 1
-
-
-def debug_mode(config: Any, logger: Any) -> int:
-    """Run debug mode - SoT provider connection and host listing test."""
-    logger.info("Running CLI debug mode - SoT provider connectivity test")
-
-    # Initialize SoT factory
-    logger.info("Initializing SoT factory")
-    sot_factory = SoTFactory(config)
-
-    # Check cache status
-    cache_info = sot_factory.get_cache_info()
-    if cache_info:
-        print(f"📦 Cache: {cache_info.get('host_count', 0)} hosts cached ({cache_info.get('age_hours', 0):.1f}h old)")
-
-    # Initialize all providers
-    if not sot_factory.initialize_providers():
-        logger.error("Failed to initialize any SoT providers")
-        print("❌ Failed to initialize any SoT providers")
-        print("Check your configuration and network connectivity")
-        return 1
-
-    print(f"✅ Successfully initialized {sot_factory.get_provider_count()} SoT provider(s): {', '.join(sot_factory.get_provider_names())}")
-
-    # Test all connections
-    logger.info("Testing SoT provider connections...")
-    connection_results = sot_factory.test_all_connections()
-
-    for provider_name, status in connection_results.items():
-        if status:
-            print(f"✅ {provider_name}: Connection successful")
-        else:
-            print(f"❌ {provider_name}: Connection failed")
-
-    # Retrieve hosts from all providers
-    logger.info("Retrieving hosts from all SoT providers...")
-    hosts = sot_factory.get_all_hosts()
-
-    # Display results
-    if hosts:
-        logger.info(f"Successfully retrieved {len(hosts)} hosts")
-        print(f"\n📋 Found {len(hosts)} hosts from all providers:")
-        print("-" * 80)
-        for i, host in enumerate(hosts, 1):
-            status = getattr(host, 'status', host.metadata.get('status', 'unknown'))
-            sources = host.metadata.get('sources', ['unknown'])
-            source_str = ', '.join(sources) if isinstance(sources, list) else str(sources)
-            print(f"{i:3d}. {host.name:<25} {host.ip:<15} [{status:<8}] ({source_str})")
-        print("-" * 80)
-    else:
-        logger.warning("No hosts found matching the filters")
-        print("⚠️  No hosts found matching the configured filters")
-        print("Check your SoT provider filters in the configuration")
-
-    logger.info("SSHplex CLI debug mode completed successfully")
-    print("\n✅ CLI debug mode completed successfully")
-    print("Note: For the full TUI interface, run the main application")
     return 0
 
 

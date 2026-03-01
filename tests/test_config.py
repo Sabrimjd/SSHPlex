@@ -186,6 +186,7 @@ class TestUIConfig:
     def test_default_values(self):
         """Test default UI configuration."""
         config = UIConfig()
+        assert config.theme == "textual-dark"
         assert config.show_log_panel is True
         assert config.log_panel_height == 20
         assert "name" in config.table_columns
@@ -322,6 +323,23 @@ class TestLoadConfig:
         config_file = temp_config_dir / "incomplete.yaml"
         with open(config_file, 'w') as f:
             yaml.dump({'sot': {'import': [{'type': 'netbox'}]}}, f)
-        
+
         with pytest.raises(ValueError):
             load_config(str(config_file))
+
+    def test_load_config_initializes_default_without_exit(self, temp_config_dir, sample_config_dict):
+        """Test first-run initialization returns a config object instead of exiting."""
+        default_config_file = temp_config_dir / "sshplex.yaml"
+        template_file = temp_config_dir / "config-template.yaml"
+
+        with open(template_file, 'w') as f:
+            yaml.dump(sample_config_dict, f)
+
+        with patch('sshplex.lib.config.get_default_config_path', return_value=default_config_file), patch(
+            'sshplex.lib.config.get_template_config_path',
+            return_value=template_file,
+        ), patch('sshplex.lib.config.ensure_config_directory', return_value=temp_config_dir):
+            config = load_config()
+
+        assert default_config_file.exists()
+        assert config.ssh.username == "testuser"

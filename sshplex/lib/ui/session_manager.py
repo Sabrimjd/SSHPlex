@@ -8,86 +8,11 @@ from typing import Any, List, Optional
 import libtmux
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal
+from textual.containers import Container
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Static
+from textual.widgets import DataTable, Static
 
 from ..logger import get_logger
-
-
-class ConfirmDialog(ModalScreen[bool]):
-    """Modal confirmation dialog for destructive actions."""
-
-    CSS = """
-    ConfirmDialog {
-        align: center middle;
-    }
-
-    #confirm-dialog {
-        width: 50;
-        height: 10;
-        border: thick $error;
-        background: $surface;
-        padding: 1;
-    }
-
-    #confirm-title {
-        text-align: center;
-        color: $text;
-        margin-bottom: 1;
-    }
-
-    #confirm-text {
-        text-align: center;
-        color: $text;
-        margin-bottom: 1;
-    }
-
-    #confirm-buttons {
-        align: center middle;
-        height: 3;
-    }
-
-    #confirm-yes {
-        margin-right: 2;
-    }
-
-    #confirm-no {
-        margin-left: 2;
-    }
-    """
-
-    BINDINGS = [
-        Binding("enter", "confirm_yes", "Yes", show=False),
-        Binding("y", "confirm_yes", "Yes", show=True),
-        Binding("n", "confirm_no", "No", show=True),
-        Binding("escape", "confirm_no", "Cancel", show=False),
-    ]
-
-    def __init__(self, message: str, title: str = "Confirm") -> None:
-        super().__init__()
-        self.message = message
-        self.title = title
-
-    def compose(self) -> ComposeResult:
-        with Container(id="confirm-dialog"):
-            yield Static(f"⚠️  {self.title}", id="confirm-title")
-            yield Static(self.message, id="confirm-text")
-            with Horizontal(id="confirm-buttons"):
-                yield Button("Yes", id="confirm-yes", variant="error")
-                yield Button("No", id="confirm-no", variant="primary")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "confirm-yes":
-            self.dismiss(True)
-        else:
-            self.dismiss(False)
-
-    def action_confirm_yes(self) -> None:
-        self.dismiss(True)
-
-    def action_confirm_no(self) -> None:
-        self.dismiss(False)
 
 
 class TmuxSession:
@@ -178,6 +103,7 @@ class ITerm2SessionManager(ModalScreen):
     BINDINGS = [
         Binding("k", "kill_session", "Kill Tab", show=True),
         Binding("shift+k", "kill_current_session", "Kill Current Session", show=True),
+        Binding("f", "toggle_current_filter", "Filter Current", show=True),
         Binding("r", "refresh_sessions", "Refresh", show=True),
         Binding("escape", "close_manager", "Close", show=True),
         Binding("q", "close_manager", "Close", show=False),
@@ -190,16 +116,24 @@ class ITerm2SessionManager(ModalScreen):
         self.logger = get_logger()
         self.config = config
         self.tabs: List[ITerm2ManagedTab] = []
+        self.visible_tabs: List[ITerm2ManagedTab] = []
         self.table: Optional[DataTable] = None
         self.current_session_name = current_session_name
+        self.show_current_only = bool(current_session_name)
 
     def compose(self) -> ComposeResult:
         with Container(id="session-dialog"):
             yield Static("🖥️  SSHplex - iTerm2 Native Session Manager", id="session-header")
             yield DataTable(id="session-table", cursor_type="row")
-            yield Static("K: Kill Tab | Shift+K: Kill Current Session | R: Refresh | ESC: Close", id="session-footer")
+            yield Static("K: Kill Tab | Shift+K: Kill Current Session | F: Toggle Current Filter | R: Refresh | ESC: Close", id="session-footer")
 
     def on_mount(self) -> None:
+        if self.current_session_name:
+            header = self.query_one("#session-header", Static)
+            filter_mode = "current" if self.show_current_only else "all"
+            header.update(
+                f"🖥️  SSHplex - iTerm2 Native Session Manager  |  session: {self.current_session_name} ({filter_mode})"
+            )
         self.table = self.query_one("#session-table", DataTable)
         self.table.add_column("Host", width=26)
         self.table.add_column("Session", width=24)
@@ -265,11 +199,12 @@ class ITerm2SessionManager(ModalScreen):
         try:
             self.tabs = await asyncio.to_thread(self._fetch_tabs_blocking)
             self.populate_table()
-            if self.table and self.tabs:
+            if self.table and self.visible_tabs:
                 self.table.move_cursor(row=0)
             self.logger.info(f"SSHplex: Loaded {len(self.tabs)} managed iTerm2 tabs")
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to load iTerm2 managed tabs: {e}")
+            self.visible_tabs = []
             if self.table is not None:
                 self.table.clear()
                 self.table.add_row("Error loading tabs", str(e), "-", "-")
@@ -279,11 +214,17 @@ class ITerm2SessionManager(ModalScreen):
             return
 
         self.table.clear()
-        if not self.tabs:
+        self.visible_tabs = list(self.tabs)
+        if self.show_current_only and self.current_session_name:
+            self.visible_tabs = [
+                tab for tab in self.tabs if tab.session_name == self.current_session_name
+            ]
+
+        if not self.visible_tabs:
             self.table.add_row("No SSHplex iTerm2 tabs", "-", "-", "-")
             return
 
-        for tab in self.tabs:
+        for tab in self.visible_tabs:
             self.table.add_row(
                 tab.hostname,
                 tab.session_name,
@@ -293,26 +234,26 @@ class ITerm2SessionManager(ModalScreen):
             )
 
     def action_move_up(self) -> None:
-        if self.table and self.tabs:
+        if self.table and self.visible_tabs:
             current_row = self.table.cursor_row
             if current_row > 0:
                 self.table.move_cursor(row=current_row - 1)
 
     def action_move_down(self) -> None:
-        if self.table and self.tabs:
+        if self.table and self.visible_tabs:
             current_row = self.table.cursor_row
-            if current_row < len(self.tabs) - 1:
+            if current_row < len(self.visible_tabs) - 1:
                 self.table.move_cursor(row=current_row + 1)
 
     def action_kill_session(self) -> None:
-        if not self.table or not self.tabs:
+        if not self.table or not self.visible_tabs:
             return
 
         cursor_row = self.table.cursor_row
-        if cursor_row < 0 or cursor_row >= len(self.tabs):
+        if cursor_row < 0 or cursor_row >= len(self.visible_tabs):
             return
 
-        tab = self.tabs[cursor_row]
+        tab = self.visible_tabs[cursor_row]
         self._do_kill_tab(tab)
 
     def _do_kill_tab(self, tab_item: ITerm2ManagedTab) -> None:
@@ -354,6 +295,7 @@ class ITerm2SessionManager(ModalScreen):
         try:
             await asyncio.to_thread(self._close_tab_blocking, tab_item)
             self.logger.info(f"SSHplex: Closed managed iTerm2 tab '{tab_item.hostname}'")
+            self.app.notify(f"Closed tab: {tab_item.hostname}", timeout=2)
             await self.load_sessions()
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to close iTerm2 tab '{tab_item.hostname}': {e}")
@@ -384,10 +326,27 @@ class ITerm2SessionManager(ModalScreen):
                 self.logger.error(f"SSHplex: Failed to close tab '{tab.hostname}' in '{session_name}': {e}")
 
         self.logger.info(f"SSHplex: Closed {closed_count}/{len(session_tabs)} tabs for '{session_name}'")
+        self.app.notify(f"Closed {closed_count}/{len(session_tabs)} tabs for {session_name}", timeout=3)
         await self.load_sessions()
 
     def action_refresh_sessions(self) -> None:
         self.run_worker(self.load_sessions(), name="iterm2_refresh_sessions")
+
+    def action_toggle_current_filter(self) -> None:
+        if not self.current_session_name:
+            self.app.notify("No current native session context", timeout=2)
+            return
+        self.show_current_only = not self.show_current_only
+        mode = "current session only" if self.show_current_only else "all sessions"
+        header = self.query_one("#session-header", Static)
+        header.update(
+            f"🖥️  SSHplex - iTerm2 Native Session Manager  |  session: {self.current_session_name} "
+            f"({'current' if self.show_current_only else 'all'})"
+        )
+        self.app.notify(f"Showing {mode}", timeout=2)
+        self.populate_table()
+        if self.table and self.visible_tabs:
+            self.table.move_cursor(row=0)
 
     def action_close_manager(self) -> None:
         self.dismiss()
@@ -976,61 +935,6 @@ class TmuxSessionManager(ModalScreen):
                 self.logger.error(f"SSHplex: Failed to create window in session '{session.name}': {e}")
         else:
             self.logger.warning("SSHplex: No session selected for window creation")
-
-    def action_create_ssh_pane(self) -> None:
-        """Create a new pane with SSH connection."""
-        if not self.table or not self.sessions:
-            self.logger.warning("SSHplex: No sessions available for SSH pane creation")
-            return
-
-        cursor_row = self.table.cursor_row
-        if cursor_row >= 0 and cursor_row < len(self.sessions):
-            session = self.sessions[cursor_row]
-
-            try:
-                # Find the tmux session
-                if self.tmux_server is None:
-                    self.logger.error("SSHplex: tmux server not initialized")
-                    return
-
-                tmux_session = self.tmux_server.find_where({"session_name": session.name})
-                if not tmux_session:
-                    self.logger.error(f"SSHplex: Session '{session.name}' not found")
-                    return
-
-                # Get the first window (or current window)
-                if tmux_session.windows:
-                    window = tmux_session.windows[0]  # Use first window
-
-                    # Create a new pane by splitting the window vertically
-                    new_pane = self._split_window(window, vertical=True)
-
-                    if new_pane:
-                        # Set a title for the new pane
-                        hostname = "new-host"  # Default hostname
-                        new_pane.send_keys(f'printf "\\033]2;{hostname}\\033\\\\"', enter=True)
-
-                        # You could prompt for hostname here or use a default SSH command
-                        # For now, just create an empty pane ready for SSH
-                        new_pane.send_keys('echo "🔗 Ready for SSH connection..."', enter=True)
-                        new_pane.send_keys('echo "Usage: ssh user@hostname"', enter=True)
-
-                        # Apply tiled layout to organize all panes nicely
-                        window.select_layout('tiled')
-
-                        self.logger.info(f"SSHplex: Created new SSH-ready pane in session '{session.name}'")
-
-                        # Refresh session list to update window/pane count
-                        self.load_sessions()
-                    else:
-                        self.logger.error(f"SSHplex: Failed to create SSH pane in session '{session.name}'")
-                else:
-                    self.logger.error(f"SSHplex: No windows found in session '{session.name}'")
-
-            except Exception as e:
-                self.logger.error(f"SSHplex: Failed to create SSH pane in session '{session.name}': {e}")
-        else:
-            self.logger.warning("SSHplex: No session selected for SSH pane creation")
 
     def key_enter(self) -> None:
         """Handle enter key for connecting to session."""

@@ -34,6 +34,7 @@ class LoggingConfig(BaseModel):
 
 class UIConfig(BaseModel):
     """User interface configuration."""
+    theme: str = "textual-dark"
     show_log_panel: bool = True
     log_panel_height: int = 20  # Percentage of screen height
     table_columns: list = Field(default_factory=lambda: ["name", "ip", "cluster", "role", "tags"])
@@ -190,7 +191,7 @@ class SoTConfig(BaseModel):
 class CacheConfig(BaseModel):
     """Host cache configuration."""
     enabled: bool = True
-    cache_dir: str = "~/cache/sshplex"
+    cache_dir: str = "~/.cache/sshplex"
     ttl_hours: int = Field(default=24, description="Cache time-to-live in hours")
 
 
@@ -283,10 +284,7 @@ def load_config(config_path: Optional[str] = None) -> Config:
                 print("   - netbox.token: Your NetBox API token")
                 print("   - ssh.username: Your SSH username")
                 print("   - ssh.key_path: Path to your SSH private key")
-                print("\n🚀 Run 'sshplex' again after configuration is complete!")
-                # Exit gracefully to let user configure
-                import sys
-                sys.exit(0)
+                print("\n🚀 Continuing with generated defaults. You can adjust settings later in the Config editor (key: e).")
             except Exception as e:
                 raise FileNotFoundError(f"SSHplex: Could not initialize default config: {e}") from e
     else:

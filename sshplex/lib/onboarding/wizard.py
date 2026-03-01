@@ -340,7 +340,7 @@ class OnboardingWizard:
         self.console.print("\n🔄 Testing connection...")
         
         try:
-            import pynetbox
+            import pynetbox  # type: ignore[import-untyped]
             nb = pynetbox.api(config['url'], token=config['token'])
             if config.get('verify_ssl') is False:
                 nb.http_session.verify = False
