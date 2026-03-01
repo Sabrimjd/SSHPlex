@@ -13,11 +13,6 @@ from .lib.sot.base import Host
 from .lib.utils.ssh_config import resolve_ssh_effective_config
 
 
-class SSHConnectionError(Exception):
-    """Raised when SSH connection fails after all retries."""
-    pass
-
-
 class SSHplexConnector:
     """Manages SSH connections and multiplexer session management.
 
@@ -361,8 +356,3 @@ class SSHplexConnector:
     def attach_to_session(self, auto_attach: bool = True) -> None:
         """Prepare session for attachment or auto-attach."""
         self.multiplexer.attach_to_session(auto_attach=auto_attach)
-
-    def close_connections(self) -> None:
-        """Close all SSH connections and tmux session."""
-        self.logger.info("SSHplex: Closing all connections")
-        self.multiplexer.close_session()

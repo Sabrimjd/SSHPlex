@@ -114,5 +114,10 @@ ignore_missing_imports = true
 
 
 [[tool.mypy.overrides]]
+module = ["pynetbox", "pynetbox.*", "pyperclip", "pyperclip.*"]
+ignore_missing_imports = true
+
+
+[[tool.mypy.overrides]]
 module = ["sshplex.lib.sot.consul"]
 ignore_errors = true

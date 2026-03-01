@@ -12,11 +12,6 @@ from ..logger import get_logger
 from .base import MultiplexerBase
 
 
-class TmuxError(Exception):
-    """Raised when tmux operations fail."""
-    pass
-
-
 class TmuxManager(MultiplexerBase):
     """tmux implementation for SSHplex multiplexer."""
 
@@ -516,31 +511,4 @@ class TmuxManager(MultiplexerBase):
 
         except Exception as e:
             self.logger.error(f"SSHplex: Failed to disable broadcast mode: {e}")
-            return False
-
-    def toggle_broadcast(self) -> bool:
-        """Toggle broadcast mode for all windows in the session."""
-        try:
-            if not self.session:
-                self.logger.error("SSHplex: No session available for broadcast")
-                return False
-
-            # Check current broadcast state of first window with multiple panes
-            current_state = False
-            for window in self.windows.values():
-                if window and len(window.panes) > 1:
-                    # Get current synchronize-panes setting
-                    result = window.cmd('show-window-options', '-v', 'synchronize-panes')
-                    if result and hasattr(result, 'stdout') and result.stdout:
-                        current_state = result.stdout[0].strip() == 'on'
-                    break
-
-            # Toggle the state
-            if current_state:
-                return self.disable_broadcast()
-            else:
-                return self.enable_broadcast()
-
-        except Exception as e:
-            self.logger.error(f"SSHplex: Failed to toggle broadcast mode: {e}")
             return False

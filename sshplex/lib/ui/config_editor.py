@@ -4,8 +4,8 @@ import contextlib
 from pathlib import Path
 from typing import Any, Dict, List
 
-from rich.syntax import Syntax
 import yaml
+from rich.syntax import Syntax
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -19,9 +19,9 @@ from textual.widgets import (
     Select,
     Static,
     Switch,
-    TextArea,
     TabbedContent,
     TabPane,
+    TextArea,
 )
 
 from ..config import Config, get_default_config_path
@@ -43,6 +43,11 @@ def _form_field(
     return container
 
 
+def _form_row(*fields: Vertical) -> Horizontal:
+    """Create a compact horizontal row of form fields."""
+    return Horizontal(*fields, classes="form-row")
+
+
 class ConfigEditorScreen(ModalScreen[bool]):
     """Modal screen for editing sshplex.yaml configuration."""
 
@@ -59,11 +64,11 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
     #config-editor-dialog {
         layout: vertical;
-        width: 90%;
-        height: 90%;
+        width: 96%;
+        height: 92%;
         border: thick $primary;
         background: $surface;
-        padding: 1 2;
+        padding: 1;
     }
 
     #editor-title {
@@ -102,12 +107,24 @@ class ConfigEditorScreen(ModalScreen[bool]):
     }
 
     TabPane {
-        padding: 1;
+        padding: 0 1;
     }
 
     .form-field {
         height: auto;
         margin-bottom: 1;
+    }
+
+    .form-row {
+        layout: horizontal;
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    .form-row .form-field {
+        width: 1fr;
+        margin-right: 1;
+        margin-bottom: 0;
     }
 
     .form-label {
@@ -150,6 +167,32 @@ class ConfigEditorScreen(ModalScreen[bool]):
         padding: 0;
         margin-bottom: 1;
         height: auto;
+    }
+
+    .proxy-row {
+        layout: horizontal;
+        height: 3;
+        margin-bottom: 1;
+    }
+
+    .proxy-row Input {
+        margin-right: 1;
+    }
+
+    .proxy-name,
+    .proxy-host,
+    .proxy-imports,
+    .proxy-key_path {
+        width: 1fr;
+    }
+
+    .proxy-username {
+        width: 16;
+        min-width: 12;
+    }
+
+    .proxy-row Button {
+        min-width: 10;
     }
 
     .import-collapsible {
@@ -237,40 +280,46 @@ class ConfigEditorScreen(ModalScreen[bool]):
     }
 
     .static-host-row Input {
-        margin-right: 1;
+        margin-right: 0;
     }
 
     .static-host-name {
-        width: 18;
+        width: 12;
+        min-width: 10;
     }
 
     .static-host-ip {
-        width: 20;
+        width: 1fr;
+        min-width: 14;
     }
 
     .static-host-alias {
-        width: 24;
+        width: 16;
+        min-width: 12;
     }
 
     .static-host-user {
-        width: 12;
+        width: 10;
+        min-width: 8;
     }
 
     .static-host-port {
-        width: 8;
+        width: 7;
+        min-width: 6;
     }
 
     .static-host-key {
-        width: 24;
+        width: 1fr;
+        min-width: 14;
     }
 
     .static-host-row Button {
-        min-width: 12;
-        margin-right: 1;
+        min-width: 9;
+        margin-right: 0;
     }
 
     .static-host-list {
-        height: 12;
+        height: 9;
         border: round $secondary;
         padding: 1;
     }
@@ -480,69 +529,73 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         "Prefix for tmux session names",
                     )
                     yield Static("UI", classes="section-header")
-                    yield _form_field(
-                        "cfg-ui-theme",
-                        "Theme",
-                        Select(
-                            [
-                                ("textual-dark", "textual-dark"),
-                                ("textual-light", "textual-light"),
-                                ("nord", "nord"),
-                                ("gruvbox", "gruvbox"),
-                                ("catppuccin-mocha", "catppuccin-mocha"),
-                                ("dracula", "dracula"),
-                                ("tokyo-night", "tokyo-night"),
-                                ("monokai", "monokai"),
-                                ("flexoki", "flexoki"),
-                                ("catppuccin-latte", "catppuccin-latte"),
-                                ("catppuccin-frappe", "catppuccin-frappe"),
-                                ("catppuccin-macchiato", "catppuccin-macchiato"),
-                                ("solarized-light", "solarized-light"),
-                                ("solarized-dark", "solarized-dark"),
-                                ("rose-pine", "rose-pine"),
-                                ("rose-pine-moon", "rose-pine-moon"),
-                                ("rose-pine-dawn", "rose-pine-dawn"),
-                                ("atom-one-dark", "atom-one-dark"),
-                                ("atom-one-light", "atom-one-light"),
-                            ],
-                            value=self._safe_select_initial(
-                                str(getattr(self.config.ui, "theme", "textual-dark")),
+                    yield _form_row(
+                        _form_field(
+                            "cfg-ui-theme",
+                            "Theme",
+                            Select(
                                 [
-                                    "textual-dark", "textual-light", "nord", "gruvbox", "catppuccin-mocha",
-                                    "dracula", "tokyo-night", "monokai", "flexoki", "catppuccin-latte",
-                                    "catppuccin-frappe", "catppuccin-macchiato", "solarized-light",
-                                    "solarized-dark", "rose-pine", "rose-pine-moon", "rose-pine-dawn",
-                                    "atom-one-dark", "atom-one-light",
+                                    ("textual-dark", "textual-dark"),
+                                    ("textual-light", "textual-light"),
+                                    ("nord", "nord"),
+                                    ("gruvbox", "gruvbox"),
+                                    ("catppuccin-mocha", "catppuccin-mocha"),
+                                    ("dracula", "dracula"),
+                                    ("tokyo-night", "tokyo-night"),
+                                    ("monokai", "monokai"),
+                                    ("flexoki", "flexoki"),
+                                    ("catppuccin-latte", "catppuccin-latte"),
+                                    ("catppuccin-frappe", "catppuccin-frappe"),
+                                    ("catppuccin-macchiato", "catppuccin-macchiato"),
+                                    ("solarized-light", "solarized-light"),
+                                    ("solarized-dark", "solarized-dark"),
+                                    ("rose-pine", "rose-pine"),
+                                    ("rose-pine-moon", "rose-pine-moon"),
+                                    ("rose-pine-dawn", "rose-pine-dawn"),
+                                    ("atom-one-dark", "atom-one-dark"),
+                                    ("atom-one-light", "atom-one-light"),
                                 ],
-                                "textual-dark",
+                                value=self._safe_select_initial(
+                                    str(getattr(self.config.ui, "theme", "textual-dark")),
+                                    [
+                                        "textual-dark", "textual-light", "nord", "gruvbox", "catppuccin-mocha",
+                                        "dracula", "tokyo-night", "monokai", "flexoki", "catppuccin-latte",
+                                        "catppuccin-frappe", "catppuccin-macchiato", "solarized-light",
+                                        "solarized-dark", "rose-pine", "rose-pine-moon", "rose-pine-dawn",
+                                        "atom-one-dark", "atom-one-light",
+                                    ],
+                                    "textual-dark",
+                                ),
                             ),
+                            "Persisted app theme used on next launch",
                         ),
-                        "Persisted app theme used on next launch",
-                    )
-                    yield _form_field(
-                        "cfg-ui-show_log_panel",
-                        "Show Log Panel",
-                        Switch(value=self.config.ui.show_log_panel),
-                    )
-                    yield _form_field(
-                        "cfg-ui-log_panel_height",
-                        "Log Panel Height (%)",
-                        Input(value=str(self.config.ui.log_panel_height)),
-                    )
-                    yield _form_field(
-                        "cfg-ui-table_columns_preset",
-                        "Table Columns Preset",
-                        Select(
-                            [
-                                ("Custom", "custom"),
-                                ("Minimal", "minimal"),
-                                ("Standard", "standard"),
-                                ("Operational", "operational"),
-                                ("Inventory", "inventory"),
-                            ],
-                            value=self._detect_table_columns_preset(),
+                        _form_field(
+                            "cfg-ui-table_columns_preset",
+                            "Table Columns Preset",
+                            Select(
+                                [
+                                    ("Custom", "custom"),
+                                    ("Minimal", "minimal"),
+                                    ("Standard", "standard"),
+                                    ("Operational", "operational"),
+                                    ("Inventory", "inventory"),
+                                ],
+                                value=self._detect_table_columns_preset(),
+                            ),
+                            "Choose a preset or keep Custom",
                         ),
-                        "Choose a preset or keep Custom",
+                    )
+                    yield _form_row(
+                        _form_field(
+                            "cfg-ui-show_log_panel",
+                            "Show Log Panel",
+                            Switch(value=self.config.ui.show_log_panel),
+                        ),
+                        _form_field(
+                            "cfg-ui-log_panel_height",
+                            "Log Panel Height (%)",
+                            Input(value=str(self.config.ui.log_panel_height)),
+                        ),
                     )
                     yield _form_field(
                         "cfg-ui-table_columns",
@@ -554,20 +607,22 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         yield Button("Detect from Data", id="btn-detect-columns", variant="primary")
                         yield Button("Apply Standard", id="btn-columns-standard", variant="default")
                     yield Static("Logging", classes="section-header")
-                    yield _form_field(
-                        "cfg-logging-enabled",
-                        "Enabled",
-                        Switch(value=self.config.logging.enabled),
-                    )
-                    yield _form_field(
-                        "cfg-logging-level",
-                        "Level",
-                        Select(
-                            [(v, v) for v in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]],
-                            value=self._safe_select_initial(
-                                str(getattr(self.config.logging, "level", "INFO")),
-                                ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-                                "INFO",
+                    yield _form_row(
+                        _form_field(
+                            "cfg-logging-enabled",
+                            "Enabled",
+                            Switch(value=self.config.logging.enabled),
+                        ),
+                        _form_field(
+                            "cfg-logging-level",
+                            "Level",
+                            Select(
+                                [(v, v) for v in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]],
+                                value=self._safe_select_initial(
+                                    str(getattr(self.config.logging, "level", "INFO")),
+                                    ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                                    "INFO",
+                                ),
                             ),
                         ),
                     )
@@ -577,126 +632,153 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         Input(value=self.config.logging.file),
                     )
                     yield Static("Cache", classes="section-header")
-                    yield _form_field(
-                        "cfg-cache-enabled",
-                        "Enabled",
-                        Switch(value=self.config.cache.enabled),
+                    yield _form_row(
+                        _form_field(
+                            "cfg-cache-enabled",
+                            "Enabled",
+                            Switch(value=self.config.cache.enabled),
+                        ),
+                        _form_field(
+                            "cfg-cache-ttl_hours",
+                            "TTL (hours)",
+                            Input(value=str(self.config.cache.ttl_hours)),
+                        ),
                     )
                     yield _form_field(
                         "cfg-cache-cache_dir",
                         "Cache Directory",
                         Input(value=self.config.cache.cache_dir),
                     )
-                    yield _form_field(
-                        "cfg-cache-ttl_hours",
-                        "TTL (hours)",
-                        Input(value=str(self.config.cache.ttl_hours)),
-                    )
 
                 with TabPane("SSH", id="tab-ssh"), VerticalScroll():
-                    yield _form_field(
-                        "cfg-ssh-username",
-                        "Username",
-                        Input(value=self.config.ssh.username),
-                        "Default SSH username",
+                    yield Static("Connection Defaults", classes="section-header")
+                    yield _form_row(
+                        _form_field(
+                            "cfg-ssh-username",
+                            "Username",
+                            Input(value=self.config.ssh.username),
+                            "Default SSH username",
+                        ),
+                        _form_field(
+                            "cfg-ssh-port",
+                            "Port",
+                            Input(value=str(self.config.ssh.port)),
+                            "Default SSH port",
+                        ),
                     )
-                    yield _form_field(
-                        "cfg-ssh-key_path",
-                        "Key Path",
-                        Input(value=self.config.ssh.key_path),
-                        "Path to SSH private key",
+                    yield _form_row(
+                        _form_field(
+                            "cfg-ssh-key_path",
+                            "Key Path",
+                            Input(value=self.config.ssh.key_path),
+                            "Path to SSH private key",
+                        ),
+                        _form_field(
+                            "cfg-ssh-timeout",
+                            "Timeout",
+                            Input(value=str(self.config.ssh.timeout)),
+                            "Connection timeout in seconds",
+                        ),
                     )
-                    yield _form_field(
-                        "cfg-ssh-timeout",
-                        "Timeout",
-                        Input(value=str(self.config.ssh.timeout)),
-                        "Connection timeout in seconds",
+                    yield _form_row(
+                        _form_field(
+                            "cfg-ssh-strict_host_key_checking",
+                            "Strict Host Key Checking",
+                            Switch(value=self.config.ssh.strict_host_key_checking),
+                        ),
+                        _form_field(
+                            "cfg-ssh-user_known_hosts_file",
+                            "Known Hosts File",
+                            Input(value=self.config.ssh.user_known_hosts_file),
+                            "Custom known_hosts file path (empty = default)",
+                        ),
                     )
-                    yield _form_field(
-                        "cfg-ssh-port",
-                        "Port",
-                        Input(value=str(self.config.ssh.port)),
-                        "Default SSH port",
-                    )
-                    yield _form_field(
-                        "cfg-ssh-strict_host_key_checking",
-                        "Strict Host Key Checking",
-                        Switch(value=self.config.ssh.strict_host_key_checking),
-                    )
-                    yield _form_field(
-                        "cfg-ssh-user_known_hosts_file",
-                        "Known Hosts File",
-                        Input(value=self.config.ssh.user_known_hosts_file),
-                        "Custom known_hosts file path (empty = default)",
-                    )
-                    # Retry sub-section
                     yield Static("Retry Settings", classes="section-header")
-                    yield _form_field(
-                        "cfg-ssh-retry-enabled",
-                        "Retry Enabled",
-                        Switch(value=self.config.ssh.retry.enabled),
+                    yield _form_row(
+                        _form_field(
+                            "cfg-ssh-retry-enabled",
+                            "Retry Enabled",
+                            Switch(value=self.config.ssh.retry.enabled),
+                        ),
+                        _form_field(
+                            "cfg-ssh-retry-exponential_backoff",
+                            "Exponential Backoff",
+                            Switch(value=self.config.ssh.retry.exponential_backoff),
+                        ),
                     )
-                    yield _form_field(
-                        "cfg-ssh-retry-max_attempts",
-                        "Max Attempts",
-                        Input(value=str(self.config.ssh.retry.max_attempts)),
+                    yield _form_row(
+                        _form_field(
+                            "cfg-ssh-retry-max_attempts",
+                            "Max Attempts",
+                            Input(value=str(self.config.ssh.retry.max_attempts)),
+                        ),
+                        _form_field(
+                            "cfg-ssh-retry-delay_seconds",
+                            "Delay Seconds",
+                            Input(value=str(self.config.ssh.retry.delay_seconds)),
+                        ),
                     )
-                    yield _form_field(
-                        "cfg-ssh-retry-delay_seconds",
-                        "Delay Seconds",
-                        Input(value=str(self.config.ssh.retry.delay_seconds)),
-                    )
-                    yield _form_field(
-                        "cfg-ssh-retry-exponential_backoff",
-                        "Exponential Backoff",
-                        Switch(value=self.config.ssh.retry.exponential_backoff),
-                    )
-                    # Proxy list
                     yield Static("SSH Proxies", classes="section-header")
                     yield Vertical(id="proxy-list", classes="dynamic-list")
 
                 with TabPane("Mux", id="tab-mux"), VerticalScroll(id="mux-scroll"):
-                    yield _form_field(
-                        "cfg-mux-backend",
-                        "Backend",
-                        Select(
-                            [("tmux", "tmux"), ("iTerm2 Native", "iterm2-native")],
-                            value=self._safe_select_initial(
-                                str(getattr(self.config.tmux, "backend", "tmux")),
-                                ["tmux", "iterm2-native"],
-                                "tmux",
+                    yield Static("Session Layout", classes="section-header")
+                    yield _form_row(
+                        _form_field(
+                            "cfg-mux-backend",
+                            "Backend",
+                            Select(
+                                [("tmux", "tmux"), ("iTerm2 Native", "iterm2-native")],
+                                value=self._safe_select_initial(
+                                    str(getattr(self.config.tmux, "backend", "tmux")),
+                                    ["tmux", "iterm2-native"],
+                                    "tmux",
+                                ),
                             ),
+                            "Multiplexer backend (iTerm2 native is macOS only)",
                         ),
-                        "Multiplexer backend (iTerm2 native is macOS only)",
-                    )
-                    yield _form_field(
-                        "cfg-mux-use_panes",
-                        "Connection Mode",
-                        Select(
-                            [("Panes (splits)", "panes"), ("Tabs (separate)", "tabs")],
-                            value="panes" if getattr(self.config.tmux, 'use_panes', True) else "tabs",
-                        ),
-                        "Panes: split within tabs | Tabs: each host in separate tab",
-                    )
-                    # Common fields for all backends
-                    yield _form_field(
-                        "cfg-mux-layout",
-                        "Layout",
-                        Select(
-                            [(v, v) for v in ["tiled", "even-horizontal", "even-vertical", "main-horizontal", "main-vertical"]],
-                            value=self._safe_select_initial(
-                                str(getattr(self.config.tmux, "layout", "tiled")),
-                                ["tiled", "even-horizontal", "even-vertical", "main-horizontal", "main-vertical"],
-                                "tiled",
+                        _form_field(
+                            "cfg-mux-use_panes",
+                            "Connection Mode",
+                            Select(
+                                [("Panes (splits)", "panes"), ("Tabs (separate)", "tabs")],
+                                value="panes" if getattr(self.config.tmux, 'use_panes', True) else "tabs",
                             ),
+                            "Panes: split within tabs | Tabs: each host in separate tab",
                         ),
-                        "Pane layout",
                     )
-                    yield _form_field(
-                        "cfg-mux-broadcast",
-                        "Broadcast",
-                        Switch(value=self.config.tmux.broadcast),
-                        "Start with broadcast enabled",
+                    yield _form_row(
+                        _form_field(
+                            "cfg-mux-layout",
+                            "Layout",
+                            Select(
+                                [(v, v) for v in ["tiled", "even-horizontal", "even-vertical", "main-horizontal", "main-vertical"]],
+                                value=self._safe_select_initial(
+                                    str(getattr(self.config.tmux, "layout", "tiled")),
+                                    ["tiled", "even-horizontal", "even-vertical", "main-horizontal", "main-vertical"],
+                                    "tiled",
+                                ),
+                            ),
+                            "Pane layout",
+                        ),
+                        _form_field(
+                            "cfg-mux-window_name",
+                            "Window Name",
+                            Input(value=self.config.tmux.window_name),
+                        ),
+                    )
+                    yield _form_row(
+                        _form_field(
+                            "cfg-mux-max_panes_per_window",
+                            "Max Panes Per Tab",
+                            Input(value=str(self.config.tmux.max_panes_per_window)),
+                        ),
+                        _form_field(
+                            "cfg-mux-broadcast",
+                            "Broadcast",
+                            Switch(value=self.config.tmux.broadcast),
+                            "Start with broadcast enabled",
+                        ),
                     )
                     yield _form_field(
                         "cfg-mux-register_history",
@@ -704,17 +786,6 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         Switch(value=not bool(getattr(self.config.tmux, 'iterm2_native_hide_from_history', True))),
                         "iTerm2-native only. OFF means commands are hidden from history.",
                     )
-                    yield _form_field(
-                        "cfg-mux-window_name",
-                        "Window Name",
-                        Input(value=self.config.tmux.window_name),
-                    )
-                    yield _form_field(
-                        "cfg-mux-max_panes_per_window",
-                        "Max Panes Per Tab",
-                        Input(value=str(self.config.tmux.max_panes_per_window)),
-                    )
-                    # Backend-specific fields container
                     yield Vertical(id="mux-backend-fields")
 
                 with TabPane("Sources", id="tab-sources"), VerticalScroll():
@@ -842,23 +913,25 @@ class ConfigEditorScreen(ModalScreen[bool]):
         if backend == "tmux":
             # tmux + iTerm2 -CC mode options
             children.append(Static("iTerm2 Integration (macOS)", classes="section-header"))
-            children.append(_form_field(
-                "cfg-mux-control_with_iterm2",
-                "Enable iTerm2 -CC Mode",
-                Switch(value=self.config.tmux.control_with_iterm2),
-                "Use iTerm2 tmux -CC mode on macOS",
-            ))
             iterm2_target = getattr(self.config.tmux, 'iterm2_attach_target', 'new-window')
             if iterm2_target not in ('new-window', 'new-tab'):
                 iterm2_target = 'new-window'
-            children.append(_form_field(
-                "cfg-mux-iterm2_attach_target",
-                "Attach Target",
-                Select(
-                    [("New Window", "new-window"), ("New Tab", "new-tab")],
-                    value=iterm2_target,
+            children.append(_form_row(
+                _form_field(
+                    "cfg-mux-control_with_iterm2",
+                    "Enable iTerm2 -CC Mode",
+                    Switch(value=self.config.tmux.control_with_iterm2),
+                    "Use iTerm2 tmux -CC mode on macOS",
                 ),
-                "Where to open tmux session in iTerm2",
+                _form_field(
+                    "cfg-mux-iterm2_attach_target",
+                    "Attach Target",
+                    Select(
+                        [("New Window", "new-window"), ("New Tab", "new-tab")],
+                        value=iterm2_target,
+                    ),
+                    "Where to open tmux session in iTerm2",
+                ),
             ))
             children.append(_form_field(
                 "cfg-mux-iterm2_profile",
@@ -869,40 +942,42 @@ class ConfigEditorScreen(ModalScreen[bool]):
         elif backend == "iterm2-native":
             # iTerm2 native options
             children.append(Static("iTerm2 Native Options", classes="section-header"))
-            children.append(_form_field(
-                "cfg-mux-iterm2_native_target",
-                "Open Target",
-                Select(
-                    [
-                        ("Current iTerm2 Window", "current-window"),
-                        ("New iTerm2 Window", "new-window"),
-                    ],
-                    value=self._safe_select_initial(
-                        str(getattr(self.config.tmux, "iterm2_native_target", "current-window")),
-                        ["current-window", "new-window"],
-                        "current-window",
+            children.append(_form_row(
+                _form_field(
+                    "cfg-mux-iterm2_native_target",
+                    "Open Target",
+                    Select(
+                        [
+                            ("Current iTerm2 Window", "current-window"),
+                            ("New iTerm2 Window", "new-window"),
+                        ],
+                        value=self._safe_select_initial(
+                            str(getattr(self.config.tmux, "iterm2_native_target", "current-window")),
+                            ["current-window", "new-window"],
+                            "current-window",
+                        ),
                     ),
+                    "Open sessions in current window (new tabs) or a new window",
                 ),
-                "Open sessions in current window (new tabs) or a new window",
+                _form_field(
+                    "cfg-mux-iterm2_split_pattern",
+                    "Split Pattern",
+                    Select(
+                        [("Alternate", "alternate"), ("Vertical", "vertical"), ("Horizontal", "horizontal")],
+                        value=self._safe_select_initial(
+                            str(getattr(self.config.tmux, "iterm2_split_pattern", "alternate")),
+                            ["alternate", "vertical", "horizontal"],
+                            "alternate",
+                        ),
+                    ),
+                    "Pane split pattern",
+                ),
             ))
             children.append(_form_field(
                 "cfg-mux-iterm2_profile",
                 "iTerm2 Profile",
                 Input(value=getattr(self.config.tmux, 'iterm2_profile', 'Default')),
                 "iTerm2 profile name to use",
-            ))
-            children.append(_form_field(
-                "cfg-mux-iterm2_split_pattern",
-                "Split Pattern",
-                Select(
-                    [("Alternate", "alternate"), ("Vertical", "vertical"), ("Horizontal", "horizontal")],
-                    value=self._safe_select_initial(
-                        str(getattr(self.config.tmux, "iterm2_split_pattern", "alternate")),
-                        ["alternate", "vertical", "horizontal"],
-                        "alternate",
-                    ),
-                ),
-                "Pane split pattern",
             ))
         return Vertical(*children, id="mux-backend-fields-container")
 
@@ -931,12 +1006,18 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
         return Vertical(
             Label(f"Proxy #{idx}", classes="form-label"),
-            Input(value=name, placeholder="Proxy name", id=f"proxy-{idx}-name"),
-            Input(value=imports, placeholder="Imports (comma-separated)", id=f"proxy-{idx}-imports"),
-            Input(value=host, placeholder="Host", id=f"proxy-{idx}-host"),
-            Input(value=username, placeholder="Username", id=f"proxy-{idx}-username"),
-            Input(value=key_path, placeholder="Key path", id=f"proxy-{idx}-key_path"),
-            Button("Remove", id=f"btn-remove-proxy-{idx}", variant="error"),
+            Horizontal(
+                Input(value=name, placeholder="Proxy name", id=f"proxy-{idx}-name", classes="proxy-name"),
+                Input(value=host, placeholder="Host", id=f"proxy-{idx}-host", classes="proxy-host"),
+                classes="proxy-row",
+            ),
+            Horizontal(
+                Input(value=imports, placeholder="Imports (comma-separated)", id=f"proxy-{idx}-imports", classes="proxy-imports"),
+                Input(value=username, placeholder="Username", id=f"proxy-{idx}-username", classes="proxy-username"),
+                Input(value=key_path, placeholder="Key path", id=f"proxy-{idx}-key_path", classes="proxy-key_path"),
+                Button("Remove", id=f"btn-remove-proxy-{idx}", variant="error"),
+                classes="proxy-row",
+            ),
             classes="dynamic-list-item",
             id=f"proxy-item-{idx}",
         )
@@ -1001,7 +1082,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
             fields.append(
                 Static(
                     "Alias = SSH Host alias from ~/.ssh/config. Port/User/Key override global ssh settings. "
-                    "Use 'Preview SSH' to view effective values (ssh -G).",
+                    "Use 'Preview' to view effective values (ssh -G).",
                     classes="form-description",
                 )
             )
@@ -1135,7 +1216,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
             Input(value=ssh_user, placeholder="user", id=f"import-{import_idx}-host-{host_idx}-ssh_user", classes="static-host-user"),
             Input(value=ssh_port, placeholder="port(22)", id=f"import-{import_idx}-host-{host_idx}-ssh_port", classes="static-host-port"),
             Input(value=ssh_key_path, placeholder="key_path", id=f"import-{import_idx}-host-{host_idx}-ssh_key_path", classes="static-host-key"),
-            Button("Preview SSH", id=f"btn-show-static-host-ssh-{import_idx}-{host_idx}", variant="default"),
+            Button("Preview", id=f"btn-show-static-host-ssh-{import_idx}-{host_idx}", variant="default"),
             Button("Remove", id=f"btn-remove-static-host-{import_idx}-{host_idx}", variant="error", disabled=not can_remove),
             classes="static-host-row",
             id=f"import-{import_idx}-host-item-{host_idx}",
@@ -1362,10 +1443,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
         port = port_override or resolved.get("port", "22")
         key = key_override or resolved.get("identityfile", "") or getattr(self.config.ssh, "key_path", "")
 
-        if key:
-            key = mask_sensitive(str(key).split()[0])
-        else:
-            key = "-"
+        key = mask_sensitive(str(key).split()[0]) if key else "-"
 
         preview = f"ssh preview => host={host_name} user={user or '-'} port={port} key={key}"
         self._update_status(preview)
@@ -1437,18 +1515,6 @@ class ConfigEditorScreen(ModalScreen[bool]):
         try:
             val = self.query_one(f"#{widget_id}", Select).value
             return str(val) if val is not None and val != Select.BLANK else default
-        except Exception:
-            return default
-
-    def _get_select_bool(self, widget_id: str, default: bool = False) -> bool:
-        """Safely get a bool value from a Select widget."""
-        try:
-            val = self.query_one(f"#{widget_id}", Select).value
-            if val is None or val == Select.BLANK:
-                return default
-            if isinstance(val, bool):
-                return val
-            return str(val).strip().lower() in ("true", "1", "yes", "on")
         except Exception:
             return default
 
@@ -1535,7 +1601,7 @@ class ConfigEditorScreen(ModalScreen[bool]):
         # Cache
         data["cache"] = {
             "enabled": self._get_switch_value("cfg-cache-enabled", True),
-            "cache_dir": self._get_input_value("cfg-cache-cache_dir", "~/cache/sshplex"),
+            "cache_dir": self._get_input_value("cfg-cache-cache_dir", "~/.cache/sshplex"),
             "ttl_hours": int(self._get_input_value("cfg-cache-ttl_hours", "24")),
         }
 

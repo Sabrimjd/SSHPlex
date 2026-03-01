@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from sshplex.lib.multiplexer.tmux import TmuxError, TmuxManager
+from sshplex.lib.multiplexer.tmux import TmuxManager
 
 
 class TestTmuxManager:
@@ -309,12 +309,3 @@ class TestTmuxManagerAttach:
                 patch('sshplex.lib.multiplexer.tmux.TmuxManager._attach_standard') as mock_standard:
             manager.attach_to_session(auto_attach=True)
             mock_standard.assert_called_once()
-
-
-class TestTmuxError:
-    """Tests for TmuxError exception."""
-
-    def test_tmux_error_message(self):
-        """Test TmuxError exception message."""
-        error = TmuxError("Session creation failed")
-        assert str(error) == "Session creation failed"

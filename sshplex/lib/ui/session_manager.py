@@ -8,86 +8,11 @@ from typing import Any, List, Optional
 import libtmux
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal
+from textual.containers import Container
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Static
+from textual.widgets import DataTable, Static
 
 from ..logger import get_logger
-
-
-class ConfirmDialog(ModalScreen[bool]):
-    """Modal confirmation dialog for destructive actions."""
-
-    CSS = """
-    ConfirmDialog {
-        align: center middle;
-    }
-
-    #confirm-dialog {
-        width: 50;
-        height: 10;
-        border: thick $error;
-        background: $surface;
-        padding: 1;
-    }
-
-    #confirm-title {
-        text-align: center;
-        color: $text;
-        margin-bottom: 1;
-    }
-
-    #confirm-text {
-        text-align: center;
-        color: $text;
-        margin-bottom: 1;
-    }
-
-    #confirm-buttons {
-        align: center middle;
-        height: 3;
-    }
-
-    #confirm-yes {
-        margin-right: 2;
-    }
-
-    #confirm-no {
-        margin-left: 2;
-    }
-    """
-
-    BINDINGS = [
-        Binding("enter", "confirm_yes", "Yes", show=False),
-        Binding("y", "confirm_yes", "Yes", show=True),
-        Binding("n", "confirm_no", "No", show=True),
-        Binding("escape", "confirm_no", "Cancel", show=False),
-    ]
-
-    def __init__(self, message: str, title: str = "Confirm") -> None:
-        super().__init__()
-        self.message = message
-        self.title = title
-
-    def compose(self) -> ComposeResult:
-        with Container(id="confirm-dialog"):
-            yield Static(f"⚠️  {self.title}", id="confirm-title")
-            yield Static(self.message, id="confirm-text")
-            with Horizontal(id="confirm-buttons"):
-                yield Button("Yes", id="confirm-yes", variant="error")
-                yield Button("No", id="confirm-no", variant="primary")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "confirm-yes":
-            self.dismiss(True)
-        else:
-            self.dismiss(False)
-
-    def action_confirm_yes(self) -> None:
-        self.dismiss(True)
-
-    def action_confirm_no(self) -> None:
-        self.dismiss(False)
 
 
 class TmuxSession:
@@ -1004,61 +929,6 @@ class TmuxSessionManager(ModalScreen):
                 self.logger.error(f"SSHplex: Failed to create window in session '{session.name}': {e}")
         else:
             self.logger.warning("SSHplex: No session selected for window creation")
-
-    def action_create_ssh_pane(self) -> None:
-        """Create a new pane with SSH connection."""
-        if not self.table or not self.sessions:
-            self.logger.warning("SSHplex: No sessions available for SSH pane creation")
-            return
-
-        cursor_row = self.table.cursor_row
-        if cursor_row >= 0 and cursor_row < len(self.sessions):
-            session = self.sessions[cursor_row]
-
-            try:
-                # Find the tmux session
-                if self.tmux_server is None:
-                    self.logger.error("SSHplex: tmux server not initialized")
-                    return
-
-                tmux_session = self.tmux_server.find_where({"session_name": session.name})
-                if not tmux_session:
-                    self.logger.error(f"SSHplex: Session '{session.name}' not found")
-                    return
-
-                # Get the first window (or current window)
-                if tmux_session.windows:
-                    window = tmux_session.windows[0]  # Use first window
-
-                    # Create a new pane by splitting the window vertically
-                    new_pane = self._split_window(window, vertical=True)
-
-                    if new_pane:
-                        # Set a title for the new pane
-                        hostname = "new-host"  # Default hostname
-                        new_pane.send_keys(f'printf "\\033]2;{hostname}\\033\\\\"', enter=True)
-
-                        # You could prompt for hostname here or use a default SSH command
-                        # For now, just create an empty pane ready for SSH
-                        new_pane.send_keys('echo "🔗 Ready for SSH connection..."', enter=True)
-                        new_pane.send_keys('echo "Usage: ssh user@hostname"', enter=True)
-
-                        # Apply tiled layout to organize all panes nicely
-                        window.select_layout('tiled')
-
-                        self.logger.info(f"SSHplex: Created new SSH-ready pane in session '{session.name}'")
-
-                        # Refresh session list to update window/pane count
-                        self.load_sessions()
-                    else:
-                        self.logger.error(f"SSHplex: Failed to create SSH pane in session '{session.name}'")
-                else:
-                    self.logger.error(f"SSHplex: No windows found in session '{session.name}'")
-
-            except Exception as e:
-                self.logger.error(f"SSHplex: Failed to create SSH pane in session '{session.name}': {e}")
-        else:
-            self.logger.warning("SSHplex: No session selected for SSH pane creation")
 
     def key_enter(self) -> None:
         """Handle enter key for connecting to session."""

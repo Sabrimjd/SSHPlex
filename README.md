@@ -49,6 +49,17 @@ sshplex
 | **tmux + iTerm2** | macOS | Native UI + persistence |
 | **iTerm2 native** | macOS | Simple setup, no tmux dependency |
 
+## Sources of Truth
+
+| Provider | `type` | Extra Dependency | Best For |
+|----------|--------|------------------|----------|
+| **Static** | `static` | None | Small lists, lab hosts, quick manual entries |
+| **NetBox** | `netbox` | None (included in base install) | Inventory-driven infrastructure with metadata |
+| **Ansible** | `ansible` | None | Reusing existing Ansible inventory files |
+| **Consul** | `consul` | `pip install "sshplex[consul]"` | Service discovery and dynamic node catalogs |
+
+Provider activation is controlled by `sot.providers`, and each source is configured as an item in `sot.import`.
+
 
 ## Local Demo (Consul + Ansible)
 

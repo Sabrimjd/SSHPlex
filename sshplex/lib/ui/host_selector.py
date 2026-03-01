@@ -28,7 +28,11 @@ from ..config import get_default_config_path, load_config
 from ..logger import get_logger
 from ..sot.base import Host
 from ..sot.factory import SoTFactory
-from ..utils.ssh_config import build_ssh_command_preview, mask_sensitive, resolve_ssh_effective_config
+from ..utils.ssh_config import (
+    build_ssh_command_preview,
+    mask_sensitive,
+    resolve_ssh_effective_config,
+)
 from .config_editor import ConfigEditorScreen
 from .session_manager import ITerm2SessionManager, TmuxSessionManager
 
@@ -573,7 +577,7 @@ class HostSelector(App):
         if not self.table:
             return
 
-        previous_host = self._current_cursor_host_name()
+        previous_host_key = self._current_cursor_host_key()
 
         # Clear existing table data
         self.table.clear()
@@ -584,7 +588,8 @@ class HostSelector(App):
         for host in hosts_to_display:
             # Build row data based on configured columns
             # Use colors for better visual feedback
-            is_selected = host.name in self.selected_hosts
+            host_key = self._host_key(host)
+            is_selected = host_key in self.selected_hosts
             row_data = ["[green]✓[/green]" if is_selected else "[dim] [/dim]"]  # Checkbox column
 
             # Highlight selected hosts with color
@@ -596,23 +601,35 @@ class HostSelector(App):
                 else:
                     row_data.append(value)
 
-            self.table.add_row(*row_data, key=host.name)
+            self.table.add_row(*row_data, key=host_key)
 
-        if previous_host:
+        if previous_host_key:
             for index, host in enumerate(hosts_to_display):
-                if host.name == previous_host:
+                if self._host_key(host) == previous_host_key:
                     self.table.move_cursor(row=index)
                     break
 
-    def _current_cursor_host_name(self) -> Optional[str]:
-        """Get host name currently under cursor in rendered table."""
+    @staticmethod
+    def _host_key(host: Host) -> str:
+        """Return stable host identity key for selection and row mapping."""
+        return f"{host.name}|{host.ip}"
+
+    def _current_cursor_host(self) -> Optional[Host]:
+        """Get host currently under cursor in rendered table."""
         if not self.table:
             return None
         row = self.table.cursor_row
         hosts_to_use = self.get_hosts_to_display()
         if row < 0 or row >= len(hosts_to_use):
             return None
-        return hosts_to_use[row].name
+        return hosts_to_use[row]
+
+    def _current_cursor_host_key(self) -> Optional[str]:
+        """Get host key currently under cursor in rendered table."""
+        host = self._current_cursor_host()
+        if host is None:
+            return None
+        return self._host_key(host)
 
     @staticmethod
     def _normalize_column_name(column: str) -> str:
@@ -689,16 +706,17 @@ class HostSelector(App):
         hosts_to_use = self.filtered_hosts if self.search_filter else self.hosts
 
         if cursor_row >= 0 and cursor_row < len(hosts_to_use):
-            host_name = hosts_to_use[cursor_row].name
+            host_key = self._host_key(hosts_to_use[cursor_row])
+            host_label = hosts_to_use[cursor_row].name
 
-            if host_name in self.selected_hosts:
-                self.selected_hosts.discard(host_name)
-                self.update_row_checkbox(host_name, False)
-                self.log_message(f"Deselected: {host_name}")
+            if host_key in self.selected_hosts:
+                self.selected_hosts.discard(host_key)
+                self.update_row_checkbox(host_key, False)
+                self.log_message(f"Deselected: {host_label}")
             else:
-                self.selected_hosts.add(host_name)
-                self.update_row_checkbox(host_name, True)
-                self.log_message(f"Selected: {host_name}")
+                self.selected_hosts.add(host_key)
+                self.update_row_checkbox(host_key, True)
+                self.log_message(f"Selected: {host_label}")
 
             self.update_status_selection()
 
@@ -710,8 +728,9 @@ class HostSelector(App):
         hosts_to_select = self.filtered_hosts if self.search_filter else self.hosts
 
         for host in hosts_to_select:
-            self.selected_hosts.add(host.name)
-            self.update_row_checkbox(host.name, True)
+            host_key = self._host_key(host)
+            self.selected_hosts.add(host_key)
+            self.update_row_checkbox(host_key, True)
 
         self.log_message(f"Selected all {len(hosts_to_select)} hosts")
         self.update_status_selection()
@@ -724,8 +743,9 @@ class HostSelector(App):
         hosts_to_deselect = self.filtered_hosts if self.search_filter else self.hosts
 
         for host in hosts_to_deselect:
-            self.selected_hosts.discard(host.name)
-            self.update_row_checkbox(host.name, False)
+            host_key = self._host_key(host)
+            self.selected_hosts.discard(host_key)
+            self.update_row_checkbox(host_key, False)
 
         self.log_message(f"Deselected all {len(hosts_to_deselect)} hosts")
         self.update_status_selection()
@@ -743,7 +763,7 @@ class HostSelector(App):
             self.log_message("No hosts selected for connection", level="warning")
             return
 
-        selected_host_objects = [h for h in self.hosts if h.name in self.selected_hosts]
+        selected_host_objects = [h for h in self.hosts if self._host_key(h) in self.selected_hosts]
         if not selected_host_objects:
             self.log_message("No hosts found matching selection", level="warning")
             return
@@ -939,14 +959,9 @@ class HostSelector(App):
 
     def action_show_host_ssh(self) -> None:
         """Show resolved SSH settings for host under cursor."""
-        host_name = self._current_cursor_host_name()
-        if not host_name:
-            self.log_message("No host selected", level="warning")
-            return
-
-        host = next((item for item in self.get_hosts_to_display() if item.name == host_name), None)
+        host = self._current_cursor_host()
         if not host:
-            self.log_message("Could not find host data", level="warning")
+            self.log_message("No host selected", level="warning")
             return
 
         alias = str(getattr(host, "ssh_alias", "") or host.metadata.get("ssh_alias", "")).strip()

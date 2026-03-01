@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import shlex
 import subprocess
-from typing import Dict
 
 
-def resolve_ssh_effective_config(host_or_alias: str) -> Dict[str, str]:
+def resolve_ssh_effective_config(host_or_alias: str) -> dict[str, str]:
     """Resolve effective SSH options with `ssh -G`.
 
     Returns a dict of lowercase key -> value. Empty dict if unavailable.
@@ -31,7 +29,7 @@ def resolve_ssh_effective_config(host_or_alias: str) -> Dict[str, str]:
     if proc.returncode != 0:
         return {}
 
-    resolved: Dict[str, str] = {}
+    resolved: dict[str, str] = {}
     for line in proc.stdout.splitlines():
         line = line.strip()
         if not line or " " not in line:
@@ -65,8 +63,3 @@ def build_ssh_command_preview(host_or_alias: str, username: str, port: int, key_
     else:
         parts.append(host_or_alias)
     return " ".join(shlex.quote(p) for p in parts)
-
-
-def expand_path(path: str) -> str:
-    """Expand user path safely."""
-    return os.path.expanduser(path or "")
