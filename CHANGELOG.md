@@ -10,15 +10,23 @@ All notable changes to this project will be documented in this file.
 - Config editor now adds field-level helper descriptions for all source providers (NetBox, Ansible, Consul, Git) to improve discoverability.
 - Onboarding wizard now supports Git provider setup, backend selection guidance on macOS, and a final configuration summary before save.
 - New regression tests for Git provider sync/parse flows (including Ansible mode) and provider initialization behavior.
+- Added a grouped Table Columns picker modal with category-based checkbox selection (`Common`, `Origin`, `Static/SSH`, `Ansible`, `Git`, `NetBox`, `Consul`).
+- Demo configuration now includes both git-backed sources: `demo-git-ansible` and `demo-git-static`.
+- Added targeted tests for git-ansible filtering (`exclude_groups`, `host_patterns`) and table-column picker categorization helpers.
 
 ### Changed
 - Git source selection is simplified to one parameter, `source_pattern`, combining path and glob (for example `hosts/**/*.y*ml`).
 - Host selector refresh (`r`) now performs git source sync first, then reloads providers, removing the separate git-update key path.
 - Config editor source forms now use the same top-of-field description pattern as the General pane for clearer UX on smaller screens.
+- Config editor spacing is compacted across source/provider forms while keeping button labels readable on laptop-sized terminals.
+- Standard table-column preset now defaults to cross-SoT fields (`source`, `status`, `description`, `user`, `port`, `platform`) in addition to core host fields.
+- Static host row editor list height was increased to show more host rows without scrolling.
 
 ### Fixed
 - Improved provider setup defaults and compatibility by preserving legacy `path`/`file_glob` fallback when `source_pattern` is not set.
 - Prevented accidental source-setting ambiguity by enforcing read-only git sync strategy (`ff-only`) in saved config shape.
+- Fixed table-column picker checkbox labels not rendering in compact modal layout.
+- Fixed inventory format select wrapping/truncation in Sources import forms.
 
 ## [1.6.4] - 2026-03-01
 
