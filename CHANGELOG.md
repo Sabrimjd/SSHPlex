@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.4] - 2026-03-01
+
+### Added
+- Regression tests for cache clearing, provider inference when `sot.providers` is not explicitly set, and filtered iTerm2 session manager row targeting.
+
+### Changed
+- Release workflow now builds GitHub release notes from the matching version section in `CHANGELOG.md`.
+
+### Fixed
+- Preserved legacy provider behavior by inferring enabled provider types from configured imports when `sot.providers` is omitted.
+- `--clear-cache` now attempts cache deletion even when metadata is missing or unreadable.
+- iTerm2 native session manager now maps kill/navigation actions to visible filtered rows, preventing row-to-tab mismatches.
+
 ## [1.6.3] - 2026-03-01
 
 ### Added

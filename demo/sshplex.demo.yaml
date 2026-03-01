@@ -1,5 +1,5 @@
 sshplex:
-  version: 1.6.3
+  version: 1.6.4
   session_prefix: sshplex-demo
 sot:
   providers:
