@@ -3,9 +3,37 @@ sshplex:
   session_prefix: sshplex-demo
 sot:
   providers:
+  - static
   - ansible
   - consul
   import:
+  - name: demo-static
+    type: static
+    hosts:
+    - name: demo-bastion
+      ip: 192.168.31.216
+      alias: bastion
+      user: demo
+      port: 22
+      key_path: ~/.ssh/id_rsa
+      description: Demo static bastion host
+      tags:
+      - static
+      - demo
+      cluster: demo
+      role: bastion
+    - name: demo-worker-1
+      ip: 192.168.31.216
+      alias: worker1
+      user: demo
+      port: 22
+      key_path: ~/.ssh/id_rsa
+      description: Demo static worker host
+      tags:
+      - static
+      - worker
+      cluster: demo
+      role: worker
   - name: demo-ansible
     type: ansible
     verify_ssl: true
@@ -58,7 +86,7 @@ logging:
   file: logs/sshplex-demo.log
 ui:
   theme: tokyo-night
-  show_log_panel: true
+  show_log_panel: false
   log_panel_height: 20
   table_columns:
   - name
@@ -66,6 +94,15 @@ ui:
   - cluster
   - role
   - tags
+  - source
+  - status
+  - platform
+  - ansible_connection
+  - ansible_group
+  - ansible_port
+  - ansible_user
+  - description
+  - inventory_file
 cache:
   enabled: true
   cache_dir: ~/.cache/sshplex
