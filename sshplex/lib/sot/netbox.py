@@ -2,10 +2,17 @@
 
 from typing import Any, Dict, List, Optional
 
-import pynetbox  # type: ignore
-
 from ..logger import get_logger
 from .base import Host, SoTProvider
+
+
+def _import_pynetbox() -> Any | None:
+    """Import pynetbox lazily so optional dependency errors stay isolated."""
+    try:
+        import pynetbox  # type: ignore
+    except ImportError:
+        return None
+    return pynetbox
 
 
 class NetBoxProvider(SoTProvider):
@@ -37,6 +44,14 @@ class NetBoxProvider(SoTProvider):
         """
         try:
             self.logger.info(f"Connecting to NetBox at {self.url}")
+
+            pynetbox = _import_pynetbox()
+            if pynetbox is None:
+                self.logger.error(
+                    "NetBox provider requires 'pynetbox' package. "
+                    "Install with: pip install sshplex or pip install pynetbox"
+                )
+                return False
 
             self.api = pynetbox.api(
                 url=self.url,

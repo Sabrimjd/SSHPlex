@@ -251,8 +251,6 @@ class TestSoTImportConfig:
             repo_url="git@github.com:acme/hosts.git",
             branch="main",
             source_pattern="hosts/**/*.y*ml",
-            path="hosts",
-            file_glob="**/*.y*ml",
             auto_pull=True,
             pull_interval_seconds=120,
             priority=100,

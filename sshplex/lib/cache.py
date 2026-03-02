@@ -1,6 +1,8 @@
 """SSHplex host cache management for optimized startup performance."""
 
+import contextlib
 import os
+import tempfile
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -28,9 +30,9 @@ class HostCache:
         self.logger = get_logger()
 
         if cache_dir is None:
-            cache_dir = os.path.expanduser("~/.cache/sshplex")
+            cache_dir = "~/.cache/sshplex"
 
-        self.cache_dir = Path(cache_dir)
+        self.cache_dir = Path(cache_dir).expanduser()
         self.cache_ttl = timedelta(hours=cache_ttl_hours)
         self.cache_file = self.cache_dir / "hosts.yaml"
         self.metadata_file = self.cache_dir / "cache_metadata.yaml"
@@ -70,18 +72,36 @@ class HostCache:
                 with open(self.metadata_file) as f:
                     metadata = yaml.safe_load(f)
 
-                if not metadata or 'timestamp' not in metadata:
+                if not isinstance(metadata, dict) or 'timestamp' not in metadata:
                     return False
 
                 cache_time = datetime.fromisoformat(metadata['timestamp'])
                 return datetime.now() - cache_time < self.cache_ttl
 
-            except (yaml.YAMLError, ValueError, KeyError) as e:
+            except (yaml.YAMLError, ValueError, KeyError, OSError) as e:
                 self.logger.warning(f"Failed to validate cache: {e}")
                 return False
             except Exception as e:
                 self.logger.error(f"Unexpected error validating cache: {e}")
                 return False
+
+    def _atomic_write_yaml(self, file_path: Path, payload: Any) -> None:
+        """Write YAML payload atomically to avoid partial/corrupt cache writes."""
+        fd, temp_path_text = tempfile.mkstemp(
+            prefix=f".{file_path.name}.",
+            suffix=".tmp",
+            dir=str(self.cache_dir),
+            text=True,
+        )
+        temp_path = Path(temp_path_text)
+        try:
+            with os.fdopen(fd, "w") as handle:
+                yaml.safe_dump(payload, handle, default_flow_style=False, sort_keys=True)
+            os.replace(temp_path, file_path)
+        finally:
+            if temp_path.exists():
+                with contextlib.suppress(OSError):
+                    temp_path.unlink()
 
     def save_hosts(self, hosts: List[Host], provider_info: Dict[str, Any]) -> bool:
         """Save hosts to cache with metadata.
@@ -95,19 +115,10 @@ class HostCache:
         """
         with self._lock:
             try:
-                # Prepare hosts data for serialization
-                hosts_data = []
-                for host in hosts:
-                    host_dict = {
-                        'name': host.name,
-                        'ip': host.ip,
-                        'metadata': host.metadata
-                    }
-                    hosts_data.append(host_dict)
+                hosts_data = [host.to_dict() for host in hosts]
 
                 # Save hosts data
-                with open(self.cache_file, 'w') as f:
-                    yaml.dump(hosts_data, f, default_flow_style=False, sort_keys=True)
+                self._atomic_write_yaml(self.cache_file, hosts_data)
 
                 # Save metadata
                 cache_metadata = {
@@ -117,8 +128,7 @@ class HostCache:
                     'cache_version': '1.0'
                 }
 
-                with open(self.metadata_file, 'w') as f:
-                    yaml.dump(cache_metadata, f, default_flow_style=False, sort_keys=True)
+                self._atomic_write_yaml(self.metadata_file, cache_metadata)
 
                 self.logger.info(f"Successfully cached {len(hosts)} hosts to {self.cache_file}")
                 return True
@@ -155,12 +165,8 @@ class HostCache:
                     if 'name' not in host_dict or 'ip' not in host_dict:
                         self.logger.warning(f"Skipping host with missing required fields: {host_dict}")
                         continue
-                        
-                    host = Host(
-                        name=host_dict['name'],
-                        ip=host_dict['ip'],
-                        **host_dict.get('metadata', {})
-                    )
+
+                    host = Host.from_dict(host_dict)
                     hosts.append(host)
 
                 self.logger.info(f"Successfully loaded {len(hosts)} hosts from cache")

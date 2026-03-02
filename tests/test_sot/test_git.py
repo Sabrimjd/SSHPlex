@@ -16,8 +16,6 @@ def _git_import(**overrides):
         "repo_url": "git@github.com:acme/hosts.git",
         "branch": "main",
         "source_pattern": "hosts/**/*.y*ml",
-        "path": "hosts",
-        "file_glob": "**/*.y*ml",
         "auto_pull": True,
         "pull_interval_seconds": 300,
         "priority": 100,
@@ -168,7 +166,6 @@ all:
 
     provider = GitProvider(
         _git_import(
-            path="inventory",
             source_pattern="inventory/**/*.y*ml",
             inventory_format="ansible",
             default_filters={"groups": ["webservers"]},
@@ -213,7 +210,6 @@ all:
 
     provider = GitProvider(
         _git_import(
-            path="inventory",
             source_pattern="inventory/**/*.y*ml",
             inventory_format="ansible",
             default_filters={"groups": ["webservers"]},
@@ -253,7 +249,6 @@ all:
 
     provider = GitProvider(
         _git_import(
-            path="inventory",
             source_pattern="inventory/**/*.y*ml",
             inventory_format="ansible",
         ),
@@ -290,7 +285,6 @@ all:
 
     provider = GitProvider(
         _git_import(
-            path="inventory",
             source_pattern="inventory/**/*.y*ml",
             inventory_format="ansible",
         ),

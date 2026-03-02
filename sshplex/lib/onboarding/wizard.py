@@ -14,7 +14,11 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich.text import Text
 
-from ..config import Config
+from ..config import (
+    SUPPORTED_MUX_BACKENDS,
+    SUPPORTED_SOT_PROVIDER_TYPES,
+    Config,
+)
 from ..logger import get_logger
 
 
@@ -181,14 +185,18 @@ class OnboardingWizard:
             Provider configuration dict or None if cancelled
         """
         self.console.print("\n" + "─" * 60)
-        
+
         # Provider type selection
+        provider_descriptions = {
+            "static": "Static host list (manual entry)",
+            "netbox": "NetBox (infrastructure source of truth)",
+            "ansible": "Ansible inventory file",
+            "consul": "HashiCorp Consul (service discovery)",
+            "git": "Git repository inventory (static or ansible YAML)",
+        }
         provider_types = [
-            ("static", "Static host list (manual entry)"),
-            ("netbox", "NetBox (infrastructure source of truth)"),
-            ("ansible", "Ansible inventory file"),
-            ("consul", "HashiCorp Consul (service discovery)"),
-            ("git", "Git repository inventory (static or ansible YAML)"),
+            (provider_type, provider_descriptions.get(provider_type, provider_type))
+            for provider_type in SUPPORTED_SOT_PROVIDER_TYPES
         ]
         
         self.console.print("\n[bold]Select inventory source type:[/bold]")
@@ -197,20 +205,19 @@ class OnboardingWizard:
         
         choice = Prompt.ask("\nChoice", choices=[str(i) for i in range(1, len(provider_types) + 1)], default="1")
         provider_type = provider_types[int(choice) - 1][0]
-        
-        # Configure based on type
-        if provider_type == "static":
-            return self._configure_static()
-        elif provider_type == "netbox":
-            return self._configure_netbox()
-        elif provider_type == "ansible":
-            return self._configure_ansible()
-        elif provider_type == "consul":
-            return self._configure_consul()
-        elif provider_type == "git":
-            return self._configure_git()
-        
-        return None
+
+        configurators = {
+            "static": self._configure_static,
+            "netbox": self._configure_netbox,
+            "ansible": self._configure_ansible,
+            "consul": self._configure_consul,
+            "git": self._configure_git,
+        }
+        handler = configurators.get(provider_type)
+        if handler is None:
+            self.console.print(f"[red]Unsupported provider type: {provider_type}[/red]")
+            return None
+        return handler()
     
     def _configure_static(self) -> Optional[Dict[str, Any]]:
         """Configure static host provider."""
@@ -414,16 +421,12 @@ class OnboardingWizard:
                 except ValueError:
                     self.console.print(f"[red]Invalid interval: {interval_input}[/red]")
 
-        path, file_glob = self._split_source_pattern_legacy(source_pattern)
-
         config: Dict[str, Any] = {
             "name": name,
             "type": "git",
             "repo_url": repo_url,
             "branch": branch,
             "source_pattern": source_pattern,
-            "path": path,
-            "file_glob": file_glob,
             "inventory_format": inventory_format,
             "priority": priority,
             "auto_pull": auto_pull,
@@ -451,30 +454,6 @@ class OnboardingWizard:
 
         return config
 
-    @staticmethod
-    def _split_source_pattern_legacy(source_pattern: str) -> tuple[str, str]:
-        """Split source pattern into path/glob compatibility fields."""
-        normalized = str(source_pattern or "").strip().lstrip("/")
-        if not normalized:
-            return "hosts", "**/*.y*ml"
-
-        if normalized.endswith((".yml", ".yaml")):
-            return normalized, "**/*.y*ml"
-
-        wildcard_chars = {"*", "?", "["}
-        parts = normalized.split("/")
-        wildcard_index = -1
-        for idx, part in enumerate(parts):
-            if any(char in part for char in wildcard_chars):
-                wildcard_index = idx
-                break
-
-        if wildcard_index == -1:
-            return normalized, "**/*.y*ml"
-        if wildcard_index == 0:
-            return ".", normalized
-        return "/".join(parts[:wildcard_index]), "/".join(parts[wildcard_index:])
-    
     def _test_netbox_connection(self, config: Dict[str, Any]) -> bool:
         """Test NetBox connection."""
         self.logger.info(f"Testing NetBox connection to {config['url']}")
@@ -583,7 +562,7 @@ class OnboardingWizard:
             default_backend = "tmux" if tmux_installed else "iterm2-native"
             backend = Prompt.ask(
                 "Backend",
-                choices=["tmux", "iterm2-native"],
+                choices=list(SUPPORTED_MUX_BACKENDS),
                 default=default_backend,
             )
             return backend
@@ -684,7 +663,7 @@ class OnboardingWizard:
                     cfg = provider.get("config", {}) or {}
                     details = f"{cfg.get('scheme', 'http')}://{cfg.get('host', 'localhost')}:{cfg.get('port', 8500)}"
                 elif provider_type == "git":
-                    details = str(provider.get("source_pattern", provider.get("path", "")))
+                    details = str(provider.get("source_pattern", ""))
 
                 provider_table.add_row(provider_name, provider_type, details)
 

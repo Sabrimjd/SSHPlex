@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
 from ..cache import HostCache
+from ..config import SUPPORTED_SOT_PROVIDER_TYPES
 from ..logger import get_logger
 from .ansible import AnsibleProvider
 from .base import Host, SoTProvider
@@ -40,7 +43,63 @@ class SoTFactory:
             # Use default cache settings if not configured
             self.cache = HostCache()
 
-        self._cached_hosts: list[Host] | None = None
+        self._cached_hosts_by_key: dict[str, list[Host]] = {}
+        self._cache_lock = threading.RLock()
+        self._provider_creators: dict[str, str] = {
+            "static": "_create_static_provider",
+            "netbox": "_create_netbox_provider_from_import",
+            "ansible": "_create_ansible_provider_from_import",
+            "consul": "_create_consul_provider",
+            "git": "_create_git_provider",
+        }
+
+    @staticmethod
+    def _normalize_filters(additional_filters: dict[str, Any] | None) -> dict[str, Any]:
+        """Normalize optional host filters to a deterministic dictionary."""
+        if not additional_filters:
+            return {}
+        return {str(key): value for key, value in additional_filters.items()}
+
+    def _build_cache_key(self, additional_filters: dict[str, Any] | None) -> str:
+        """Build a deterministic cache key based on active filters."""
+        normalized = self._normalize_filters(additional_filters)
+        if not normalized:
+            return "default"
+        try:
+            return json.dumps(normalized, sort_keys=True, separators=(",", ":"), default=str)
+        except TypeError:
+            fallback = {key: str(value) for key, value in normalized.items()}
+            return json.dumps(fallback, sort_keys=True, separators=(",", ":"))
+
+    def _get_enabled_provider_types(self, configured_imports: list[Any]) -> set[str]:
+        """Resolve enabled provider types from config or infer from imports."""
+        configured_types = {
+            str(provider_type).strip()
+            for provider_type in (getattr(self.config.sot, "providers", []) or [])
+            if str(provider_type).strip()
+        }
+        unknown_configured = configured_types.difference(SUPPORTED_SOT_PROVIDER_TYPES)
+        if unknown_configured:
+            self.logger.warning(
+                "Ignoring unknown provider types from sot.providers: "
+                f"{sorted(unknown_configured)}"
+            )
+        configured_types = configured_types.intersection(SUPPORTED_SOT_PROVIDER_TYPES)
+        if configured_types:
+            return configured_types
+
+        inferred_types = {
+            str(getattr(import_config, "type", "")).strip()
+            for import_config in configured_imports
+            if str(getattr(import_config, "type", "")).strip()
+        }
+        inferred_types = inferred_types.intersection(SUPPORTED_SOT_PROVIDER_TYPES)
+        if inferred_types:
+            self.logger.info(
+                "No explicit sot.providers configured; inferred provider types from imports: "
+                f"{sorted(inferred_types)}"
+            )
+        return inferred_types
 
     def initialize_providers(self) -> bool:
         """Initialize all configured SoT providers from import configurations.
@@ -58,38 +117,10 @@ class SoTFactory:
             self.logger.error("No import configurations found in sot.import")
             return False
 
-        sot_config = self.config.sot
-        providers_explicitly_set = True
-        if hasattr(sot_config, "model_fields_set"):
-            providers_explicitly_set = "providers" in getattr(
-                sot_config,
-                "model_fields_set",
-                set(),
-            )
-
-        provider_types_source = "config"
-        enabled_provider_types = {
-            str(provider_type).strip()
-            for provider_type in (getattr(sot_config, "providers", []) or [])
-            if str(provider_type).strip()
-        }
-
-        if not providers_explicitly_set:
-            provider_types_source = "imports"
-            enabled_provider_types = {
-                str(getattr(import_config, "type", "")).strip()
-                for import_config in configured_imports
-                if str(getattr(import_config, "type", "")).strip()
-            }
-            if enabled_provider_types:
-                self.logger.info(
-                    "No explicit sot.providers configured; inferred enabled provider "
-                    f"types from imports: {sorted(enabled_provider_types)}"
-                )
-
+        enabled_provider_types = self._get_enabled_provider_types(configured_imports)
         if enabled_provider_types:
             self.logger.info(
-                f"Enabled provider types from {provider_types_source}: {sorted(enabled_provider_types)}"
+                f"Enabled provider types: {sorted(enabled_provider_types)}"
             )
 
         for import_config in configured_imports:
@@ -104,21 +135,26 @@ class SoTFactory:
                     continue
 
                 attempted_count += 1
-                provider: SoTProvider | None = None
-
-                if import_type == "static":
-                    provider = self._create_static_provider(import_config)
-                elif import_type == "netbox":
-                    provider = self._create_netbox_provider_from_import(import_config)
-                elif import_type == "ansible":
-                    provider = self._create_ansible_provider_from_import(import_config)
-                elif import_type == "consul":
-                    provider = self._create_consul_provider(import_config)
-                elif import_type == "git":
-                    provider = self._create_git_provider(import_config)
-                else:
-                    self.logger.error(f"Unknown SoT provider type: {import_type}")
+                if import_type not in SUPPORTED_SOT_PROVIDER_TYPES:
+                    self.logger.error(
+                        f"Unknown SoT provider type: {import_type}. "
+                        f"Supported types: {list(SUPPORTED_SOT_PROVIDER_TYPES)}"
+                    )
                     continue
+
+                creator_name = self._provider_creators.get(import_type)
+                if creator_name is None:
+                    self.logger.error(f"No provider creator registered for type '{import_type}'")
+                    continue
+
+                creator = getattr(self, creator_name, None)
+                if creator is None:
+                    self.logger.error(
+                        f"Provider creator method '{creator_name}' is missing for type '{import_type}'"
+                    )
+                    continue
+
+                provider: SoTProvider | None = creator(import_config)
 
                 if provider and provider.connect():
                     self.providers.append(provider)
@@ -236,18 +272,32 @@ class SoTFactory:
 
         return provider
 
-    def _load_hosts_from_cache(self, force_refresh: bool) -> list[Host] | None:
+    def _load_hosts_from_cache(
+        self,
+        force_refresh: bool,
+        additional_filters: dict[str, Any] | None,
+    ) -> list[Host] | None:
         """Load hosts from memory/cache when refresh is not requested."""
-        if not force_refresh and self._cached_hosts is not None:
-            self.logger.debug("Returning already loaded hosts from memory")
-            return self._cached_hosts
+        if force_refresh:
+            return None
 
-        if not force_refresh:
-            cached_hosts = self.cache.load_hosts()
-            if cached_hosts is not None:
-                self.logger.info(f"Loaded {len(cached_hosts)} hosts from cache")
-                self._cached_hosts = cached_hosts
-                return cached_hosts
+        cache_key = self._build_cache_key(additional_filters)
+        with self._cache_lock:
+            memory_hosts = self._cached_hosts_by_key.get(cache_key)
+            if memory_hosts is not None:
+                self.logger.debug(f"Returning hosts from memory cache key '{cache_key}'")
+                return memory_hosts
+
+        # Disk cache is only used for unfiltered host sets.
+        if cache_key != "default":
+            return None
+
+        cached_hosts = self.cache.load_hosts()
+        if cached_hosts is not None:
+            self.logger.info(f"Loaded {len(cached_hosts)} hosts from cache")
+            with self._cache_lock:
+                self._cached_hosts_by_key[cache_key] = cached_hosts
+            return cached_hosts
 
         return None
 
@@ -258,14 +308,22 @@ class SoTFactory:
         fetch_mode: str,
     ) -> None:
         """Persist retrieved hosts in cache and memory."""
+        cache_key = self._build_cache_key(additional_filters)
+        with self._cache_lock:
+            self._cached_hosts_by_key[cache_key] = hosts
+
+        # Keep on-disk cache canonical for unfiltered results only.
+        if cache_key != "default":
+            return
+
         provider_info = {
             'provider_count': len(self.providers),
             'provider_names': self.get_provider_names(),
             'filters_applied': additional_filters or {},
             'fetch_mode': fetch_mode,
+            'cache_key': cache_key,
         }
         self.cache.save_hosts(hosts, provider_info)
-        self._cached_hosts = hosts
 
     def _deduplicate_hosts(self, hosts: list[Host]) -> list[Host]:
         """Deduplicate hosts and merge metadata/source information."""
@@ -279,10 +337,10 @@ class SoTFactory:
                 unique_hosts[key] = host
                 continue
 
-            existing.metadata.update(host.metadata)
-
             existing_sources = existing.metadata.get('sources', [])
             incoming_sources = host.metadata.get('sources', [])
+
+            existing.merge_metadata(host.metadata)
 
             if isinstance(existing_sources, str):
                 existing_sources = [existing_sources]
@@ -306,7 +364,7 @@ class SoTFactory:
                     merged_sources.append(source_text)
 
             if merged_sources:
-                existing.metadata['sources'] = merged_sources
+                existing.merge_metadata({'sources': merged_sources})
 
         return list(unique_hosts.values())
 
@@ -320,7 +378,7 @@ class SoTFactory:
         Returns:
             Combined list of hosts from all providers
         """
-        cached_hosts = self._load_hosts_from_cache(force_refresh)
+        cached_hosts = self._load_hosts_from_cache(force_refresh, additional_filters)
         if cached_hosts is not None:
             return cached_hosts
 
@@ -366,7 +424,7 @@ class SoTFactory:
         Returns:
             Combined list of hosts from all providers
         """
-        cached_hosts = self._load_hosts_from_cache(force_refresh)
+        cached_hosts = self._load_hosts_from_cache(force_refresh, additional_filters)
         if cached_hosts is not None:
             return cached_hosts
 
@@ -450,12 +508,6 @@ class SoTFactory:
         import_filters = getattr(provider, 'import_filters', None)
         if import_filters:
             filters.update(import_filters)
-        elif isinstance(provider, NetBoxProvider) and self.config.netbox:
-            # Fallback to old configuration structure if available
-            filters.update(self.config.netbox.default_filters)
-        elif isinstance(provider, AnsibleProvider) and self.config.ansible_inventory:
-            # Fallback to old configuration structure if available
-            filters.update(self.config.ansible_inventory.default_filters)
 
         # Merge additional filters
         if additional_filters:
@@ -557,7 +609,8 @@ class SoTFactory:
         Returns:
             True if cache was cleared successfully, False otherwise
         """
-        self._cached_hosts = None
+        with self._cache_lock:
+            self._cached_hosts_by_key.clear()
         return self.cache.clear_cache()
 
     def is_cache_valid(self) -> bool:
@@ -604,22 +657,7 @@ class SoTFactory:
         if not configured_imports:
             return initialized
 
-        enabled_provider_types = {
-            str(provider_type).strip()
-            for provider_type in (getattr(self.config.sot, "providers", []) or [])
-            if str(provider_type).strip()
-        }
-
-        providers_explicitly_set = True
-        if hasattr(self.config.sot, "model_fields_set"):
-            providers_explicitly_set = "providers" in getattr(self.config.sot, "model_fields_set", set())
-
-        if not providers_explicitly_set:
-            enabled_provider_types = {
-                str(getattr(import_config, "type", "")).strip()
-                for import_config in configured_imports
-                if str(getattr(import_config, "type", "")).strip()
-            }
+        enabled_provider_types = self._get_enabled_provider_types(configured_imports)
 
         for import_config in configured_imports:
             import_type = str(getattr(import_config, "type", "")).strip()

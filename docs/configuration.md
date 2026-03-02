@@ -83,7 +83,8 @@ tmux:
 | Consul | `consul` | Add `consul` to `sot.providers` | `config.host`, `config.token` |
 | Git | `git` | Add `git` to `sot.providers` | `repo_url` |
 
-Only imports whose `type` is listed in `sot.providers` are loaded.
+When `sot.providers` is set, only imports whose `type` is listed are loaded.
+If `sot.providers` is omitted or empty, SSHplex infers enabled types from the configured imports.
 
 ```yaml
 sot:

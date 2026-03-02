@@ -37,7 +37,7 @@ sshplex
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.10+
 - tmux (Linux/macOS) and/or iTerm2 (macOS)
 - SSH key configured for target hosts
 
