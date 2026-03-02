@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.8.0] - 2026-03-02
 
 ### Changed
 - Simplified SoT activation flow: when `sot.providers` is empty, enabled provider types are inferred from configured imports.
