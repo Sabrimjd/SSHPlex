@@ -2,7 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Command Snippets**: Predefined command library that users can run on selected hosts. Press `S` in host selector to open snippet picker, then broadcast commands to all connected sessions.
+- **Host Health Check**: Visual indicators showing if hosts are reachable before connecting. Press `H` to check health of selected hosts. Results are cached with configurable TTL.
+- **Recent & Favorites**: Quick access to frequently used hosts. Press `F` to toggle favorite on selected host, `V` to filter by favorites, `N` to filter by recent connections. Auto-tracks connection history.
+
+### Configuration
+New config sections:
+- `snippets.enabled`: Enable/disable snippets feature (default: true)
+- `snippets.show_preview`: Show command preview before sending (default: true)
+- `health.enabled`: Enable/disable health checks (default: true)
+- `health.timeout`: TCP connection timeout in seconds (default: 2.0)
+- `health.cache_ttl_minutes`: Health result cache TTL in minutes (default: 5)
+- `history.enabled`: Enable/disable history tracking (default: true)
+- `history.max_recent`: Maximum recent connections to remember (default: 20)
+- `history.remember_favorites`: Persist favorites across sessions (default: true)
+
+### Keyboard Shortcuts (New)
+| Key | Action |
+|-----|--------|
+| `S` | Open snippet picker |
+| `H` | Run health check on selected hosts |
+| `F` | Toggle favorite on selected host |
+| `V` | Filter by favorites |
+| `N` | Filter by recent connections |
+
 ## [1.8.0] - 2026-03-02
+
+### Added
+- Added command snippets, host health checks, and recent/favorites tracking foundations with new TUI keybindings (`S`, `H`, `f`, `v`, `n`).
 
 ### Changed
 - Simplified SoT activation flow: when `sot.providers` is empty, enabled provider types are inferred from configured imports.

@@ -95,6 +95,21 @@ sshplex --config demo/sshplex.demo.yaml
 | [Backends](docs/backends.md) | Multiplexer backend options and setup |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and solutions |
 
+## TUI Keybindings
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Connect to selected hosts |
+| `Space` | Toggle host selection |
+| `s` | Open session manager |
+| `S` | Open snippets picker and send command |
+| `H` | Run host health checks |
+| `f` | Toggle favorite on current host |
+| `v` | Toggle favorites filter |
+| `n` | Toggle recent-hosts filter |
+| `r` | Refresh hosts from sources |
+| `h` | Open in-app help |
+
 ## Installation Options
 
 ```bash
