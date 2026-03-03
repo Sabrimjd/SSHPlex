@@ -120,5 +120,15 @@ ignore_missing_imports = true
 
 
 [[tool.mypy.overrides]]
+module = ["iterm2", "iterm2.*"]
+ignore_missing_imports = true
+
+
+[[tool.mypy.overrides]]
 module = ["sshplex.lib.sot.consul"]
+ignore_errors = true
+
+
+[[tool.mypy.overrides]]
+module = ["sshplex.lib.multiplexer.iterm2_native", "sshplex.lib.ui.session_manager"]
 ignore_errors = true
