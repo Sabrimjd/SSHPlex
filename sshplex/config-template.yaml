@@ -146,3 +146,17 @@ cache:
   enabled: true
   cache_dir: "~/.cache/sshplex"  # Directory to store cached host data
   ttl_hours: 24  # Cache time-to-live in hours (24 = refresh daily)
+
+snippets:
+  enabled: true
+  show_preview: true
+
+health:
+  enabled: true
+  timeout: 2.0
+  cache_ttl_minutes: 5
+
+history:
+  enabled: true
+  max_recent: 20
+  remember_favorites: true
