@@ -1,5 +1,13 @@
 ![SSHPlex Demo](demo/demo.gif)
 
+[![GitHub stars](https://img.shields.io/github/stars/Sabrimjd/SSHPlex?style=flat-square&logo=github&color=yellow)](https://github.com/Sabrimjd/SSHPlex/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/Sabrimjd/SSHPlex?style=flat-square&logo=github)](https://github.com/Sabrimjd/SSHPlex/fork)
+[![GitHub issues](https://img.shields.io/github/issues/Sabrimjd/SSHPlex?style=flat-square&logo=github)](https://github.com/Sabrimjd/SSHPlex/issues)
+[![PyPI version](https://img.shields.io/pypi/v/sshplex?style=flat-square&logo=pypi&color=blue)](https://pypi.org/project/sshplex/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/sshplex?style=flat-square&logo=pypi&color=green)](https://pypi.org/project/sshplex/)
+[![Python versions](https://img.shields.io/pypi/pyversions/sshplex?style=flat-square&logo=python)](https://pypi.org/project/sshplex/)
+[![License](https://img.shields.io/github/license/Sabrimjd/SSHPlex?style=flat-square)](LICENSE)
+
 **Multiplex your SSH connections with style**
 
 SSHplex is a Python-based SSH connection multiplexer with a modern TUI. Connect to multiple hosts simultaneously using tmux or iTerm2, with sources from NetBox, Ansible, Consul, or static lists.
@@ -13,14 +21,6 @@ SSHplex is a Python-based SSH connection multiplexer with a modern TUI. Connect 
 - 🔄 **Broadcast Input** - Sync commands across multiple SSH sessions
 - 🔐 **SSH Security** - Configurable host key checking and retry logic
 - 🚀 **Fast Startup** - Intelligent caching with configurable TTL
-
-## What Is New in QoL v2
-
-- **Static host manager in UI** - Add and edit static hosts as rows (`name`, `ip`, `alias`, `user`, `port`, `key_path`) instead of raw YAML blobs.
-- **Per-host SSH preview** - Preview effective SSH values from `ssh -G` in settings and from host selector (`o`).
-- **Smarter table columns** - Detect columns from live hosts/cache/imports, including SSH-oriented fields like `alias`, `user`, `port`, and `key_path`.
-- **Better Sources UX** - Provider toggles and collapsible import cards make large source configs easier to navigate.
-- **Rich YAML view** - Side-by-side YAML edit + syntax-highlight preview for full config inspection.
 
 ## Quick Start
 
@@ -127,6 +127,10 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## Author
 
 **Sabrimjd** - [@sabrimjd](https://github.com/sabrimjd)
+
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Sabrimjd/SSHPlex&type=Date)](https://star-history.com/#Sabrimjd/SSHPlex&Date)
 
 ---
 
