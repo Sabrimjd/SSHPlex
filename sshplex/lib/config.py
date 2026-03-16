@@ -29,12 +29,14 @@ SUPPORTED_GIT_INVENTORY_FORMATS = ("static", "ansible")
 
 class SSHplexConfig(BaseModel):
     """SSHplex main configuration."""
+
     version: str = __version__
     session_prefix: str = "sshplex"
 
 
 class LoggingConfig(BaseModel):
     """Logging configuration."""
+
     enabled: bool = True
     level: str = "INFO"
     file: str = "logs/sshplex.log"
@@ -42,15 +44,22 @@ class LoggingConfig(BaseModel):
 
 class UIConfig(BaseModel):
     """User interface configuration."""
+
     theme: str = "textual-dark"
     show_log_panel: bool = True
     log_panel_height: int = 20  # Percentage of screen height
-    table_columns: list = Field(default_factory=lambda: ["name", "ip", "cluster", "role", "tags"])
+    table_columns: list = Field(
+        default_factory=lambda: ["name", "ip", "cluster", "role", "tags"]
+    )
+
 
 class Proxy(BaseModel):
     """ImportProxies configuration with defaults."""
+
     name: str = Field("", description="Proxy name")
-    imports: list = Field(default_factory=list, description="List of imports that will use this proxy")
+    imports: list = Field(
+        default_factory=list, description="List of imports that will use this proxy"
+    )
     host: str = Field("", description="Proxy host or ip")
     username: str = Field("", description="Proxy username")
     key_path: str = Field("", description="Proxy key")
@@ -58,24 +67,45 @@ class Proxy(BaseModel):
 
 class SSHRetryConfig(BaseModel):
     """SSH connection retry configuration."""
-    enabled: bool = Field(default=True, description="Enable connection retry on failure")
-    max_attempts: int = Field(default=3, ge=1, le=10, description="Maximum retry attempts")
-    delay_seconds: float = Field(default=2.0, ge=0.5, le=60.0, description="Initial delay between retries")
-    exponential_backoff: bool = Field(default=True, description="Double delay on each retry")
+
+    enabled: bool = Field(
+        default=True, description="Enable connection retry on failure"
+    )
+    max_attempts: int = Field(
+        default=3, ge=1, le=10, description="Maximum retry attempts"
+    )
+    delay_seconds: float = Field(
+        default=2.0, ge=0.5, le=60.0, description="Initial delay between retries"
+    )
+    exponential_backoff: bool = Field(
+        default=True, description="Double delay on each retry"
+    )
 
 
 class SSHConfig(BaseModel):
     """SSH connection configuration."""
+
     username: str = Field(default="admin", description="Default SSH username")
-    key_path: str = Field(default="~/.ssh/id_rsa", description="Path to SSH private key")
+    key_path: str = Field(
+        default="~/.ssh/id_rsa", description="Path to SSH private key"
+    )
     timeout: int = 10
     port: int = 22
     # SSH security options
-    strict_host_key_checking: bool = Field(default=False, description="Enable strict host key checking")
-    user_known_hosts_file: str = Field(default="", description="Custom known_hosts file path (empty = default)")
+    strict_host_key_checking: bool = Field(
+        default=False, description="Enable strict host key checking"
+    )
+    user_known_hosts_file: str = Field(
+        default="", description="Custom known_hosts file path (empty = default)"
+    )
     # Retry configuration
-    retry: SSHRetryConfig = Field(default_factory=SSHRetryConfig, description="Connection retry settings")
-    proxy: List[Proxy] = Field(alias='proxy', default_factory=list, description="List of proxies")
+    retry: SSHRetryConfig = Field(
+        default_factory=SSHRetryConfig, description="Connection retry settings"
+    )
+    proxy: List[Proxy] = Field(
+        alias="proxy", default_factory=list, description="List of proxies"
+    )
+
 
 class TmuxConfig(BaseModel):
     """tmux/iTerm2 multiplexer configuration.
@@ -85,36 +115,44 @@ class TmuxConfig(BaseModel):
     2. tmux + iTerm2: backend="tmux", control_with_iterm2=true (macOS only)
     3. iTerm2 native: backend="iterm2-native" (macOS only)
     """
+
     # Backend selection
     backend: str = Field(
-        default="tmux",
-        description="Multiplexer backend: 'tmux' or 'iterm2-native'"
+        default="tmux", description="Multiplexer backend: 'tmux' or 'iterm2-native'"
     )
     # Common options
-    use_panes: bool = Field(default=True, description="Connection mode: true=panes, false=tabs")
+    use_panes: bool = Field(
+        default=True, description="Connection mode: true=panes, false=tabs"
+    )
     layout: str = "tiled"  # tiled, even-horizontal, even-vertical
     broadcast: bool = False  # Start with broadcast off
     window_name: str = "sshplex"
-    max_panes_per_window: int = Field(default=5, description="Maximum panes per window before creating a new window")
+    max_panes_per_window: int = Field(
+        default=5, description="Maximum panes per window before creating a new window"
+    )
     # iTerm2 + tmux integration (macOS only, for backend="tmux")
-    control_with_iterm2: bool = Field(default=False, description="Use iTerm2 tmux -CC mode (macOS only)")
+    control_with_iterm2: bool = Field(
+        default=False, description="Use iTerm2 tmux -CC mode (macOS only)"
+    )
     iterm2_attach_target: str = Field(
         default="new-window",
-        description="Where to open tmux session in iTerm2: new-window or new-tab"
+        description="Where to open tmux session in iTerm2: new-window or new-tab",
     )
     # iTerm2 native specific (macOS only, for backend="iterm2-native")
-    iterm2_profile: str = Field(default="Default", description="iTerm2 profile to use for new windows/tabs")
+    iterm2_profile: str = Field(
+        default="Default", description="iTerm2 profile to use for new windows/tabs"
+    )
     iterm2_native_target: str = Field(
         default="current-window",
-        description="Where to open iTerm2 native sessions: current-window or new-window"
+        description="Where to open iTerm2 native sessions: current-window or new-window",
     )
     iterm2_native_hide_from_history: bool = Field(
         default=True,
-        description="Prefix native iTerm2 dispatched commands with a leading space"
+        description="Prefix native iTerm2 dispatched commands with a leading space",
     )
     iterm2_split_pattern: str = Field(
         default="alternate",
-        description="Split pattern for iTerm2 native: alternate, vertical, horizontal"
+        description="Split pattern for iTerm2 native: alternate, vertical, horizontal",
     )
 
     @field_validator("backend")
@@ -165,18 +203,26 @@ class TmuxConfig(BaseModel):
 
 class ConsulConfig(BaseModel):
     """Consul-specific configuration with defaults."""
+
     host: str = Field("consul.example.com", description="Consul host address")
     port: int = Field(443, description="Consul port number")
     token: str = Field("default_token", description="Consul token for authentication")
     scheme: str = Field("https", description="URL scheme (e.g., 'https')")
-    verify: bool = Field(True, description="Whether to verify SSL certificates (default: True for security)")
+    verify: bool = Field(
+        True,
+        description="Whether to verify SSL certificates (default: True for security)",
+    )
     dc: str = Field("dc1", description="Datacenter name")
     cert: str = Field("", description="Path to SSL certificate")
 
+
 class SoTImportConfig(BaseModel):
     """Individual SoT import configuration."""
+
     name: str = Field(..., description="Unique name for this import")
-    type: str = Field(..., description=f"Provider type: {', '.join(SUPPORTED_SOT_PROVIDER_TYPES)}")
+    type: str = Field(
+        ..., description=f"Provider type: {', '.join(SUPPORTED_SOT_PROVIDER_TYPES)}"
+    )
 
     # Static provider fields
     hosts: Optional[List[Dict[str, Any]]] = None
@@ -238,13 +284,19 @@ class SoTImportConfig(BaseModel):
             )
         return normalized
 
+
 class SoTConfig(BaseModel):
     """Source of Truth configuration."""
+
     providers: List[str] = Field(
         default_factory=list,
         description="List of SoT providers to use: static, netbox, ansible, consul, git",
     )
-    import_: List[SoTImportConfig] = Field(alias='import', default_factory=list, description="List of import configurations")
+    import_: List[SoTImportConfig] = Field(
+        alias="import",
+        default_factory=list,
+        description="List of import configurations",
+    )
 
     @field_validator("providers")
     @classmethod
@@ -266,13 +318,38 @@ class SoTConfig(BaseModel):
 
 class CacheConfig(BaseModel):
     """Host cache configuration."""
+
     enabled: bool = True
     cache_dir: str = "~/.cache/sshplex"
     ttl_hours: int = Field(default=24, description="Cache time-to-live in hours")
 
 
+class SnippetsConfig(BaseModel):
+    """Command snippets feature configuration."""
+
+    enabled: bool = True
+    show_preview: bool = True
+
+
+class HealthConfig(BaseModel):
+    """Host health-check feature configuration."""
+
+    enabled: bool = True
+    timeout: float = Field(default=2.0, ge=0.1, le=60.0)
+    cache_ttl_minutes: int = Field(default=5, ge=1, le=1440)
+
+
+class HistoryConfig(BaseModel):
+    """Recent/favorites feature configuration."""
+
+    enabled: bool = True
+    max_recent: int = Field(default=20, ge=1, le=500)
+    remember_favorites: bool = True
+
+
 class Config(BaseModel):
     """Main SSHplex configuration model."""
+
     sshplex: SSHplexConfig = Field(default_factory=SSHplexConfig)
     sot: SoTConfig = Field(default_factory=SoTConfig)
     ssh: SSHConfig = Field(default_factory=SSHConfig)
@@ -280,6 +357,9 @@ class Config(BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
+    snippets: SnippetsConfig = Field(default_factory=SnippetsConfig)
+    health: HealthConfig = Field(default_factory=HealthConfig)
+    history: HistoryConfig = Field(default_factory=HistoryConfig)
 
 
 def get_default_config_path() -> Path:
@@ -315,7 +395,9 @@ def initialize_default_config() -> Path:
     ensure_config_directory()
 
     if not template_path.exists():
-        raise FileNotFoundError(f"SSHplex: Template config file not found: {template_path}")
+        raise FileNotFoundError(
+            f"SSHplex: Template config file not found: {template_path}"
+        )
 
     # Copy template to default config location
     shutil.copy2(template_path, config_path)
@@ -351,16 +433,24 @@ def load_config(config_path: Optional[str] = None) -> Config:
         if not config_file.exists():
             try:
                 config_file = initialize_default_config()
-                print(f"✅ SSHplex: First run detected - created configuration at {config_file}")
-                print(f"📝 Please edit {config_file} with your NetBox details before running SSHplex again")
+                print(
+                    f"✅ SSHplex: First run detected - created configuration at {config_file}"
+                )
+                print(
+                    f"📝 Please edit {config_file} with your NetBox details before running SSHplex again"
+                )
                 print("🔧 Key settings to configure:")
                 print("   - netbox.url: Your NetBox instance URL")
                 print("   - netbox.token: Your NetBox API token")
                 print("   - ssh.username: Your SSH username")
                 print("   - ssh.key_path: Path to your SSH private key")
-                print("\n🚀 Continuing with generated defaults. You can adjust settings later in the Config editor (key: e).")
+                print(
+                    "\n🚀 Continuing with generated defaults. You can adjust settings later in the Config editor (key: e)."
+                )
             except Exception as e:
-                raise FileNotFoundError(f"SSHplex: Could not initialize default config: {e}") from e
+                raise FileNotFoundError(
+                    f"SSHplex: Could not initialize default config: {e}"
+                ) from e
     else:
         config_file = Path(config_path)
 
@@ -391,7 +481,9 @@ def load_config(config_path: Optional[str] = None) -> Config:
         # Provide more context for pydantic validation errors
         error_msg = str(e)
         if "validation" in error_msg.lower() or "field" in error_msg.lower():
-            raise ValueError(f"SSHplex: Configuration validation failed: {error_msg}") from e
+            raise ValueError(
+                f"SSHplex: Configuration validation failed: {error_msg}"
+            ) from e
         raise ValueError(f"SSHplex: Configuration validation failed: {e}") from e
 
 
@@ -405,5 +497,5 @@ def get_config_info() -> Dict[str, Any]:
         "default_config_exists": default_path.exists(),
         "template_path": str(template_path),
         "template_exists": template_path.exists(),
-        "config_dir_exists": default_path.parent.exists()
+        "config_dir_exists": default_path.parent.exists(),
     }

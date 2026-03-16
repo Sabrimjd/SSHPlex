@@ -2,7 +2,8 @@
 
 import asyncio
 import contextlib
-from datetime import datetime
+import subprocess
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, List, Optional, Set
 
@@ -25,7 +26,10 @@ from textual.widgets import (
 
 from ... import __version__
 from ..config import get_default_config_path, load_config
+from ..health import HealthStatus, check_host
+from ..history import HistoryManager
 from ..logger import get_logger
+from ..snippets import Snippet, SnippetManager
 from ..sot.base import Host
 from ..sot.factory import SoTFactory
 from ..utils.ssh_config import (
@@ -75,7 +79,11 @@ class LoadingScreen(ModalScreen[None]):
     }
     """
 
-    def __init__(self, message: str = "🔄 Refreshing Data Sources", status: str = "Initializing...") -> None:
+    def __init__(
+        self,
+        message: str = "🔄 Refreshing Data Sources",
+        status: str = "Initializing...",
+    ) -> None:
         super().__init__()
         self.message = message
         self.status = status
@@ -125,12 +133,115 @@ class HelpScreen(Screen):
 
     def compose(self) -> ComposeResult:
         from textual.widgets import Markdown
+
         with Vertical(id="help-dialog"):
             yield Markdown(self.help_text)
 
     def on_key(self, event: Any) -> None:
         """Close help screen on any key press."""
         self.dismiss()
+
+
+class SnippetPickerScreen(ModalScreen[Snippet | None]):
+    """Modal picker for command snippets."""
+
+    CSS = """
+    SnippetPickerScreen {
+        align: center middle;
+    }
+
+    #snippet-dialog {
+        width: 90%;
+        height: 80%;
+        border: thick $primary;
+        background: $surface;
+        layout: vertical;
+    }
+
+    #snippet-title {
+        height: 2;
+        text-align: center;
+        text-style: bold;
+    }
+
+    #snippet-table {
+        height: 1fr;
+        margin: 0 1;
+    }
+
+    #snippet-preview {
+        height: 3;
+        margin: 0 1 1 1;
+        color: $text-muted;
+    }
+    """
+
+    BINDINGS = [
+        Binding("enter", "select", "Select", show=True),
+        Binding("escape", "cancel", "Cancel", show=True),
+    ]
+
+    def __init__(self, snippets: list[Snippet], show_preview: bool = True) -> None:
+        super().__init__()
+        self.snippets = snippets
+        self.show_preview = show_preview
+        self.table: Optional[DataTable] = None
+        self.preview: Optional[Static] = None
+
+    def compose(self) -> ComposeResult:
+        with Container(id="snippet-dialog"):
+            yield Static("Snippet Picker", id="snippet-title")
+            yield DataTable(id="snippet-table", cursor_type="row")
+            yield Static("", id="snippet-preview")
+
+    def on_mount(self) -> None:
+        self.table = self.query_one("#snippet-table", DataTable)
+        self.preview = self.query_one("#snippet-preview", Static)
+
+        self.table.add_column("Name", width=24)
+        self.table.add_column("Description", width=38)
+        self.table.add_column("Tags", width=28)
+
+        for idx, snippet in enumerate(self.snippets):
+            self.table.add_row(
+                snippet.name,
+                snippet.description,
+                ", ".join(snippet.tags),
+                key=str(idx),
+            )
+
+        if self.snippets:
+            self._update_preview(0)
+        self.table.focus()
+
+    def _update_preview(self, row: int) -> None:
+        if not self.preview:
+            return
+        if row < 0 or row >= len(self.snippets):
+            self.preview.update("")
+            return
+
+        snippet = self.snippets[row]
+        if self.show_preview:
+            self.preview.update(f"Preview: {snippet.command}")
+        else:
+            self.preview.update(f"Selected: {snippet.name}")
+
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        self._update_preview(event.cursor_row)
+
+    def action_select(self) -> None:
+        if not self.table:
+            self.dismiss(None)
+            return
+        row = self.table.cursor_row
+        if row < 0 or row >= len(self.snippets):
+            self.dismiss(None)
+            return
+        self.dismiss(self.snippets[row])
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
 
 class HostSelector(App):
@@ -233,13 +344,18 @@ class HostSelector(App):
         Binding("enter", "connect_selected", "Connect", show=True),
         Binding("/", "start_search", "Search", show=True),
         Binding("s", "show_sessions", "Sessions", show=True),
+        Binding("S", "show_snippets", "Snippets", show=True),
         Binding("p", "toggle_panes", "Panes/Tabs", show=True),
         Binding("b", "toggle_broadcast", "Broadcast", show=True),
         Binding("r", "refresh_hosts", "Refresh", show=True),
+        Binding("H", "check_health", "Health", show=True),
         Binding("escape", "focus_table", "Focus Table", show=False),
         Binding("h", "show_help", "Help", show=True),
         Binding("q", "quit", "Quit", show=True),
         Binding("c", "copy_select", "Copy", show=True),
+        Binding("f", "toggle_favorite", "Favorite", show=True),
+        Binding("v", "toggle_favorites_filter", "Fav Filter", show=True),
+        Binding("n", "toggle_recent_filter", "Recent", show=True),
         Binding("e", "edit_config", "Config", show=True),
         Binding("o", "show_host_ssh", "SSH View", show=True),
         Binding("l", "toggle_log_panel", "Logs", show=True),
@@ -248,7 +364,9 @@ class HostSelector(App):
     selected_hosts: reactive[Set[str]] = reactive(set())
     search_filter: reactive[str] = reactive("")
     use_panes: reactive[bool] = reactive(True)  # True for panes, False for tabs
-    use_broadcast: reactive[bool] = reactive(False)  # True for broadcast enabled, False for disabled
+    use_broadcast: reactive[bool] = reactive(
+        False
+    )  # True for broadcast enabled, False for disabled
 
     def __init__(self, config: Any, config_path: str = "") -> None:
         """Initialize the host selector.
@@ -275,6 +393,15 @@ class HostSelector(App):
         self.native_sessions_created_count = 0
         self._log_max_lines = 1000
         self._host_load_lock = asyncio.Lock()
+        config_dir = (
+            Path(config_path).expanduser().parent
+            if config_path
+            else Path.home() / ".config" / "sshplex"
+        )
+        self.snippet_manager = SnippetManager(config_dir)
+        self.history_manager = HistoryManager(config_dir)
+        self.filter_mode = "all"
+        self.health_cache: dict[str, tuple[HealthStatus, datetime]] = {}
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -303,7 +430,9 @@ class HostSelector(App):
 
     def on_mount(self) -> None:
         """Initialize the UI and load hosts."""
-        configured_theme = str(getattr(self.config.ui, "theme", "textual-dark") or "textual-dark")
+        configured_theme = str(
+            getattr(self.config.ui, "theme", "textual-dark") or "textual-dark"
+        )
         if configured_theme in self.available_themes:
             self.theme = configured_theme
 
@@ -324,6 +453,9 @@ class HostSelector(App):
         # Focus on the table by default
         if self.table:
             self.table.focus()
+
+        with contextlib.suppress(Exception):
+            self.snippet_manager.ensure_snippets_file()
 
         # Load hosts from SoT providers
         self.run_worker(self.load_hosts(), name="initial_load")
@@ -346,7 +478,11 @@ class HostSelector(App):
 
     def _persist_theme_setting(self, theme: str) -> None:
         """Write current theme to active config file."""
-        config_path = Path(self.config_path).expanduser() if self.config_path else get_default_config_path()
+        config_path = (
+            Path(self.config_path).expanduser()
+            if self.config_path
+            else get_default_config_path()
+        )
         try:
             with open(config_path) as f:
                 config_data = yaml.safe_load(f) or {}
@@ -370,19 +506,80 @@ class HostSelector(App):
     def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
         """Add SSHplex commands to command palette while keeping built-ins."""
         yield from super().get_system_commands(screen)
-        yield SystemCommand("Connect Selected", "Connect to selected hosts", self.action_connect_selected)
-        yield SystemCommand("Refresh Hosts", "Sync git sources and reload hosts", self.action_refresh_hosts)
-        yield SystemCommand("Sessions", "Open session manager", self.action_show_sessions)
-        yield SystemCommand("Settings", "Open configuration editor", self.action_edit_config)
-        yield SystemCommand("Reload Config", "Reload config from disk", lambda: self.run_worker(self._reload_config_runtime(), name="cmd_reload_config"))
-        yield SystemCommand("Toggle Panes/Tabs", "Switch connection mode", self.action_toggle_panes)
-        yield SystemCommand("Toggle Broadcast", "Toggle broadcast mode", self.action_toggle_broadcast)
-        yield SystemCommand("Toggle Log Panel", "Show or hide the log panel", self.action_toggle_log_panel)
-        yield SystemCommand("Clear Logs", "Clear in-app log panel", self.action_clear_logs)
-        yield SystemCommand("Show Host SSH", "Show resolved SSH values for current host", self.action_show_host_ssh)
+        yield SystemCommand(
+            "Connect Selected",
+            "Connect to selected hosts",
+            self.action_connect_selected,
+        )
+        yield SystemCommand(
+            "Refresh Hosts",
+            "Sync git sources and reload hosts",
+            self.action_refresh_hosts,
+        )
+        yield SystemCommand(
+            "Snippets",
+            "Pick and send a command snippet",
+            self.action_show_snippets,
+        )
+        yield SystemCommand(
+            "Health Check",
+            "Check host reachability",
+            self.action_check_health,
+        )
+        yield SystemCommand(
+            "Sessions", "Open session manager", self.action_show_sessions
+        )
+        yield SystemCommand(
+            "Settings", "Open configuration editor", self.action_edit_config
+        )
+        yield SystemCommand(
+            "Reload Config",
+            "Reload config from disk",
+            lambda: self.run_worker(
+                self._reload_config_runtime(), name="cmd_reload_config"
+            ),
+        )
+        yield SystemCommand(
+            "Toggle Panes/Tabs", "Switch connection mode", self.action_toggle_panes
+        )
+        yield SystemCommand(
+            "Toggle Broadcast", "Toggle broadcast mode", self.action_toggle_broadcast
+        )
+        yield SystemCommand(
+            "Toggle Log Panel",
+            "Show or hide the log panel",
+            self.action_toggle_log_panel,
+        )
+        yield SystemCommand(
+            "Clear Logs", "Clear in-app log panel", self.action_clear_logs
+        )
+        yield SystemCommand(
+            "Show Host SSH",
+            "Show resolved SSH values for current host",
+            self.action_show_host_ssh,
+        )
+        yield SystemCommand(
+            "Toggle Favorite",
+            "Mark/unmark current host as favorite",
+            self.action_toggle_favorite,
+        )
+        yield SystemCommand(
+            "Toggle Favorites Filter",
+            "Filter to favorites",
+            self.action_toggle_favorites_filter,
+        )
+        yield SystemCommand(
+            "Toggle Recent Filter",
+            "Filter to recent connections",
+            self.action_toggle_recent_filter,
+        )
         yield SystemCommand("Search", "Focus search input", self.action_start_search)
         yield SystemCommand("Help", "Show keyboard shortcuts", self.action_show_help)
-        yield SystemCommand("Copy Selection", "Copy selected hosts to clipboard", self.action_copy_select)
+        yield SystemCommand(
+            "Copy Selection",
+            "Copy selected hosts to clipboard",
+            self.action_copy_select,
+        )
 
     def setup_table(self) -> None:
         """Setup the data table columns with responsive widths."""
@@ -393,8 +590,18 @@ class HostSelector(App):
         self.table.add_column("✓", width=3, key="checkbox")
 
         # Add configured columns with proportional widths
-        for column in self.config.ui.table_columns:
+        for column in self._table_columns():
             self.table.add_column(column, width=None, key=column)
+
+    def _table_columns(self) -> list[str]:
+        """Return active table columns with feature-driven additions."""
+        columns = list(self.config.ui.table_columns)
+        if (
+            bool(getattr(self.config.health, "enabled", True))
+            and "status" not in columns
+        ):
+            columns.append("status")
+        return columns
 
     def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
         col = event.column_key.value
@@ -403,12 +610,15 @@ class HostSelector(App):
         self.sort_reverse = not self.sort_reverse
         hosts_to_display = self.get_hosts_to_display()
         hosts_to_display.sort(
-            key=lambda r: getattr(r, col, ""),
-            reverse=self.sort_reverse
+            key=lambda r: getattr(r, col, ""), reverse=self.sort_reverse
         )
         self.populate_table(hosts_to_display)
 
-    def show_loading_screen(self, message: str = "🔄 Refreshing Data Sources", status: str = "Initializing...") -> None:
+    def show_loading_screen(
+        self,
+        message: str = "🔄 Refreshing Data Sources",
+        status: str = "Initializing...",
+    ) -> None:
         """Show the loading screen modal."""
         if self.loading_screen is not None:
             self.hide_loading_screen()
@@ -432,7 +642,7 @@ class HostSelector(App):
         try:
             cache_info = self.sot_factory.get_cache_info()
             if cache_info:
-                age_hours = cache_info.get('age_hours', 0)
+                age_hours = cache_info.get("age_hours", 0)
                 if age_hours < 1:
                     age_minutes = int(age_hours * 60)
                     cache_text = f"Cache: {age_minutes}m"
@@ -443,7 +653,7 @@ class HostSelector(App):
                     cache_text = f"Cache: {age_days}d"
 
                 # Add TTL info
-                ttl_hours = getattr(self.config.cache, 'ttl_hours', 24)
+                ttl_hours = getattr(self.config.cache, "ttl_hours", 24)
                 cache_text += f" (TTL: {ttl_hours}h)"
             else:
                 cache_text = "Cache: None"
@@ -467,7 +677,9 @@ class HostSelector(App):
                 self.loading_screen.update_status(status)
             except (AttributeError, RuntimeError) as e:
                 # Widget may not be mounted yet - log but don't crash
-                self.log_message(f"Warning: Could not update loading status: {e}", level="warning")
+                self.log_message(
+                    f"Warning: Could not update loading status: {e}", level="warning"
+                )
 
     async def load_hosts(self, force_refresh: bool = False) -> None:
         """Load hosts from all configured SoT providers with single-flight protection."""
@@ -495,9 +707,13 @@ class HostSelector(App):
         # Show loading screen for refresh operations or initial load without cache
         if show_loading:
             if force_refresh:
-                self.show_loading_screen("🔄 Refreshing Data Sources", "Initializing providers...")
+                self.show_loading_screen(
+                    "🔄 Refreshing Data Sources", "Initializing providers..."
+                )
             else:
-                self.show_loading_screen("📡 Loading Data Sources", "Initializing providers...")
+                self.show_loading_screen(
+                    "📡 Loading Data Sources", "Initializing providers..."
+                )
             await asyncio.sleep(0.2)  # Give the modal time to mount properly
 
         if force_refresh:
@@ -519,8 +735,10 @@ class HostSelector(App):
             if not force_refresh:
                 cache_info = self.sot_factory.get_cache_info()
                 if cache_info:
-                    cache_age = cache_info.get('age_hours', 0)
-                    self.log_message(f"Found cache with {cache_info.get('host_count', 0)} hosts (age: {cache_age:.1f} hours)")
+                    cache_age = cache_info.get("age_hours", 0)
+                    self.log_message(
+                        f"Found cache with {cache_info.get('host_count', 0)} hosts (age: {cache_age:.1f} hours)"
+                    )
 
             # Initialize all providers (needed for refresh even if cache exists)
             if show_loading:
@@ -528,14 +746,18 @@ class HostSelector(App):
                 await asyncio.sleep(0.1)  # Allow UI to update
 
             if not self.sot_factory.initialize_providers():
-                self.log_message("ERROR: Failed to initialize any SoT providers", level="error")
+                self.log_message(
+                    "ERROR: Failed to initialize any SoT providers", level="error"
+                )
                 self.update_status("Error: SoT provider initialization failed")
                 if show_loading:
                     self.hide_loading_screen()
                 return
 
-            provider_names = ', '.join(self.sot_factory.get_provider_names())
-            self.log_message(f"Successfully initialized {self.sot_factory.get_provider_count()} provider(s): {provider_names}")
+            provider_names = ", ".join(self.sot_factory.get_provider_names())
+            self.log_message(
+                f"Successfully initialized {self.sot_factory.get_provider_count()} provider(s): {provider_names}"
+            )
 
             # Get hosts (with caching support) - use parallel fetching for better performance
             if show_loading:
@@ -546,11 +768,15 @@ class HostSelector(App):
                 await asyncio.sleep(0.1)  # Allow UI to update
 
             # Use parallel fetching for better performance with multiple providers
-            self.hosts = self.sot_factory.get_all_hosts_parallel(force_refresh=force_refresh)
+            self.hosts = self.sot_factory.get_all_hosts_parallel(
+                force_refresh=force_refresh
+            )
             self.filtered_hosts = self.hosts.copy()  # Initialize filtered hosts
 
             if not self.hosts:
-                self.log_message("WARNING: No hosts found matching filters", level="warning")
+                self.log_message(
+                    "WARNING: No hosts found matching filters", level="warning"
+                )
                 self.update_status("No hosts found")
                 if show_loading:
                     self.hide_loading_screen()
@@ -563,8 +789,12 @@ class HostSelector(App):
 
             self.populate_table(self.get_hosts_to_display())
 
-            source_msg = "fresh data from providers" if force_refresh else "cache/providers"
-            self.log_message(f"Loaded {len(self.hosts)} hosts successfully from {source_msg}")
+            source_msg = (
+                "fresh data from providers" if force_refresh else "cache/providers"
+            )
+            self.log_message(
+                f"Loaded {len(self.hosts)} hosts successfully from {source_msg}"
+            )
             self.update_status_with_mode()
             self.update_cache_display()
 
@@ -579,8 +809,26 @@ class HostSelector(App):
                 self.hide_loading_screen()
 
     def get_hosts_to_display(self) -> List[Host]:
-        """Return filtered hosts if search is active, otherwise all hosts."""
-        return self.filtered_hosts if self.search_filter else self.hosts
+        """Return hosts matching active search/history filters."""
+        hosts = self.filtered_hosts if self.search_filter else self.hosts
+
+        if self.filter_mode == "favorites":
+            favorite_keys = {
+                self._host_key_from_parts(record.name, record.ip)
+                for record in self.history_manager.get_favorites()
+            }
+            return [host for host in hosts if self._host_key(host) in favorite_keys]
+
+        if self.filter_mode == "recent":
+            recent_keys = {
+                self._host_key_from_parts(record.name, record.ip)
+                for record in self.history_manager.get_recent(
+                    limit=int(getattr(self.config.history, "max_recent", 20))
+                )
+            }
+            return [host for host in hosts if self._host_key(host) in recent_keys]
+
+        return hosts
 
     def populate_table(self, hosts_to_display: List[Host]) -> None:
         """Populate the table with host data."""
@@ -600,10 +848,12 @@ class HostSelector(App):
             # Use colors for better visual feedback
             host_key = self._host_key(host)
             is_selected = host_key in self.selected_hosts
-            row_data = ["[green]✓[/green]" if is_selected else "[dim] [/dim]"]  # Checkbox column
+            row_data = [
+                "[green]✓[/green]" if is_selected else "[dim] [/dim]"
+            ]  # Checkbox column
 
             # Highlight selected hosts with color
-            for column in self.config.ui.table_columns:
+            for column in self._table_columns():
                 value = self._get_column_value(host, column)
                 if is_selected:
                     # Highlight selected hosts
@@ -623,6 +873,11 @@ class HostSelector(App):
     def _host_key(host: Host) -> str:
         """Return stable host identity key for selection and row mapping."""
         return f"{host.name}|{host.ip}"
+
+    @staticmethod
+    def _host_key_from_parts(name: str, ip: str) -> str:
+        """Return stable host identity key from name/ip parts."""
+        return f"{name}|{ip}"
 
     def _current_cursor_host(self) -> Optional[Host]:
         """Get host currently under cursor in rendered table."""
@@ -658,6 +913,22 @@ class HostSelector(App):
     def _get_column_value(self, host: Host, column: str) -> str:
         """Get display value for a table column from host attributes/metadata."""
         key = self._normalize_column_name(str(column).strip())
+        if key == "name" and bool(getattr(self.config.history, "enabled", True)):
+            name_value = str(getattr(host, "name", ""))
+            if self.history_manager.is_favorite(host.name, host.ip):
+                return f"★ {name_value}"
+            return name_value
+
+        if key == "status":
+            cached = self.health_cache.get(self._host_key(host))
+            if cached:
+                status = cached[0]
+                if status == HealthStatus.HEALTHY:
+                    return "healthy"
+                if status == HealthStatus.UNHEALTHY:
+                    return "unhealthy"
+                return "unknown"
+
         value = getattr(host, key, None)
         if value in (None, "") and isinstance(getattr(host, "metadata", None), dict):
             value = host.metadata.get(key)
@@ -674,7 +945,7 @@ class HostSelector(App):
     def action_copy_select(self) -> None:
 
         hosts = self.get_hosts_to_display()
-        columns = self.config.ui.table_columns
+        columns = self._table_columns()
 
         # Build raw table (list of lists)
         table = []
@@ -688,24 +959,19 @@ class HostSelector(App):
             table.append(row)
 
         # Compute max width for each column
-        col_widths = [
-            max(len(row[i]) for row in table)
-            for i in range(len(columns))
-        ]
+        col_widths = [max(len(row[i]) for row in table) for i in range(len(columns))]
 
         # Build aligned lines
         lines = []
         for row in table:
             line = "  ".join(  # two spaces between columns
-                row[i].ljust(col_widths[i])
-                for i in range(len(columns))
+                row[i].ljust(col_widths[i]) for i in range(len(columns))
             )
             lines.append(line)
 
         # Final clipboard text
         text = "\n".join(lines)
         pyperclip.copy(text)
-
 
     def action_toggle_select(self) -> None:
         """Toggle selection of current row."""
@@ -766,28 +1032,43 @@ class HostSelector(App):
             return
 
         if self.connect_in_progress:
-            self.log_message("Connection already in progress, please wait...", level="warning")
+            self.log_message(
+                "Connection already in progress, please wait...", level="warning"
+            )
             return
 
         if not self.selected_hosts:
             self.log_message("No hosts selected for connection", level="warning")
             return
 
-        selected_host_objects = [h for h in self.hosts if self._host_key(h) in self.selected_hosts]
+        selected_host_objects = [
+            h for h in self.hosts if self._host_key(h) in self.selected_hosts
+        ]
         if not selected_host_objects:
             self.log_message("No hosts found matching selection", level="warning")
             return
 
         mode = "Panes" if self.use_panes else "Tabs"
         broadcast = "ON" if self.use_broadcast else "OFF"
-        self.log_message(f"Connecting to {len(selected_host_objects)} hosts in {mode} mode, Broadcast {broadcast}")
+        self.log_message(
+            f"Connecting to {len(selected_host_objects)} hosts in {mode} mode, Broadcast {broadcast}"
+        )
 
         for host in selected_host_objects:
             self.log_message(f"  - {host.name} ({host.ip})")
 
+        if bool(getattr(self.config.history, "enabled", True)):
+            max_recent = int(getattr(self.config.history, "max_recent", 20))
+            for host in selected_host_objects:
+                self.history_manager.add_recent(
+                    host.name, host.ip, max_recent=max_recent
+                )
+
         backend = getattr(self.config.tmux, "backend", "tmux")
         if backend == "iterm2-native":
-            self.log_message("Starting iTerm2 native session (staying in SSHplex TUI)...")
+            self.log_message(
+                "Starting iTerm2 native session (staying in SSHplex TUI)..."
+            )
             self.connect_in_progress = True
             self.update_status_with_mode()
             self.run_worker(
@@ -799,7 +1080,9 @@ class HostSelector(App):
         # Exit the TUI and return selected hosts for connection by main.py
         self.exit(selected_host_objects)
 
-    async def _connect_selected_iterm2_native(self, selected_host_objects: List[Host]) -> None:
+    async def _connect_selected_iterm2_native(
+        self, selected_host_objects: List[Host]
+    ) -> None:
         """Create iTerm2 native sessions without exiting host selector."""
 
         def _connect() -> Optional[str]:
@@ -833,7 +1116,9 @@ class HostSelector(App):
                     level="info",
                 )
             else:
-                self.log_message("Failed to create iTerm2 native session", level="error")
+                self.log_message(
+                    "Failed to create iTerm2 native session", level="error"
+                )
         except Exception as e:
             self.log_message(f"iTerm2 native connection failed: {e}", level="error")
         finally:
@@ -843,10 +1128,14 @@ class HostSelector(App):
     def action_show_sessions(self) -> None:
         """Show the tmux session manager modal."""
         backend = getattr(self.config.tmux, "backend", "tmux")
-        control_with_iterm2 = bool(getattr(self.config.tmux, "control_with_iterm2", False))
+        control_with_iterm2 = bool(
+            getattr(self.config.tmux, "control_with_iterm2", False)
+        )
         if backend == "iterm2-native":
             self.log_message("Opening iTerm2 native session manager...")
-            self.push_screen(ITerm2SessionManager(self.config, self.latest_native_session_name))
+            self.push_screen(
+                ITerm2SessionManager(self.config, self.latest_native_session_name)
+            )
             return
 
         if control_with_iterm2:
@@ -859,15 +1148,152 @@ class HostSelector(App):
         self.log_message("Opening tmux session manager...")
         self.push_screen(TmuxSessionManager(self.config))
 
+    def action_show_snippets(self) -> None:
+        """Open snippet picker and dispatch selected command."""
+        if not bool(getattr(self.config.snippets, "enabled", True)):
+            self.log_message("Snippets feature is disabled in config", level="warning")
+            return
+
+        snippets = self.snippet_manager.load_snippets()
+        if not snippets:
+            self.log_message("No snippets available", level="warning")
+            return
+
+        picker = SnippetPickerScreen(
+            snippets=snippets,
+            show_preview=bool(getattr(self.config.snippets, "show_preview", True)),
+        )
+        self.push_screen(picker, callback=self._on_snippet_selected)
+
+    def _on_snippet_selected(self, snippet: Snippet | None) -> None:
+        """Handle snippet picker selection callback."""
+        if snippet is None:
+            return
+        self._dispatch_snippet_command(snippet)
+
+    def _dispatch_snippet_command(self, snippet: Snippet) -> None:
+        """Send snippet command to matching tmux sessions."""
+        if bool(getattr(self.config.snippets, "show_preview", True)):
+            self.log_message(f"Snippet preview: {snippet.command}")
+
+        if not self.use_broadcast:
+            self.log_message(
+                "Broadcast is OFF; enable broadcast to send snippets to all panes",
+                level="warning",
+            )
+            self.notify(f"Snippet selected: {snippet.name}", timeout=3)
+            return
+
+        try:
+            prefix = str(
+                getattr(self.config.sshplex, "session_prefix", "sshplex") or "sshplex"
+            )
+            target = f"{prefix}*"
+            subprocess.run(
+                ["tmux", "send-keys", "-t", target, snippet.command, "C-m"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.log_message(f"Snippet sent: {snippet.name}")
+            self.notify(f"Sent snippet: {snippet.name}", title="Snippets", timeout=3)
+        except Exception as exc:
+            self.log_message(
+                f"Failed to send snippet '{snippet.name}': {exc}", level="error"
+            )
+            self.notify("Failed to send snippet", title="Snippets", timeout=3)
+
+    def action_check_health(self) -> None:
+        """Run async host health checks."""
+        if not bool(getattr(self.config.health, "enabled", True)):
+            self.log_message("Health checks are disabled in config", level="warning")
+            return
+        self.run_worker(self._check_health_async(), name="health_check")
+
+    async def _check_health_async(self) -> None:
+        """Check host health and update status column."""
+        timeout = float(getattr(self.config.health, "timeout", 2.0))
+        cache_ttl = timedelta(
+            minutes=int(getattr(self.config.health, "cache_ttl_minutes", 5))
+        )
+        now = datetime.now()
+
+        target_hosts = [
+            h
+            for h in self.get_hosts_to_display()
+            if self._host_key(h) in self.selected_hosts
+        ]
+        if not target_hosts:
+            target_hosts = self.get_hosts_to_display()
+
+        if not target_hosts:
+            self.log_message("No hosts available for health check", level="warning")
+            return
+
+        checked = 0
+        for host in target_hosts:
+            key = self._host_key(host)
+            cached = self.health_cache.get(key)
+            if cached and (now - cached[1]) < cache_ttl:
+                continue
+
+            target = host.ip if host.ip else host.name
+            status = await check_host(
+                target, port=int(getattr(self.config.ssh, "port", 22)), timeout=timeout
+            )
+            self.health_cache[key] = (status, datetime.now())
+            checked += 1
+            self.update_status(f"Health check: {checked}/{len(target_hosts)}")
+
+        self.populate_table(self.get_hosts_to_display())
+        self.update_status_with_mode()
+        self.log_message(f"Health check complete for {len(target_hosts)} host(s)")
+
+    def action_toggle_favorite(self) -> None:
+        """Toggle favorite flag for host under cursor."""
+        if not bool(getattr(self.config.history, "enabled", True)):
+            self.log_message("History feature is disabled in config", level="warning")
+            return
+
+        host = self._current_cursor_host()
+        if host is None:
+            self.log_message("No host selected", level="warning")
+            return
+
+        current = self.history_manager.is_favorite(host.name, host.ip)
+        new_value = not current
+        self.history_manager.set_favorite(host.name, host.ip, new_value)
+        icon = "★" if new_value else "☆"
+        self.log_message(
+            f"{icon} {'Favorited' if new_value else 'Unfavorited'}: {host.name}"
+        )
+        self.populate_table(self.get_hosts_to_display())
+
+    def action_toggle_favorites_filter(self) -> None:
+        """Toggle favorites-only view."""
+        self.filter_mode = "all" if self.filter_mode == "favorites" else "favorites"
+        self.populate_table(self.get_hosts_to_display())
+        self.update_status_with_mode()
+
+    def action_toggle_recent_filter(self) -> None:
+        """Toggle recent-hosts-only view."""
+        self.filter_mode = "all" if self.filter_mode == "recent" else "recent"
+        self.populate_table(self.get_hosts_to_display())
+        self.update_status_with_mode()
+
     def action_edit_config(self) -> None:
         """Open the configuration editor modal."""
         self.log_message("Opening configuration editor...")
 
         def _on_editor_close(saved: Optional[bool]) -> None:
             if saved:
-                self.run_worker(self._reload_config_runtime(), name="reload_config_runtime")
+                self.run_worker(
+                    self._reload_config_runtime(), name="reload_config_runtime"
+                )
 
-        editor = ConfigEditorScreen(self.config, self.config_path, runtime_hosts=self.hosts)
+        editor = ConfigEditorScreen(
+            self.config, self.config_path, runtime_hosts=self.hosts
+        )
         self.push_screen(editor, callback=_on_editor_close)
 
     async def _reload_config_runtime(self) -> None:
@@ -878,8 +1304,12 @@ class HostSelector(App):
             await self._apply_runtime_config(new_config)
             self.log_message("Configuration reloaded successfully")
             if old_sot != new_config.sot.model_dump():
-                self.log_message("SoT settings changed, refreshing hosts...", level="info")
-                self.run_worker(self.load_hosts(force_refresh=True), name="reload_refresh_hosts")
+                self.log_message(
+                    "SoT settings changed, refreshing hosts...", level="info"
+                )
+                self.run_worker(
+                    self.load_hosts(force_refresh=True), name="reload_refresh_hosts"
+                )
         except Exception as e:
             self.log_message(f"Failed to hot-reload config: {e}", level="error")
 
@@ -887,7 +1317,9 @@ class HostSelector(App):
         """Apply config changes to current TUI session."""
         old_show_log_panel = bool(getattr(self.config.ui, "show_log_panel", True))
         new_show_log_panel = bool(getattr(new_config.ui, "show_log_panel", True))
-        new_theme = str(getattr(new_config.ui, "theme", "textual-dark") or "textual-dark")
+        new_theme = str(
+            getattr(new_config.ui, "theme", "textual-dark") or "textual-dark"
+        )
 
         self.config = new_config
         self.use_panes = bool(getattr(self.config.tmux, "use_panes", True))
@@ -913,11 +1345,15 @@ class HostSelector(App):
                 await self.mount(log_panel, before=search_container)
                 self.log_widget = log_widget
             except Exception as e:
-                self.log_message(f"Could not enable log panel dynamically: {e}", level="warning")
+                self.log_message(
+                    f"Could not enable log panel dynamically: {e}", level="warning"
+                )
 
         try:
             panel = self.query_one("#log-panel", Container)
-            panel.styles.height = f"{int(getattr(self.config.ui, 'log_panel_height', 20))}%"
+            panel.styles.height = (
+                f"{int(getattr(self.config.ui, 'log_panel_height', 20))}%"
+            )
         except Exception:
             pass
 
@@ -943,14 +1379,18 @@ class HostSelector(App):
             factory = SoTFactory(self.config)
             return factory.sync_git_sources(force=True), ""
 
-        self.log_message("Refreshing sources (forcing git pull, then provider reload)...")
+        self.log_message(
+            "Refreshing sources (forcing git pull, then provider reload)..."
+        )
         self.update_status("Refreshing sources...")
 
         try:
             results, error = await asyncio.to_thread(_sync_blocking)
             if error:
                 self.log_message(f"Update failed: {error}", level="error")
-                self.notify(f"Sources update failed: {error}", title="Sources", timeout=4)
+                self.notify(
+                    f"Sources update failed: {error}", title="Sources", timeout=4
+                )
                 return
 
             if not results:
@@ -960,7 +1400,9 @@ class HostSelector(App):
                 for result in results:
                     message, level = self._format_git_sync_result(result)
                     self.log_message(message, level=level)
-                self.notify(self._summarize_git_sync(results), title="Sources", timeout=4)
+                self.notify(
+                    self._summarize_git_sync(results), title="Sources", timeout=4
+                )
         except Exception as e:
             self.log_message(f"Unexpected source update error: {e}", level="error")
             self.notify(f"Update error: {e}", title="Sources", timeout=4)
@@ -983,7 +1425,10 @@ class HostSelector(App):
 
         prefix = f"Git[{provider}]"
         if status == "updated":
-            return f"{prefix} updated {old_commit} -> {new_commit} ({changed_files} files)", "info"
+            return (
+                f"{prefix} updated {old_commit} -> {new_commit} ({changed_files} files)",
+                "info",
+            )
         if status == "up_to_date":
             return f"{prefix} up to date at {new_commit}", "info"
         if status == "skipped":
@@ -1021,7 +1466,9 @@ class HostSelector(App):
         except Exception:
             try:
                 log_panel = Container(id="log-panel")
-                log_widget = Log(id="log", auto_scroll=True, max_lines=self._log_max_lines)
+                log_widget = Log(
+                    id="log", auto_scroll=True, max_lines=self._log_max_lines
+                )
                 log_panel.mount(log_widget)
                 search_container = self.query_one("#search-container", Container)
                 self.mount(log_panel, before=search_container)
@@ -1038,18 +1485,34 @@ class HostSelector(App):
             self.log_message("No host selected", level="warning")
             return
 
-        alias = str(getattr(host, "ssh_alias", "") or host.metadata.get("ssh_alias", "")).strip()
-        user_override = str(getattr(host, "ssh_user", "") or host.metadata.get("ssh_user", "")).strip()
-        port_override = str(getattr(host, "ssh_port", "") or host.metadata.get("ssh_port", "")).strip()
-        key_override = str(getattr(host, "ssh_key_path", "") or host.metadata.get("ssh_key_path", "")).strip()
+        alias = str(
+            getattr(host, "ssh_alias", "") or host.metadata.get("ssh_alias", "")
+        ).strip()
+        user_override = str(
+            getattr(host, "ssh_user", "") or host.metadata.get("ssh_user", "")
+        ).strip()
+        port_override = str(
+            getattr(host, "ssh_port", "") or host.metadata.get("ssh_port", "")
+        ).strip()
+        key_override = str(
+            getattr(host, "ssh_key_path", "") or host.metadata.get("ssh_key_path", "")
+        ).strip()
 
         target = alias or host.ip or host.name
         resolved = resolve_ssh_effective_config(target)
 
         hostname = resolved.get("hostname", target) if resolved else target
-        user = user_override or resolved.get("user", "") or str(getattr(self.config.ssh, "username", ""))
+        user = (
+            user_override
+            or resolved.get("user", "")
+            or str(getattr(self.config.ssh, "username", ""))
+        )
         port = port_override or resolved.get("port", "22")
-        identity = key_override or resolved.get("identityfile", "") or str(getattr(self.config.ssh, "key_path", ""))
+        identity = (
+            key_override
+            or resolved.get("identityfile", "")
+            or str(getattr(self.config.ssh, "key_path", ""))
+        )
         identity_display = mask_sensitive(str(identity).split()[0]) if identity else "-"
         proxy_jump = resolved.get("proxyjump", "-")
         try:
@@ -1072,14 +1535,18 @@ class HostSelector(App):
         self.table.update_cell(row_key, "checkbox", checkbox)
 
         # Also update the row style for all columns
-        for column in self.config.ui.table_columns:
+        for column in self._table_columns():
             value = self.table.get_cell(row_key, column)
             if value:
                 if selected:
                     self.table.update_cell(row_key, column, f"[bold]{value}[/bold]")
                 else:
                     # Remove bold tags
-                    self.table.update_cell(row_key, column, value.replace("[bold]", "").replace("[/bold]", ""))
+                    self.table.update_cell(
+                        row_key,
+                        column,
+                        value.replace("[bold]", "").replace("[/bold]", ""),
+                    )
 
     def update_status_selection(self) -> None:
         """Update status bar with selection count and mode."""
@@ -1130,6 +1597,8 @@ class HostSelector(App):
 | Key | Action |
 |-----|--------|
 | `/` | Open search input |
+| `n` | Toggle recent-only filter |
+| `v` | Toggle favorites-only filter |
 | `r` | Sync git sources, then refresh hosts from providers |
 | `Escape` | Focus table / clear search |
 
@@ -1142,14 +1611,17 @@ class HostSelector(App):
 ## Other
 | Key | Action |
 |-----|--------|
-| `s` | {'iTerm2 tab manager' if (getattr(self.config.tmux, 'backend', 'tmux') == 'iterm2-native') else ('Session manager (disabled in iTerm2-CC)' if bool(getattr(self.config.tmux, 'control_with_iterm2', False)) else 'Session manager')} |
+| `s` | {"iTerm2 tab manager" if (getattr(self.config.tmux, "backend", "tmux") == "iterm2-native") else ("Session manager (disabled in iTerm2-CC)" if bool(getattr(self.config.tmux, "control_with_iterm2", False)) else "Session manager")} |
+| `S` | Open snippets picker and send command |
+| `H` | Run health checks and update status |
+| `f` | Toggle favorite on current host |
 | `c` | Copy table to clipboard |
 | `e` | Edit configuration |
 | `o` | Show SSH resolution |
 | `h` | Show this help |
 
 ## Current Settings
-- **Backend**: {getattr(self.config.tmux, 'backend', 'tmux')}{('/' + getattr(self.config.tmux, 'iterm2_native_target', 'current-window')) if getattr(self.config.tmux, 'backend', 'tmux') == 'iterm2-native' else ''}
+- **Backend**: {getattr(self.config.tmux, "backend", "tmux")}{("/" + getattr(self.config.tmux, "iterm2_native_target", "current-window")) if getattr(self.config.tmux, "backend", "tmux") == "iterm2-native" else ""}
 - **Mode**: {"Panes" if self.use_panes else "Tabs"}
 - **Broadcast**: {"ON" if self.use_broadcast else "OFF"}
 - **Hosts**: {len(self.hosts)} total
@@ -1169,7 +1641,9 @@ class HostSelector(App):
 
             # Focus on the search input
             self.search_input.focus()
-            self.log_message("Search mode activated - type to filter hosts, ESC to focus table")
+            self.log_message(
+                "Search mode activated - type to filter hosts, ESC to focus table"
+            )
 
     def action_focus_table(self) -> None:
         """Focus back on the table."""
@@ -1177,7 +1651,9 @@ class HostSelector(App):
             self.table.focus()
             # If search is active, we keep the filter but just change focus
             if self.search_filter:
-                self.log_message(f"Table focused - search filter '{self.search_filter}' still active")
+                self.log_message(
+                    f"Table focused - search filter '{self.search_filter}' still active"
+                )
             else:
                 self.log_message("Table focused")
 
@@ -1209,18 +1685,25 @@ class HostSelector(App):
             backend_display = "tmux"
 
         busy = " | Busy:connect" if self.connect_in_progress else ""
+        filter_suffix = ""
+        if self.filter_mode == "favorites":
+            filter_suffix = " | filter:favorites"
+        elif self.filter_mode == "recent":
+            filter_suffix = " | filter:recent"
         selected_count = len(self.selected_hosts)
-        total_hosts = len(self.filtered_hosts) if self.search_filter else len(self.hosts)
+        total_hosts = (
+            len(self.filtered_hosts) if self.search_filter else len(self.hosts)
+        )
         if self.search_filter:
             self.update_status(
                 f"sel {selected_count}/{total_hosts} (filter '{self.search_filter}') | "
                 f"{backend_display} | {mode} | bcast:{broadcast}"
-                f"{busy}"
+                f"{filter_suffix}{busy}"
             )
         else:
             self.update_status(
                 f"sel {selected_count}/{total_hosts} | {backend_display} | {mode} | bcast:{broadcast}"
-                f"{busy}"
+                f"{filter_suffix}{busy}"
             )
 
     def key_enter(self) -> None:
@@ -1261,10 +1744,13 @@ class HostSelector(App):
             return
 
         self.filtered_hosts = [
-            host for host in self.hosts
+            host
+            for host in self.hosts
             if any(
-                fnmatch.fnmatchcase(self._get_column_value(host, attr).lower(), term.lower())
-                for attr in self.config.ui.table_columns
+                fnmatch.fnmatchcase(
+                    self._get_column_value(host, attr).lower(), term.lower()
+                )
+                for attr in self._table_columns()
             )
         ]
 
@@ -1280,7 +1766,12 @@ class HostSelector(App):
             return
 
         # Check if Enter was pressed while DataTable has focus
-        if event.key == "enter" and hasattr(self, 'table') and self.table and self.table.has_focus:
+        if (
+            event.key == "enter"
+            and hasattr(self, "table")
+            and self.table
+            and self.table.has_focus
+        ):
             self.action_connect_selected()
             event.prevent_default()
             event.stop()
@@ -1299,6 +1790,8 @@ class HostSelector(App):
             # Focus back on the table when Enter is pressed in search
             self.table.focus()
             if self.search_filter:
-                self.log_message(f"Search complete - table focused with filter '{self.search_filter}'")
+                self.log_message(
+                    f"Search complete - table focused with filter '{self.search_filter}'"
+                )
             else:
                 self.log_message("Search complete - table focused")
