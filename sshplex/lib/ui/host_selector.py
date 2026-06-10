@@ -1172,7 +1172,7 @@ class HostSelector(App):
         self._dispatch_snippet_command(snippet)
 
     def _dispatch_snippet_command(self, snippet: Snippet) -> None:
-        """Send snippet command to matching tmux sessions."""
+        """Send snippet command to active sessions when supported."""
         if bool(getattr(self.config.snippets, "show_preview", True)):
             self.log_message(f"Snippet preview: {snippet.command}")
 
@@ -1182,6 +1182,16 @@ class HostSelector(App):
                 level="warning",
             )
             self.notify(f"Snippet selected: {snippet.name}", timeout=3)
+            return
+
+        backend = getattr(self.config.tmux, "backend", "tmux")
+        if backend == "iterm2-native":
+            self.log_message(
+                "Snippets are not available with the iTerm2 native backend yet; "
+                "use tmux backend or iTerm2's native broadcast input",
+                level="warning",
+            )
+            self.notify("Snippets unavailable in iTerm2 native", title="Snippets", timeout=3)
             return
 
         try:
@@ -1230,20 +1240,36 @@ class HostSelector(App):
             self.log_message("No hosts available for health check", level="warning")
             return
 
-        checked = 0
+        hosts_to_check = []
         for host in target_hosts:
             key = self._host_key(host)
             cached = self.health_cache.get(key)
             if cached and (now - cached[1]) < cache_ttl:
                 continue
 
+            hosts_to_check.append((host, key))
+
+        if not hosts_to_check:
+            self.populate_table(self.get_hosts_to_display())
+            self.update_status_with_mode()
+            self.log_message(f"Health check complete for {len(target_hosts)} host(s)")
+            return
+
+        async def check_one(host: Host, key: str) -> tuple[str, HealthStatus]:
             target = host.ip if host.ip else host.name
-            status = await check_host(
+            return key, await check_host(
                 target, port=int(getattr(self.config.ssh, "port", 22)), timeout=timeout
             )
+
+        for checked, result in enumerate(
+            asyncio.as_completed(
+                check_one(host, key) for host, key in hosts_to_check
+            ),
+            start=1,
+        ):
+            key, status = await result
             self.health_cache[key] = (status, datetime.now())
-            checked += 1
-            self.update_status(f"Health check: {checked}/{len(target_hosts)}")
+            self.update_status(f"Health check: {checked}/{len(hosts_to_check)}")
 
         self.populate_table(self.get_hosts_to_display())
         self.update_status_with_mode()
