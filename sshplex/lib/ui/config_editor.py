@@ -190,7 +190,9 @@ class TableColumnsPickerScreen(ModalScreen[list[str] | None]):
                     yield Grid(*checkboxes, classes="columns-picker-grid")
 
             with Horizontal(id="columns-picker-actions"):
-                yield Button("Detected", id="btn-columns-select-detected", variant="primary")
+                yield Button(
+                    "Detected", id="btn-columns-select-detected", variant="primary"
+                )
                 yield Button("All", id="btn-columns-select-all", variant="default")
                 yield Button("None", id="btn-columns-select-none", variant="default")
                 yield Button("Apply", id="btn-columns-apply", variant="success")
@@ -199,11 +201,17 @@ class TableColumnsPickerScreen(ModalScreen[list[str] | None]):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         btn_id = event.button.id or ""
         if btn_id == "btn-columns-select-detected":
-            detected = [col for col in self._detected_columns if col in self._checkbox_id_by_column]
+            detected = [
+                col
+                for col in self._detected_columns
+                if col in self._checkbox_id_by_column
+            ]
             if detected:
                 self._set_selected_columns(detected)
             else:
-                self.app.notify("No detected columns available", title="Columns", timeout=2)
+                self.app.notify(
+                    "No detected columns available", title="Columns", timeout=2
+                )
             return
         if btn_id == "btn-columns-select-all":
             self._set_selected_columns(self._ordered_columns)
@@ -571,7 +579,12 @@ class ConfigEditorScreen(ModalScreen[bool]):
     }
     """
 
-    def __init__(self, config: Config, config_path: str = "", runtime_hosts: List[Any] | None = None) -> None:
+    def __init__(
+        self,
+        config: Config,
+        config_path: str = "",
+        runtime_hosts: List[Any] | None = None,
+    ) -> None:
         super().__init__()
         self.config = config
         self.config_path = config_path
@@ -623,18 +636,33 @@ class ConfigEditorScreen(ModalScreen[bool]):
     def _build_table_columns_hint(self) -> str:
         """Build a user-friendly hint for available table columns."""
         common = [
-            "name", "ip", "cluster", "role", "tags", "status", "source", "site", "platform", "env",
-            "alias", "user", "port", "key_path",
+            "name",
+            "ip",
+            "cluster",
+            "role",
+            "tags",
+            "status",
+            "source",
+            "site",
+            "platform",
+            "env",
+            "alias",
+            "user",
+            "port",
+            "key_path",
         ]
         detected = self._detect_columns_from_cache_and_imports()
         if detected:
             sample = ", ".join(detected[:10])
             return (
-                "Use 'Choose Columns' for grouped picker. Common: " + ", ".join(common) +
-                f" | Detected from live/cache/imports: {sample}"
+                "Use 'Choose Columns' for grouped picker. Common: "
+                + ", ".join(common)
+                + f" | Detected from live/cache/imports: {sample}"
             )
 
-        return "Use 'Choose Columns' for grouped picker. Common columns: " + ", ".join(common)
+        return "Use 'Choose Columns' for grouped picker. Common columns: " + ", ".join(
+            common
+        )
 
     @staticmethod
     def _parse_columns_csv(columns_value: str) -> List[str]:
@@ -650,13 +678,42 @@ class ConfigEditorScreen(ModalScreen[bool]):
     def _get_available_table_columns(self) -> List[str]:
         """Build the available column list for picker from presets/current/detected."""
         preferred = [
-            "name", "ip", "cluster", "role", "tags", "status", "source", "site", "platform", "env",
-            "description", "alias", "user", "port", "key_path",
-            "ansible_group", "ansible_user", "ansible_port", "ansible_connection", "inventory_file",
-            "git_repo", "git_branch", "git_commit", "git_file", "git_inventory_format",
-            "netbox_site", "netbox_tenant", "netbox_device_role", "netbox_device_type", "netbox_platform",
-            "consul_service", "consul_node", "consul_dc", "consul_tags",
-            "provider", "sources",
+            "name",
+            "ip",
+            "cluster",
+            "role",
+            "tags",
+            "status",
+            "source",
+            "site",
+            "platform",
+            "env",
+            "description",
+            "alias",
+            "user",
+            "port",
+            "key_path",
+            "ansible_group",
+            "ansible_user",
+            "ansible_port",
+            "ansible_connection",
+            "inventory_file",
+            "git_repo",
+            "git_branch",
+            "git_commit",
+            "git_file",
+            "git_inventory_format",
+            "netbox_site",
+            "netbox_tenant",
+            "netbox_device_role",
+            "netbox_device_type",
+            "netbox_platform",
+            "consul_service",
+            "consul_node",
+            "consul_dc",
+            "consul_tags",
+            "provider",
+            "sources",
         ]
 
         available: List[str] = []
@@ -687,15 +744,46 @@ class ConfigEditorScreen(ModalScreen[bool]):
             "Consul SoT",
             "Other",
         ]
-        categorized: Dict[str, List[str]] = {category: [] for category in category_order}
+        categorized: Dict[str, List[str]] = {
+            category: [] for category in category_order
+        }
 
         common = {
-            "name", "ip", "cluster", "role", "tags", "status", "site", "platform", "env", "description"
+            "name",
+            "ip",
+            "cluster",
+            "role",
+            "tags",
+            "status",
+            "site",
+            "platform",
+            "env",
+            "description",
         }
         origin = {"source", "provider", "sources", "inventory_file"}
-        static_ssh = {"alias", "user", "port", "key_path", "ssh_alias", "ssh_user", "ssh_port", "ssh_key_path"}
-        ansible_fixed = {"ansible_group", "ansible_user", "ansible_port", "ansible_connection"}
-        git_fixed = {"git_repo", "git_branch", "git_commit", "git_file", "git_inventory_format"}
+        static_ssh = {
+            "alias",
+            "user",
+            "port",
+            "key_path",
+            "ssh_alias",
+            "ssh_user",
+            "ssh_port",
+            "ssh_key_path",
+        }
+        ansible_fixed = {
+            "ansible_group",
+            "ansible_user",
+            "ansible_port",
+            "ansible_connection",
+        }
+        git_fixed = {
+            "git_repo",
+            "git_branch",
+            "git_commit",
+            "git_file",
+            "git_inventory_format",
+        }
 
         for column in columns:
             c = str(column).strip()
@@ -763,14 +851,28 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
         def _add_keys_from_host_like(item: Dict[str, Any]) -> None:
             for base_key in [
-                "name", "ip", "cluster", "role", "tags", "provider", "status",
-                "site", "platform", "env", "ssh_alias", "ssh_user", "ssh_port", "ssh_key_path",
+                "name",
+                "ip",
+                "cluster",
+                "role",
+                "tags",
+                "provider",
+                "status",
+                "site",
+                "platform",
+                "env",
+                "ssh_alias",
+                "ssh_user",
+                "ssh_port",
+                "ssh_key_path",
             ]:
                 if base_key in item and item.get(base_key) not in (None, "", []):
                     keys.add(base_key)
             metadata = item.get("metadata", {})
             if isinstance(metadata, dict):
-                keys.update(str(k) for k, v in metadata.items() if v not in (None, "", []))
+                keys.update(
+                    str(k) for k, v in metadata.items() if v not in (None, "", [])
+                )
 
         # 0) Live host objects from currently loaded TUI table
         for host in self._runtime_hosts:
@@ -781,8 +883,18 @@ class ConfigEditorScreen(ModalScreen[bool]):
                     "metadata": getattr(host, "metadata", {}) or {},
                 }
                 for key in [
-                    "cluster", "role", "tags", "provider", "status", "site", "platform", "env",
-                    "ssh_alias", "ssh_user", "ssh_port", "ssh_key_path",
+                    "cluster",
+                    "role",
+                    "tags",
+                    "provider",
+                    "status",
+                    "site",
+                    "platform",
+                    "env",
+                    "ssh_alias",
+                    "ssh_user",
+                    "ssh_port",
+                    "ssh_key_path",
                 ]:
                     value = getattr(host, key, None)
                     if value not in (None, "", []):
@@ -793,7 +905,9 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
         # 1) Cache metadata keys (runtime reality)
         candidate_cache_dirs = [
-            Path(str(getattr(self.config.cache, "cache_dir", "~/.cache/sshplex"))).expanduser(),
+            Path(
+                str(getattr(self.config.cache, "cache_dir", "~/.cache/sshplex"))
+            ).expanduser(),
             Path("~/.cache/sshplex").expanduser(),
             Path("~/cache/sshplex").expanduser(),
         ]
@@ -835,12 +949,22 @@ class ConfigEditorScreen(ModalScreen[bool]):
                     except Exception:
                         continue
                     row = {
-                        "name": self._get_input_value(f"import-{i}-host-{host_idx}-name"),
+                        "name": self._get_input_value(
+                            f"import-{i}-host-{host_idx}-name"
+                        ),
                         "ip": self._get_input_value(f"import-{i}-host-{host_idx}-ip"),
-                        "ssh_alias": self._get_input_value(f"import-{i}-host-{host_idx}-ssh_alias"),
-                        "ssh_user": self._get_input_value(f"import-{i}-host-{host_idx}-ssh_user"),
-                        "ssh_port": self._get_input_value(f"import-{i}-host-{host_idx}-ssh_port"),
-                        "ssh_key_path": self._get_input_value(f"import-{i}-host-{host_idx}-ssh_key_path"),
+                        "ssh_alias": self._get_input_value(
+                            f"import-{i}-host-{host_idx}-ssh_alias"
+                        ),
+                        "ssh_user": self._get_input_value(
+                            f"import-{i}-host-{host_idx}-ssh_user"
+                        ),
+                        "ssh_port": self._get_input_value(
+                            f"import-{i}-host-{host_idx}-ssh_port"
+                        ),
+                        "ssh_key_path": self._get_input_value(
+                            f"import-{i}-host-{host_idx}-ssh_key_path"
+                        ),
                     }
                     _add_keys_from_host_like(row)
         except Exception:
@@ -862,8 +986,20 @@ class ConfigEditorScreen(ModalScreen[bool]):
                 normalized.add(key)
 
         preferred = [
-            "name", "ip", "cluster", "role", "tags", "source", "status", "site", "platform", "env",
-            "alias", "user", "port", "key_path",
+            "name",
+            "ip",
+            "cluster",
+            "role",
+            "tags",
+            "source",
+            "status",
+            "site",
+            "platform",
+            "env",
+            "alias",
+            "user",
+            "port",
+            "key_path",
         ]
         ordered = [k for k in preferred if k in normalized]
         extras = sorted(k for k in normalized if k not in set(preferred))
@@ -922,13 +1058,29 @@ class ConfigEditorScreen(ModalScreen[bool]):
                                     ("atom-one-light", "atom-one-light"),
                                 ],
                                 value=self._safe_select_initial(
-                                    str(getattr(self.config.ui, "theme", "textual-dark")),
+                                    str(
+                                        getattr(self.config.ui, "theme", "textual-dark")
+                                    ),
                                     [
-                                        "textual-dark", "textual-light", "nord", "gruvbox", "catppuccin-mocha",
-                                        "dracula", "tokyo-night", "monokai", "flexoki", "catppuccin-latte",
-                                        "catppuccin-frappe", "catppuccin-macchiato", "solarized-light",
-                                        "solarized-dark", "rose-pine", "rose-pine-moon", "rose-pine-dawn",
-                                        "atom-one-dark", "atom-one-light",
+                                        "textual-dark",
+                                        "textual-light",
+                                        "nord",
+                                        "gruvbox",
+                                        "catppuccin-mocha",
+                                        "dracula",
+                                        "tokyo-night",
+                                        "monokai",
+                                        "flexoki",
+                                        "catppuccin-latte",
+                                        "catppuccin-frappe",
+                                        "catppuccin-macchiato",
+                                        "solarized-light",
+                                        "solarized-dark",
+                                        "rose-pine",
+                                        "rose-pine-moon",
+                                        "rose-pine-dawn",
+                                        "atom-one-dark",
+                                        "atom-one-light",
                                     ],
                                     "textual-dark",
                                 ),
@@ -970,9 +1122,19 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         self._table_columns_hint,
                     )
                     with Horizontal(classes="list-buttons"):
-                        yield Button("Choose Columns", id="btn-columns-picker", variant="primary")
-                        yield Button("Detect from Data", id="btn-detect-columns", variant="primary")
-                        yield Button("Apply Standard", id="btn-columns-standard", variant="default")
+                        yield Button(
+                            "Choose Columns", id="btn-columns-picker", variant="primary"
+                        )
+                        yield Button(
+                            "Detect from Data",
+                            id="btn-detect-columns",
+                            variant="primary",
+                        )
+                        yield Button(
+                            "Apply Standard",
+                            id="btn-columns-standard",
+                            variant="default",
+                        )
                     yield Static("Logging", classes="section-header")
                     yield _form_row(
                         _form_field(
@@ -984,7 +1146,16 @@ class ConfigEditorScreen(ModalScreen[bool]):
                             "cfg-logging-level",
                             "Level",
                             Select(
-                                [(v, v) for v in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]],
+                                [
+                                    (v, v)
+                                    for v in [
+                                        "DEBUG",
+                                        "INFO",
+                                        "WARNING",
+                                        "ERROR",
+                                        "CRITICAL",
+                                    ]
+                                ],
                                 value=self._safe_select_initial(
                                     str(getattr(self.config.logging, "level", "INFO")),
                                     ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
@@ -1116,8 +1287,13 @@ class ConfigEditorScreen(ModalScreen[bool]):
                             "cfg-mux-use_panes",
                             "Connection Mode",
                             Select(
-                                [("Panes (splits)", "panes"), ("Tabs (separate)", "tabs")],
-                                value="panes" if getattr(self.config.tmux, 'use_panes', True) else "tabs",
+                                [
+                                    ("Panes (splits)", "panes"),
+                                    ("Tabs (separate)", "tabs"),
+                                ],
+                                value="panes"
+                                if getattr(self.config.tmux, "use_panes", True)
+                                else "tabs",
                             ),
                             "Panes: split within tabs | Tabs: each host in separate tab",
                         ),
@@ -1127,10 +1303,25 @@ class ConfigEditorScreen(ModalScreen[bool]):
                             "cfg-mux-layout",
                             "Layout",
                             Select(
-                                [(v, v) for v in ["tiled", "even-horizontal", "even-vertical", "main-horizontal", "main-vertical"]],
+                                [
+                                    (v, v)
+                                    for v in [
+                                        "tiled",
+                                        "even-horizontal",
+                                        "even-vertical",
+                                        "main-horizontal",
+                                        "main-vertical",
+                                    ]
+                                ],
                                 value=self._safe_select_initial(
                                     str(getattr(self.config.tmux, "layout", "tiled")),
-                                    ["tiled", "even-horizontal", "even-vertical", "main-horizontal", "main-vertical"],
+                                    [
+                                        "tiled",
+                                        "even-horizontal",
+                                        "even-vertical",
+                                        "main-horizontal",
+                                        "main-vertical",
+                                    ],
                                     "tiled",
                                 ),
                             ),
@@ -1158,14 +1349,25 @@ class ConfigEditorScreen(ModalScreen[bool]):
                     yield _form_field(
                         "cfg-mux-register_history",
                         "Register SSHPlex Commands in Shell History",
-                        Switch(value=not bool(getattr(self.config.tmux, 'iterm2_native_hide_from_history', True))),
+                        Switch(
+                            value=not bool(
+                                getattr(
+                                    self.config.tmux,
+                                    "iterm2_native_hide_from_history",
+                                    True,
+                                )
+                            )
+                        ),
                         "iTerm2-native only. OFF means commands are hidden from history.",
                     )
                     yield Vertical(id="mux-backend-fields")
 
                 with TabPane("Sources", id="tab-sources"), VerticalScroll():
                     yield Static("Providers", classes="section-header")
-                    yield Static("Enable the data sources SSHplex should load.", classes="form-description")
+                    yield Static(
+                        "Enable the data sources SSHplex should load.",
+                        classes="form-description",
+                    )
                     with Horizontal(id="sources-providers"):
                         for provider in SUPPORTED_SOT_PROVIDER_TYPES:
                             yield Checkbox(
@@ -1180,8 +1382,62 @@ class ConfigEditorScreen(ModalScreen[bool]):
                     yield Static("Imports", classes="section-header")
                     yield Vertical(id="import-list", classes="dynamic-list")
 
+                with TabPane("Features", id="tab-features"), VerticalScroll():
+                    yield Static("Snippets", classes="section-header")
+                    yield _form_row(
+                        _form_field(
+                            "cfg-features-snippets-enabled",
+                            "Enabled",
+                            Switch(value=self.config.snippets.enabled),
+                        ),
+                        _form_field(
+                            "cfg-features-snippets-show_preview",
+                            "Show Preview",
+                            Switch(value=self.config.snippets.show_preview),
+                        ),
+                    )
+                    yield Static("Health", classes="section-header")
+                    yield _form_row(
+                        _form_field(
+                            "cfg-features-health-enabled",
+                            "Enabled",
+                            Switch(value=self.config.health.enabled),
+                        ),
+                        _form_field(
+                            "cfg-features-health-timeout",
+                            "Timeout (seconds)",
+                            Input(value=str(self.config.health.timeout)),
+                        ),
+                    )
+                    yield _form_field(
+                        "cfg-features-health-cache_ttl_minutes",
+                        "Cache TTL (minutes)",
+                        Input(value=str(self.config.health.cache_ttl_minutes)),
+                    )
+                    yield Static("History", classes="section-header")
+                    yield _form_row(
+                        _form_field(
+                            "cfg-features-history-enabled",
+                            "Enabled",
+                            Switch(value=self.config.history.enabled),
+                        ),
+                        _form_field(
+                            "cfg-features-history-max_recent",
+                            "Max Recent",
+                            Input(value=str(self.config.history.max_recent)),
+                        ),
+                    )
+                    yield _form_field(
+                        "cfg-features-history-remember_favorites",
+                        "Remember Favorites",
+                        Switch(value=self.config.history.remember_favorites),
+                    )
+
                 with TabPane("Config YAML", id="tab-yaml"), Vertical():
-                    yield Static("Edit on left, rich YAML highlight preview on right.", classes="form-description")
+                    yield Static(
+                        "Edit on left, rich YAML highlight preview on right.",
+                        classes="form-description",
+                    )
                     with Horizontal(id="yaml-editor-row"):
                         yield TextArea(
                             "",
@@ -1194,7 +1450,9 @@ class ConfigEditorScreen(ModalScreen[bool]):
                         with VerticalScroll(id="cfg-yaml-preview-wrap"):
                             yield Static(id="cfg-yaml-preview")
                     with Horizontal(classes="list-buttons"):
-                        yield Button("Reload File", id="btn-yaml-reload", variant="default")
+                        yield Button(
+                            "Reload File", id="btn-yaml-reload", variant="default"
+                        )
                         yield Button("Save YAML", id="btn-yaml-save", variant="primary")
 
             with Horizontal(id="editor-buttons"):
@@ -1235,7 +1493,9 @@ class ConfigEditorScreen(ModalScreen[bool]):
             "atom-one-dark": "vscode_dark",
             "atom-one-light": "github_light",
         }
-        app_theme = current_theme or str(getattr(self.app, "theme", "textual-dark") or "textual-dark")
+        app_theme = current_theme or str(
+            getattr(self.app, "theme", "textual-dark") or "textual-dark"
+        )
         syntax_theme = theme_map.get(app_theme, "monokai")
         self._yaml_syntax_theme = syntax_theme
         try:
@@ -1258,9 +1518,17 @@ class ConfigEditorScreen(ModalScreen[bool]):
             raw = "# Empty configuration"
 
         try:
-            syntax = Syntax(raw, "yaml", theme=self._yaml_syntax_theme, line_numbers=True, word_wrap=False)
+            syntax = Syntax(
+                raw,
+                "yaml",
+                theme=self._yaml_syntax_theme,
+                line_numbers=True,
+                word_wrap=False,
+            )
         except Exception:
-            syntax = Syntax(raw, "yaml", theme="monokai", line_numbers=True, word_wrap=False)
+            syntax = Syntax(
+                raw, "yaml", theme="monokai", line_numbers=True, word_wrap=False
+            )
         preview.update(syntax)
 
     def _refresh_mux_scroll(self) -> None:
@@ -1290,73 +1558,101 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
         if backend == "tmux":
             # tmux + iTerm2 -CC mode options
-            children.append(Static("iTerm2 Integration (macOS)", classes="section-header"))
-            iterm2_target = getattr(self.config.tmux, 'iterm2_attach_target', 'new-window')
-            if iterm2_target not in ('new-window', 'new-tab'):
-                iterm2_target = 'new-window'
-            children.append(_form_row(
-                _form_field(
-                    "cfg-mux-control_with_iterm2",
-                    "Enable iTerm2 -CC Mode",
-                    Switch(value=self.config.tmux.control_with_iterm2),
-                    "Use iTerm2 tmux -CC mode on macOS",
-                ),
-                _form_field(
-                    "cfg-mux-iterm2_attach_target",
-                    "Attach Target",
-                    Select(
-                        [("New Window", "new-window"), ("New Tab", "new-tab")],
-                        value=iterm2_target,
+            children.append(
+                Static("iTerm2 Integration (macOS)", classes="section-header")
+            )
+            iterm2_target = getattr(
+                self.config.tmux, "iterm2_attach_target", "new-window"
+            )
+            if iterm2_target not in ("new-window", "new-tab"):
+                iterm2_target = "new-window"
+            children.append(
+                _form_row(
+                    _form_field(
+                        "cfg-mux-control_with_iterm2",
+                        "Enable iTerm2 -CC Mode",
+                        Switch(value=self.config.tmux.control_with_iterm2),
+                        "Use iTerm2 tmux -CC mode on macOS",
                     ),
-                    "Where to open tmux session in iTerm2",
-                ),
-            ))
-            children.append(_form_field(
-                "cfg-mux-iterm2_profile",
-                "iTerm2 Profile",
-                Input(value=getattr(self.config.tmux, 'iterm2_profile', 'Default')),
-                "iTerm2 profile name to use",
-            ))
+                    _form_field(
+                        "cfg-mux-iterm2_attach_target",
+                        "Attach Target",
+                        Select(
+                            [("New Window", "new-window"), ("New Tab", "new-tab")],
+                            value=iterm2_target,
+                        ),
+                        "Where to open tmux session in iTerm2",
+                    ),
+                )
+            )
+            children.append(
+                _form_field(
+                    "cfg-mux-iterm2_profile",
+                    "iTerm2 Profile",
+                    Input(value=getattr(self.config.tmux, "iterm2_profile", "Default")),
+                    "iTerm2 profile name to use",
+                )
+            )
         elif backend == "iterm2-native":
             # iTerm2 native options
             children.append(Static("iTerm2 Native Options", classes="section-header"))
-            children.append(_form_row(
-                _form_field(
-                    "cfg-mux-iterm2_native_target",
-                    "Open Target",
-                    Select(
-                        [
-                            ("Current iTerm2 Window", "current-window"),
-                            ("New iTerm2 Window", "new-window"),
-                        ],
-                        value=self._safe_select_initial(
-                            str(getattr(self.config.tmux, "iterm2_native_target", "current-window")),
-                            ["current-window", "new-window"],
-                            "current-window",
+            children.append(
+                _form_row(
+                    _form_field(
+                        "cfg-mux-iterm2_native_target",
+                        "Open Target",
+                        Select(
+                            [
+                                ("Current iTerm2 Window", "current-window"),
+                                ("New iTerm2 Window", "new-window"),
+                            ],
+                            value=self._safe_select_initial(
+                                str(
+                                    getattr(
+                                        self.config.tmux,
+                                        "iterm2_native_target",
+                                        "current-window",
+                                    )
+                                ),
+                                ["current-window", "new-window"],
+                                "current-window",
+                            ),
                         ),
+                        "Open sessions in current window (new tabs) or a new window",
                     ),
-                    "Open sessions in current window (new tabs) or a new window",
-                ),
-                _form_field(
-                    "cfg-mux-iterm2_split_pattern",
-                    "Split Pattern",
-                    Select(
-                        [("Alternate", "alternate"), ("Vertical", "vertical"), ("Horizontal", "horizontal")],
-                        value=self._safe_select_initial(
-                            str(getattr(self.config.tmux, "iterm2_split_pattern", "alternate")),
-                            ["alternate", "vertical", "horizontal"],
-                            "alternate",
+                    _form_field(
+                        "cfg-mux-iterm2_split_pattern",
+                        "Split Pattern",
+                        Select(
+                            [
+                                ("Alternate", "alternate"),
+                                ("Vertical", "vertical"),
+                                ("Horizontal", "horizontal"),
+                            ],
+                            value=self._safe_select_initial(
+                                str(
+                                    getattr(
+                                        self.config.tmux,
+                                        "iterm2_split_pattern",
+                                        "alternate",
+                                    )
+                                ),
+                                ["alternate", "vertical", "horizontal"],
+                                "alternate",
+                            ),
                         ),
+                        "Pane split pattern",
                     ),
-                    "Pane split pattern",
-                ),
-            ))
-            children.append(_form_field(
-                "cfg-mux-iterm2_profile",
-                "iTerm2 Profile",
-                Input(value=getattr(self.config.tmux, 'iterm2_profile', 'Default')),
-                "iTerm2 profile name to use",
-            ))
+                )
+            )
+            children.append(
+                _form_field(
+                    "cfg-mux-iterm2_profile",
+                    "iTerm2 Profile",
+                    Input(value=getattr(self.config.tmux, "iterm2_profile", "Default")),
+                    "iTerm2 profile name to use",
+                )
+            )
         return Vertical(*children, id="mux-backend-fields-container")
 
     # --- Dynamic proxy list ---
@@ -1385,14 +1681,39 @@ class ConfigEditorScreen(ModalScreen[bool]):
         return Vertical(
             Label(f"Proxy #{idx}", classes="form-label"),
             Horizontal(
-                Input(value=name, placeholder="Proxy name", id=f"proxy-{idx}-name", classes="proxy-name"),
-                Input(value=host, placeholder="Host", id=f"proxy-{idx}-host", classes="proxy-host"),
+                Input(
+                    value=name,
+                    placeholder="Proxy name",
+                    id=f"proxy-{idx}-name",
+                    classes="proxy-name",
+                ),
+                Input(
+                    value=host,
+                    placeholder="Host",
+                    id=f"proxy-{idx}-host",
+                    classes="proxy-host",
+                ),
                 classes="proxy-row",
             ),
             Horizontal(
-                Input(value=imports, placeholder="Imports (comma-separated)", id=f"proxy-{idx}-imports", classes="proxy-imports"),
-                Input(value=username, placeholder="Username", id=f"proxy-{idx}-username", classes="proxy-username"),
-                Input(value=key_path, placeholder="Key path", id=f"proxy-{idx}-key_path", classes="proxy-key_path"),
+                Input(
+                    value=imports,
+                    placeholder="Imports (comma-separated)",
+                    id=f"proxy-{idx}-imports",
+                    classes="proxy-imports",
+                ),
+                Input(
+                    value=username,
+                    placeholder="Username",
+                    id=f"proxy-{idx}-username",
+                    classes="proxy-username",
+                ),
+                Input(
+                    value=key_path,
+                    placeholder="Key path",
+                    id=f"proxy-{idx}-key_path",
+                    classes="proxy-key_path",
+                ),
                 Button("Remove", id=f"btn-remove-proxy-{idx}", variant="error"),
                 classes="proxy-row",
             ),
@@ -1407,7 +1728,11 @@ class ConfigEditorScreen(ModalScreen[bool]):
         container = self.query_one("#import-list", Vertical)
         for imp in self.config.sot.import_:
             self._import_counter += 1
-            container.mount(self._make_import_item(self._import_counter, imp, collapsed=self._import_counter > 1))
+            container.mount(
+                self._make_import_item(
+                    self._import_counter, imp, collapsed=self._import_counter > 1
+                )
+            )
         container.mount(
             Horizontal(
                 Button("+ Add Import", id="btn-add-import", variant="success"),
@@ -1415,7 +1740,9 @@ class ConfigEditorScreen(ModalScreen[bool]):
             )
         )
 
-    def _make_import_item(self, idx: int, imp: Any = None, collapsed: bool = False) -> Collapsible:
+    def _make_import_item(
+        self, idx: int, imp: Any = None, collapsed: bool = False
+    ) -> Collapsible:
         """Create a compact import form item with type-specific fields."""
         name = imp.name if imp else ""
         imp_type = self._safe_select_initial(
@@ -1426,7 +1753,12 @@ class ConfigEditorScreen(ModalScreen[bool]):
         self._import_types[str(idx)] = imp_type
 
         header = Horizontal(
-            Input(value=name, placeholder="Import name", id=f"import-{idx}-name", classes="import-name"),
+            Input(
+                value=name,
+                placeholder="Import name",
+                id=f"import-{idx}-name",
+                classes="import-name",
+            ),
             Select(
                 [(v, v) for v in SUPPORTED_SOT_PROVIDER_TYPES],
                 value=imp_type,
@@ -1452,11 +1784,15 @@ class ConfigEditorScreen(ModalScreen[bool]):
             classes="import-collapsible",
         )
 
-    def _import_form_field(self, field_id: str, label: str, description: str, widget: Any) -> Vertical:
+    def _import_form_field(
+        self, field_id: str, label: str, description: str, widget: Any
+    ) -> Vertical:
         """Build an import field with label + helper text above input."""
         return _form_field(field_id, label, widget, description)
 
-    def _make_import_type_fields(self, idx: int, imp_type: str, imp: Any = None) -> list:
+    def _make_import_type_fields(
+        self, idx: int, imp_type: str, imp: Any = None
+    ) -> list:
         """Generate type-specific fields for an import item."""
         fields: list = []
         if imp_type == "static":
@@ -1469,7 +1805,10 @@ class ConfigEditorScreen(ModalScreen[bool]):
                 )
             )
             fields.append(
-                Static("Columns: name | ip/hostname | alias | user | port | key_path", classes="form-description")
+                Static(
+                    "Columns: name | ip/hostname | alias | user | port | key_path",
+                    classes="form-description",
+                )
             )
 
             self._static_host_counters[str(idx)] = 0
@@ -1479,197 +1818,231 @@ class ConfigEditorScreen(ModalScreen[bool]):
             host_rows: List[Any] = []
             for host_data in source_hosts:
                 self._static_host_counters[str(idx)] += 1
-                host_row = self._make_static_host_row(idx, self._static_host_counters[str(idx)], host_data)
+                host_row = self._make_static_host_row(
+                    idx, self._static_host_counters[str(idx)], host_data
+                )
                 host_rows.append(host_row)
-            fields.append(Horizontal(Button("+ Add Host", id=f"btn-add-static-host-{idx}", variant="success"), classes="list-buttons"))
-            host_list = VerticalScroll(*host_rows, id=f"import-{idx}-static-hosts", classes="static-host-list")
+            fields.append(
+                Horizontal(
+                    Button(
+                        "+ Add Host", id=f"btn-add-static-host-{idx}", variant="success"
+                    ),
+                    classes="list-buttons",
+                )
+            )
+            host_list = VerticalScroll(
+                *host_rows, id=f"import-{idx}-static-hosts", classes="static-host-list"
+            )
             fields.append(host_list)
         elif imp_type == "netbox":
             fields.append(Static("NetBox settings", classes="form-label"))
-            fields.append(_form_row(
-                self._import_form_field(
-                    f"import-{idx}-url",
-                    "NetBox URL",
-                    "NetBox API endpoint (https://netbox.example.com)",
-                    Input(
-                        value=(imp.url or "") if imp else "",
-                        placeholder="https://netbox.example.com",
-                        classes="import-netbox-url",
+            fields.append(
+                _form_row(
+                    self._import_form_field(
+                        f"import-{idx}-url",
+                        "NetBox URL",
+                        "NetBox API endpoint (https://netbox.example.com)",
+                        Input(
+                            value=(imp.url or "") if imp else "",
+                            placeholder="https://netbox.example.com",
+                            classes="import-netbox-url",
+                        ),
                     ),
-                ),
-                self._import_form_field(
-                    f"import-{idx}-token",
-                    "API Token",
-                    "Read token used to query inventory",
-                    Input(
-                        value=(imp.token or "") if imp else "",
-                        placeholder="NetBox token",
-                        password=True,
-                        classes="import-netbox-token",
-                    ),
-                ),
-            ))
-            filters_str = ""
-            if imp and imp.default_filters:
-                filters_str = ", ".join(f"{k}={v}" for k, v in imp.default_filters.items())
-            fields.append(_form_row(
-                self._import_form_field(
-                    f"import-{idx}-filters",
-                    "Default Filters",
-                    "Optional query filters (key=value, key2=value2)",
-                    Input(
-                        value=filters_str,
-                        placeholder="status=active, role=server",
-                        classes="import-netbox-filters",
+                    self._import_form_field(
+                        f"import-{idx}-token",
+                        "API Token",
+                        "Read token used to query inventory",
+                        Input(
+                            value=(imp.token or "") if imp else "",
+                            placeholder="NetBox token",
+                            password=True,
+                            classes="import-netbox-token",
+                        ),
                     ),
                 )
-            ))
+            )
+            filters_str = ""
+            if imp and imp.default_filters:
+                filters_str = ", ".join(
+                    f"{k}={v}" for k, v in imp.default_filters.items()
+                )
+            fields.append(
+                _form_row(
+                    self._import_form_field(
+                        f"import-{idx}-filters",
+                        "Default Filters",
+                        "Optional query filters (key=value, key2=value2)",
+                        Input(
+                            value=filters_str,
+                            placeholder="status=active, role=server",
+                            classes="import-netbox-filters",
+                        ),
+                    )
+                )
+            )
         elif imp_type == "ansible":
             fields.append(Static("Ansible settings", classes="form-label"))
             paths = ""
             if imp and imp.inventory_paths:
                 paths = ", ".join(imp.inventory_paths)
-            fields.append(_form_row(
-                self._import_form_field(
-                    f"import-{idx}-inventory_paths",
-                    "Inventory Paths",
-                    "Comma-separated local inventory files",
-                    Input(
-                        value=paths,
-                        placeholder="inventory/prod.yml, inventory/staging.yml",
-                        classes="import-ansible-paths",
-                    ),
+            fields.append(
+                _form_row(
+                    self._import_form_field(
+                        f"import-{idx}-inventory_paths",
+                        "Inventory Paths",
+                        "Comma-separated local inventory files",
+                        Input(
+                            value=paths,
+                            placeholder="inventory/prod.yml, inventory/staging.yml",
+                            classes="import-ansible-paths",
+                        ),
+                    )
                 )
-            ))
+            )
         elif imp_type == "consul":
             fields.append(Static("Consul settings", classes="form-label"))
             cfg = imp.config if imp else None
-            fields.append(_form_row(
-                self._import_form_field(
-                    f"import-{idx}-consul_host",
-                    "Consul Host",
-                    "Consul server hostname",
-                    Input(
-                        value=(cfg.host if cfg else ""),
-                        placeholder="consul.example.com",
-                        classes="import-consul-host",
+            fields.append(
+                _form_row(
+                    self._import_form_field(
+                        f"import-{idx}-consul_host",
+                        "Consul Host",
+                        "Consul server hostname",
+                        Input(
+                            value=(cfg.host if cfg else ""),
+                            placeholder="consul.example.com",
+                            classes="import-consul-host",
+                        ),
                     ),
-                ),
-                self._import_form_field(
-                    f"import-{idx}-consul_port",
-                    "Port",
-                    "Consul API port",
-                    Input(
-                        value=str(cfg.port if cfg else 443),
-                        placeholder="443",
-                        classes="import-consul-port",
+                    self._import_form_field(
+                        f"import-{idx}-consul_port",
+                        "Port",
+                        "Consul API port",
+                        Input(
+                            value=str(cfg.port if cfg else 443),
+                            placeholder="443",
+                            classes="import-consul-port",
+                        ),
                     ),
-                ),
-                self._import_form_field(
-                    f"import-{idx}-consul_scheme",
-                    "Scheme",
-                    "http or https",
-                    Input(
-                        value=(cfg.scheme if cfg else "https"),
-                        placeholder="https",
-                        classes="import-consul-scheme",
+                    self._import_form_field(
+                        f"import-{idx}-consul_scheme",
+                        "Scheme",
+                        "http or https",
+                        Input(
+                            value=(cfg.scheme if cfg else "https"),
+                            placeholder="https",
+                            classes="import-consul-scheme",
+                        ),
                     ),
-                ),
-                self._import_form_field(
-                    f"import-{idx}-consul_dc",
-                    "Datacenter",
-                    "Consul datacenter name",
-                    Input(
-                        value=(cfg.dc if cfg else "dc1"),
-                        placeholder="dc1",
-                        classes="import-consul-dc",
-                    ),
-                ),
-            ))
-            fields.append(_form_row(
-                self._import_form_field(
-                    f"import-{idx}-consul_token",
-                    "Token",
-                    "Read token for catalog queries",
-                    Input(
-                        value=(cfg.token if cfg else ""),
-                        placeholder="Consul token",
-                        password=True,
-                        classes="import-consul-token",
+                    self._import_form_field(
+                        f"import-{idx}-consul_dc",
+                        "Datacenter",
+                        "Consul datacenter name",
+                        Input(
+                            value=(cfg.dc if cfg else "dc1"),
+                            placeholder="dc1",
+                            classes="import-consul-dc",
+                        ),
                     ),
                 )
-            ))
+            )
+            fields.append(
+                _form_row(
+                    self._import_form_field(
+                        f"import-{idx}-consul_token",
+                        "Token",
+                        "Read token for catalog queries",
+                        Input(
+                            value=(cfg.token if cfg else ""),
+                            placeholder="Consul token",
+                            password=True,
+                            classes="import-consul-token",
+                        ),
+                    )
+                )
+            )
         elif imp_type == "git":
             fields.append(Static("Git settings", classes="form-label"))
             source_pattern = "hosts/**/*.y*ml"
             if imp is not None:
                 source_pattern = str(
-                    getattr(imp, "source_pattern", "hosts/**/*.y*ml") or "hosts/**/*.y*ml"
+                    getattr(imp, "source_pattern", "hosts/**/*.y*ml")
+                    or "hosts/**/*.y*ml"
                 ).strip()
 
-            fields.append(_form_row(
-                self._import_form_field(
-                    f"import-{idx}-git_repo_url",
-                    "Repository URL",
-                    "Git repository URL (ssh or https)",
-                    Input(
-                        value=(getattr(imp, "repo_url", "") or "") if imp else "",
-                        placeholder="git@github.com:org/repo.git",
-                        classes="import-git-repo",
+            fields.append(
+                _form_row(
+                    self._import_form_field(
+                        f"import-{idx}-git_repo_url",
+                        "Repository URL",
+                        "Git repository URL (ssh or https)",
+                        Input(
+                            value=(getattr(imp, "repo_url", "") or "") if imp else "",
+                            placeholder="git@github.com:org/repo.git",
+                            classes="import-git-repo",
+                        ),
                     ),
-                ),
-                self._import_form_field(
-                    f"import-{idx}-git_branch",
-                    "Branch",
-                    "Branch to track for updates",
-                    Input(
-                        value=(getattr(imp, "branch", "main") or "main") if imp else "main",
-                        placeholder="main",
-                        classes="import-git-branch",
+                    self._import_form_field(
+                        f"import-{idx}-git_branch",
+                        "Branch",
+                        "Branch to track for updates",
+                        Input(
+                            value=(getattr(imp, "branch", "main") or "main")
+                            if imp
+                            else "main",
+                            placeholder="main",
+                            classes="import-git-branch",
+                        ),
                     ),
-                ),
-            ))
+                )
+            )
 
             inventory_format_value = self._safe_select_initial(
-                str(getattr(imp, "inventory_format", "static") or "static") if imp else "static",
+                str(getattr(imp, "inventory_format", "static") or "static")
+                if imp
+                else "static",
                 ["static", "ansible"],
                 "static",
             )
-            fields.append(_form_row(
-                self._import_form_field(
-                    f"import-{idx}-git_source_pattern",
-                    "Source Pattern",
-                    "Repo path + glob in one value (e.g. hosts/**/*.y*ml)",
-                    Input(
-                        value=source_pattern,
-                        placeholder="hosts/**/*.y*ml",
-                        classes="import-git-source",
+            fields.append(
+                _form_row(
+                    self._import_form_field(
+                        f"import-{idx}-git_source_pattern",
+                        "Source Pattern",
+                        "Repo path + glob in one value (e.g. hosts/**/*.y*ml)",
+                        Input(
+                            value=source_pattern,
+                            placeholder="hosts/**/*.y*ml",
+                            classes="import-git-source",
+                        ),
                     ),
-                ),
-                self._import_form_field(
-                    f"import-{idx}-git_inventory_format",
-                    "Inventory Format",
-                    "Static hosts or Ansible inventory YAML",
-                    Select(
-                        [("Static", "static"), ("Ansible", "ansible")],
-                        value=inventory_format_value,
-                        classes="import-git-format",
+                    self._import_form_field(
+                        f"import-{idx}-git_inventory_format",
+                        "Inventory Format",
+                        "Static hosts or Ansible inventory YAML",
+                        Select(
+                            [("Static", "static"), ("Ansible", "ansible")],
+                            value=inventory_format_value,
+                            classes="import-git-format",
+                        ),
                     ),
-                ),
-            ))
+                )
+            )
 
-            fields.append(_form_row(
-                self._import_form_field(
-                    f"import-{idx}-git_priority",
-                    "Priority",
-                    "Higher value wins on duplicates",
-                    Input(
-                        value=str(getattr(imp, "priority", 100) if imp else 100),
-                        placeholder="100",
-                        classes="import-git-priority",
+            fields.append(
+                _form_row(
+                    self._import_form_field(
+                        f"import-{idx}-git_priority",
+                        "Priority",
+                        "Higher value wins on duplicates",
+                        Input(
+                            value=str(getattr(imp, "priority", 100) if imp else 100),
+                            placeholder="100",
+                            classes="import-git-priority",
+                        ),
                     ),
-                ),
-            ))
+                )
+            )
 
             auto_pull_value = "true"
             if imp is not None and not bool(getattr(imp, "auto_pull", True)):
@@ -1679,32 +2052,40 @@ class ConfigEditorScreen(ModalScreen[bool]):
                 ["true", "false"],
                 "true",
             )
-            fields.append(_form_row(
-                self._import_form_field(
-                    f"import-{idx}-git_auto_pull",
-                    "Auto Pull",
-                    "Auto checks remote changes before refresh",
-                    Select(
-                        [("Auto", "true"), ("Manual", "false")],
-                        value=auto_pull_value,
-                        classes="import-git-auto-pull",
+            fields.append(
+                _form_row(
+                    self._import_form_field(
+                        f"import-{idx}-git_auto_pull",
+                        "Auto Pull",
+                        "Auto checks remote changes before refresh",
+                        Select(
+                            [("Auto", "true"), ("Manual", "false")],
+                            value=auto_pull_value,
+                            classes="import-git-auto-pull",
+                        ),
                     ),
-                ),
-                self._import_form_field(
-                    f"import-{idx}-git_pull_interval",
-                    "Pull Interval (s)",
-                    "Seconds between automatic pull attempts",
-                    Input(
-                        value=str(getattr(imp, "pull_interval_seconds", 300) if imp else 300),
-                        placeholder="300",
-                        classes="import-git-interval",
+                    self._import_form_field(
+                        f"import-{idx}-git_pull_interval",
+                        "Pull Interval (s)",
+                        "Seconds between automatic pull attempts",
+                        Input(
+                            value=str(
+                                getattr(imp, "pull_interval_seconds", 300)
+                                if imp
+                                else 300
+                            ),
+                            placeholder="300",
+                            classes="import-git-interval",
+                        ),
                     ),
-                ),
-            ))
+                )
+            )
 
         return fields
 
-    def _make_static_host_row(self, import_idx: int, host_idx: int, host_data: Dict[str, Any]) -> Horizontal:
+    def _make_static_host_row(
+        self, import_idx: int, host_idx: int, host_data: Dict[str, Any]
+    ) -> Horizontal:
         """Build one editable static host row."""
         name = str(host_data.get("name", ""))
         ip = str(host_data.get("ip", ""))
@@ -1715,14 +2096,53 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
         can_remove = host_idx > 1
         return Horizontal(
-            Input(value=name, placeholder="name", id=f"import-{import_idx}-host-{host_idx}-name", classes="static-host-name"),
-            Input(value=ip, placeholder="ip/hostname", id=f"import-{import_idx}-host-{host_idx}-ip", classes="static-host-ip"),
-            Input(value=alias, placeholder="alias(~/.ssh/config)", id=f"import-{import_idx}-host-{host_idx}-ssh_alias", classes="static-host-alias"),
-            Input(value=ssh_user, placeholder="user", id=f"import-{import_idx}-host-{host_idx}-ssh_user", classes="static-host-user"),
-            Input(value=ssh_port, placeholder="port(22)", id=f"import-{import_idx}-host-{host_idx}-ssh_port", classes="static-host-port"),
-            Input(value=ssh_key_path, placeholder="key_path", id=f"import-{import_idx}-host-{host_idx}-ssh_key_path", classes="static-host-key"),
-            Button("Preview", id=f"btn-show-static-host-ssh-{import_idx}-{host_idx}", variant="default"),
-            Button("Remove", id=f"btn-remove-static-host-{import_idx}-{host_idx}", variant="error", disabled=not can_remove),
+            Input(
+                value=name,
+                placeholder="name",
+                id=f"import-{import_idx}-host-{host_idx}-name",
+                classes="static-host-name",
+            ),
+            Input(
+                value=ip,
+                placeholder="ip/hostname",
+                id=f"import-{import_idx}-host-{host_idx}-ip",
+                classes="static-host-ip",
+            ),
+            Input(
+                value=alias,
+                placeholder="alias(~/.ssh/config)",
+                id=f"import-{import_idx}-host-{host_idx}-ssh_alias",
+                classes="static-host-alias",
+            ),
+            Input(
+                value=ssh_user,
+                placeholder="user",
+                id=f"import-{import_idx}-host-{host_idx}-ssh_user",
+                classes="static-host-user",
+            ),
+            Input(
+                value=ssh_port,
+                placeholder="port(22)",
+                id=f"import-{import_idx}-host-{host_idx}-ssh_port",
+                classes="static-host-port",
+            ),
+            Input(
+                value=ssh_key_path,
+                placeholder="key_path",
+                id=f"import-{import_idx}-host-{host_idx}-ssh_key_path",
+                classes="static-host-key",
+            ),
+            Button(
+                "Preview",
+                id=f"btn-show-static-host-ssh-{import_idx}-{host_idx}",
+                variant="default",
+            ),
+            Button(
+                "Remove",
+                id=f"btn-remove-static-host-{import_idx}-{host_idx}",
+                variant="error",
+                disabled=not can_remove,
+            ),
             classes="static-host-row",
             id=f"import-{import_idx}-host-item-{host_idx}",
         )
@@ -1911,7 +2331,10 @@ class ConfigEditorScreen(ModalScreen[bool]):
         self._import_counter += 1
         container = self.query_one("#import-list", Vertical)
         add_btn_row = container.query(".list-buttons").last()
-        container.mount(self._make_import_item(self._import_counter, collapsed=False), before=add_btn_row)
+        container.mount(
+            self._make_import_item(self._import_counter, collapsed=False),
+            before=add_btn_row,
+        )
 
     def _remove_import(self, idx: str) -> None:
         """Remove an import entry."""
@@ -1926,8 +2349,14 @@ class ConfigEditorScreen(ModalScreen[bool]):
         try:
             current = self._static_host_counters.get(import_idx, 0) + 1
             self._static_host_counters[import_idx] = current
-            container = self.query_one(f"#import-{import_idx}-static-hosts", VerticalScroll)
-            container.mount(self._make_static_host_row(int(import_idx), current, {"name": "", "ip": ""}))
+            container = self.query_one(
+                f"#import-{import_idx}-static-hosts", VerticalScroll
+            )
+            container.mount(
+                self._make_static_host_row(
+                    int(import_idx), current, {"name": "", "ip": ""}
+                )
+            )
         except Exception as e:
             self._update_status(f"Could not add static host row: {e}", error=True)
 
@@ -1942,9 +2371,15 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
         alias = self._get_input_value(f"import-{import_idx}-host-{host_idx}-ssh_alias")
         ip = self._get_input_value(f"import-{import_idx}-host-{host_idx}-ip")
-        user_override = self._get_input_value(f"import-{import_idx}-host-{host_idx}-ssh_user")
-        port_override = self._get_input_value(f"import-{import_idx}-host-{host_idx}-ssh_port")
-        key_override = self._get_input_value(f"import-{import_idx}-host-{host_idx}-ssh_key_path")
+        user_override = self._get_input_value(
+            f"import-{import_idx}-host-{host_idx}-ssh_user"
+        )
+        port_override = self._get_input_value(
+            f"import-{import_idx}-host-{host_idx}-ssh_port"
+        )
+        key_override = self._get_input_value(
+            f"import-{import_idx}-host-{host_idx}-ssh_key_path"
+        )
         target = alias or ip
         if not target:
             self._update_status("Set alias or ip first", error=True)
@@ -1953,18 +2388,32 @@ class ConfigEditorScreen(ModalScreen[bool]):
         resolved = resolve_ssh_effective_config(target)
 
         host_name = resolved.get("hostname", target) if resolved else target
-        user = user_override or resolved.get("user", "") or getattr(self.config.ssh, "username", "")
+        user = (
+            user_override
+            or resolved.get("user", "")
+            or getattr(self.config.ssh, "username", "")
+        )
         port = port_override or resolved.get("port", "22")
-        key = key_override or resolved.get("identityfile", "") or getattr(self.config.ssh, "key_path", "")
+        key = (
+            key_override
+            or resolved.get("identityfile", "")
+            or getattr(self.config.ssh, "key_path", "")
+        )
 
         key = mask_sensitive(str(key).split()[0]) if key else "-"
 
-        preview = f"ssh preview => host={host_name} user={user or '-'} port={port} key={key}"
+        preview = (
+            f"ssh preview => host={host_name} user={user or '-'} port={port} key={key}"
+        )
         self._update_status(preview)
 
     def _load_yaml_editor_from_file(self) -> None:
         """Load current config file content into YAML editor tab."""
-        config_path = get_default_config_path() if not self.config_path else Path(self.config_path)
+        config_path = (
+            get_default_config_path()
+            if not self.config_path
+            else Path(self.config_path)
+        )
         editor = self.query_one("#cfg-yaml-editor", TextArea)
         try:
             if config_path.exists():
@@ -1996,7 +2445,11 @@ class ConfigEditorScreen(ModalScreen[bool]):
             self._update_status(f"YAML validation error: {e}", error=True)
             return
 
-        config_path = get_default_config_path() if not self.config_path else Path(self.config_path)
+        config_path = (
+            get_default_config_path()
+            if not self.config_path
+            else Path(self.config_path)
+        )
         config_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with open(config_path, "w") as f:
@@ -2006,7 +2459,9 @@ class ConfigEditorScreen(ModalScreen[bool]):
             return
 
         self.dismiss(True)
-        self.app.notify("Configuration saved from YAML editor.", title="Config Saved", timeout=4)
+        self.app.notify(
+            "Configuration saved from YAML editor.", title="Config Saved", timeout=4
+        )
 
     # --- Data collection ---
 
@@ -2038,7 +2493,9 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
         # General
         data["sshplex"] = {
-            "session_prefix": self._get_input_value("cfg-general-session_prefix", "sshplex"),
+            "session_prefix": self._get_input_value(
+                "cfg-general-session_prefix", "sshplex"
+            ),
         }
 
         # SSH
@@ -2048,13 +2505,23 @@ class ConfigEditorScreen(ModalScreen[bool]):
             "key_path": self._get_input_value("cfg-ssh-key_path", "~/.ssh/id_rsa"),
             "timeout": int(self._get_input_value("cfg-ssh-timeout", "10")),
             "port": int(self._get_input_value("cfg-ssh-port", "22")),
-            "strict_host_key_checking": self._get_switch_value("cfg-ssh-strict_host_key_checking"),
-            "user_known_hosts_file": self._get_input_value("cfg-ssh-user_known_hosts_file"),
+            "strict_host_key_checking": self._get_switch_value(
+                "cfg-ssh-strict_host_key_checking"
+            ),
+            "user_known_hosts_file": self._get_input_value(
+                "cfg-ssh-user_known_hosts_file"
+            ),
             "retry": {
                 "enabled": self._get_switch_value("cfg-ssh-retry-enabled", True),
-                "max_attempts": int(self._get_input_value("cfg-ssh-retry-max_attempts", "3")),
-                "delay_seconds": float(self._get_input_value("cfg-ssh-retry-delay_seconds", "2.0")),
-                "exponential_backoff": self._get_switch_value("cfg-ssh-retry-exponential_backoff", True),
+                "max_attempts": int(
+                    self._get_input_value("cfg-ssh-retry-max_attempts", "3")
+                ),
+                "delay_seconds": float(
+                    self._get_input_value("cfg-ssh-retry-delay_seconds", "2.0")
+                ),
+                "exponential_backoff": self._get_switch_value(
+                    "cfg-ssh-retry-exponential_backoff", True
+                ),
             },
             "proxy": proxies,
         }
@@ -2063,25 +2530,42 @@ class ConfigEditorScreen(ModalScreen[bool]):
         backend = self._get_select_value("cfg-mux-backend", "tmux")
         mux_data: Dict[str, Any] = {
             "backend": backend,
-            "use_panes": self._get_select_value("cfg-mux-use_panes", "panes") == "panes",
+            "use_panes": self._get_select_value("cfg-mux-use_panes", "panes")
+            == "panes",
             "layout": self._get_select_value("cfg-mux-layout", "tiled"),
             "broadcast": self._get_switch_value("cfg-mux-broadcast"),
-            "iterm2_native_hide_from_history": not self._get_switch_value("cfg-mux-register_history", False),
+            "iterm2_native_hide_from_history": not self._get_switch_value(
+                "cfg-mux-register_history", False
+            ),
             "window_name": self._get_input_value("cfg-mux-window_name", "sshplex"),
-            "max_panes_per_window": int(self._get_input_value("cfg-mux-max_panes_per_window", "5")),
+            "max_panes_per_window": int(
+                self._get_input_value("cfg-mux-max_panes_per_window", "5")
+            ),
         }
 
         # Backend-specific fields
         if backend == "tmux":
-            mux_data["control_with_iterm2"] = self._get_switch_value("cfg-mux-control_with_iterm2")
-            mux_data["iterm2_attach_target"] = self._get_select_value("cfg-mux-iterm2_attach_target", "new-window")
-            mux_data["iterm2_profile"] = self._get_input_value("cfg-mux-iterm2_profile", "Default")
+            mux_data["control_with_iterm2"] = self._get_switch_value(
+                "cfg-mux-control_with_iterm2"
+            )
+            mux_data["iterm2_attach_target"] = self._get_select_value(
+                "cfg-mux-iterm2_attach_target", "new-window"
+            )
+            mux_data["iterm2_profile"] = self._get_input_value(
+                "cfg-mux-iterm2_profile", "Default"
+            )
         elif backend == "iterm2-native":
             mux_data["control_with_iterm2"] = False  # Not applicable
             mux_data["iterm2_attach_target"] = "new-window"  # Default
-            mux_data["iterm2_native_target"] = self._get_select_value("cfg-mux-iterm2_native_target", "current-window")
-            mux_data["iterm2_profile"] = self._get_input_value("cfg-mux-iterm2_profile", "Default")
-            mux_data["iterm2_split_pattern"] = self._get_select_value("cfg-mux-iterm2_split_pattern", "alternate")
+            mux_data["iterm2_native_target"] = self._get_select_value(
+                "cfg-mux-iterm2_native_target", "current-window"
+            )
+            mux_data["iterm2_profile"] = self._get_input_value(
+                "cfg-mux-iterm2_profile", "Default"
+            )
+            mux_data["iterm2_split_pattern"] = self._get_select_value(
+                "cfg-mux-iterm2_split_pattern", "alternate"
+            )
 
         data["tmux"] = mux_data
 
@@ -2096,12 +2580,16 @@ class ConfigEditorScreen(ModalScreen[bool]):
         }
 
         # UI
-        columns_str = self._get_input_value("cfg-ui-table_columns", "name, ip, cluster, role, tags")
+        columns_str = self._get_input_value(
+            "cfg-ui-table_columns", "name, ip, cluster, role, tags"
+        )
         columns = [c.strip() for c in columns_str.split(",") if c.strip()]
         data["ui"] = {
             "theme": self._get_select_value("cfg-ui-theme", "textual-dark"),
             "show_log_panel": self._get_switch_value("cfg-ui-show_log_panel", True),
-            "log_panel_height": int(self._get_input_value("cfg-ui-log_panel_height", "20")),
+            "log_panel_height": int(
+                self._get_input_value("cfg-ui-log_panel_height", "20")
+            ),
             "table_columns": columns,
         }
 
@@ -2115,8 +2603,36 @@ class ConfigEditorScreen(ModalScreen[bool]):
         # Cache
         data["cache"] = {
             "enabled": self._get_switch_value("cfg-cache-enabled", True),
-            "cache_dir": self._get_input_value("cfg-cache-cache_dir", "~/.cache/sshplex"),
+            "cache_dir": self._get_input_value(
+                "cfg-cache-cache_dir", "~/.cache/sshplex"
+            ),
             "ttl_hours": int(self._get_input_value("cfg-cache-ttl_hours", "24")),
+        }
+
+        # Features (snippets, health, history)
+        data["snippets"] = {
+            "enabled": self._get_switch_value("cfg-features-snippets-enabled", True),
+            "show_preview": self._get_switch_value(
+                "cfg-features-snippets-show_preview", True
+            ),
+        }
+        data["health"] = {
+            "enabled": self._get_switch_value("cfg-features-health-enabled", True),
+            "timeout": float(
+                self._get_input_value("cfg-features-health-timeout", "2.0")
+            ),
+            "cache_ttl_minutes": int(
+                self._get_input_value("cfg-features-health-cache_ttl_minutes", "5")
+            ),
+        }
+        data["history"] = {
+            "enabled": self._get_switch_value("cfg-features-history-enabled", True),
+            "max_recent": int(
+                self._get_input_value("cfg-features-history-max_recent", "20")
+            ),
+            "remember_favorites": self._get_switch_value(
+                "cfg-features-history-remember_favorites", True
+            ),
         }
 
         return data
@@ -2137,13 +2653,15 @@ class ConfigEditorScreen(ModalScreen[bool]):
             imports_str = self._get_input_value(f"proxy-{i}-imports")
             imports = [s.strip() for s in imports_str.split(",") if s.strip()]
 
-            proxies.append({
-                "name": name,
-                "imports": imports,
-                "host": self._get_input_value(f"proxy-{i}-host"),
-                "username": self._get_input_value(f"proxy-{i}-username"),
-                "key_path": self._get_input_value(f"proxy-{i}-key_path"),
-            })
+            proxies.append(
+                {
+                    "name": name,
+                    "imports": imports,
+                    "host": self._get_input_value(f"proxy-{i}-host"),
+                    "username": self._get_input_value(f"proxy-{i}-username"),
+                    "key_path": self._get_input_value(f"proxy-{i}-key_path"),
+                }
+            )
         return proxies
 
     def _collect_enabled_providers(self) -> List[str]:
@@ -2182,21 +2700,33 @@ class ConfigEditorScreen(ModalScreen[bool]):
                     except Exception:
                         continue
 
-                    host_name = self._get_input_value(f"import-{i}-host-{host_idx}-name")
+                    host_name = self._get_input_value(
+                        f"import-{i}-host-{host_idx}-name"
+                    )
                     host_ip = self._get_input_value(f"import-{i}-host-{host_idx}-ip")
                     if not host_name and not host_ip:
                         continue
                     if not host_name or not host_ip:
-                        raise ValueError(f"static import #{i} host row {host_idx}: name and ip are required")
+                        raise ValueError(
+                            f"static import #{i} host row {host_idx}: name and ip are required"
+                        )
 
                     row: Dict[str, Any] = {
                         "name": host_name,
                         "ip": host_ip,
                     }
-                    ssh_alias = self._get_input_value(f"import-{i}-host-{host_idx}-ssh_alias")
-                    ssh_user = self._get_input_value(f"import-{i}-host-{host_idx}-ssh_user")
-                    ssh_port = self._get_input_value(f"import-{i}-host-{host_idx}-ssh_port")
-                    ssh_key_path = self._get_input_value(f"import-{i}-host-{host_idx}-ssh_key_path")
+                    ssh_alias = self._get_input_value(
+                        f"import-{i}-host-{host_idx}-ssh_alias"
+                    )
+                    ssh_user = self._get_input_value(
+                        f"import-{i}-host-{host_idx}-ssh_user"
+                    )
+                    ssh_port = self._get_input_value(
+                        f"import-{i}-host-{host_idx}-ssh_port"
+                    )
+                    ssh_key_path = self._get_input_value(
+                        f"import-{i}-host-{host_idx}-ssh_key_path"
+                    )
 
                     if ssh_alias:
                         row["ssh_alias"] = ssh_alias
@@ -2226,37 +2756,58 @@ class ConfigEditorScreen(ModalScreen[bool]):
             elif imp_type == "ansible":
                 paths_str = self._get_input_value(f"import-{i}-inventory_paths")
                 if paths_str:
-                    entry["inventory_paths"] = [p.strip() for p in paths_str.split(",") if p.strip()]
+                    entry["inventory_paths"] = [
+                        p.strip() for p in paths_str.split(",") if p.strip()
+                    ]
             elif imp_type == "consul":
                 entry["config"] = {
-                    "host": self._get_input_value(f"import-{i}-consul_host", "consul.example.com"),
-                    "port": int(self._get_input_value(f"import-{i}-consul_port", "443")),
+                    "host": self._get_input_value(
+                        f"import-{i}-consul_host", "consul.example.com"
+                    ),
+                    "port": int(
+                        self._get_input_value(f"import-{i}-consul_port", "443")
+                    ),
                     "token": self._get_input_value(f"import-{i}-consul_token"),
-                    "scheme": self._get_input_value(f"import-{i}-consul_scheme", "https"),
+                    "scheme": self._get_input_value(
+                        f"import-{i}-consul_scheme", "https"
+                    ),
                     "dc": self._get_input_value(f"import-{i}-consul_dc", "dc1"),
                 }
             elif imp_type == "git":
                 entry["repo_url"] = self._get_input_value(f"import-{i}-git_repo_url")
-                entry["branch"] = self._get_input_value(f"import-{i}-git_branch", "main")
+                entry["branch"] = self._get_input_value(
+                    f"import-{i}-git_branch", "main"
+                )
                 entry["source_pattern"] = self._get_input_value(
                     f"import-{i}-git_source_pattern",
                     "hosts/**/*.y*ml",
                 )
-                entry["inventory_format"] = self._get_select_value(f"import-{i}-git_inventory_format", "static")
+                entry["inventory_format"] = self._get_select_value(
+                    f"import-{i}-git_inventory_format", "static"
+                )
                 entry["pull_strategy"] = "ff-only"
-                entry["auto_pull"] = self._get_select_value(f"import-{i}-git_auto_pull", "true") == "true"
+                entry["auto_pull"] = (
+                    self._get_select_value(f"import-{i}-git_auto_pull", "true")
+                    == "true"
+                )
 
-                pull_interval_raw = self._get_input_value(f"import-{i}-git_pull_interval", "300")
+                pull_interval_raw = self._get_input_value(
+                    f"import-{i}-git_pull_interval", "300"
+                )
                 try:
                     entry["pull_interval_seconds"] = int(pull_interval_raw)
                 except ValueError as e:
-                    raise ValueError(f"git import #{i}: pull interval must be an integer") from e
+                    raise ValueError(
+                        f"git import #{i}: pull interval must be an integer"
+                    ) from e
 
                 priority_raw = self._get_input_value(f"import-{i}-git_priority", "100")
                 try:
                     entry["priority"] = int(priority_raw)
                 except ValueError as e:
-                    raise ValueError(f"git import #{i}: priority must be an integer") from e
+                    raise ValueError(
+                        f"git import #{i}: priority must be an integer"
+                    ) from e
 
             imports.append(entry)
         return imports
@@ -2291,7 +2842,13 @@ class ConfigEditorScreen(ModalScreen[bool]):
 
     def _apply_detected_columns_from_cache(self) -> None:
         """Populate table columns using cached metadata keys plus core fields."""
-        detected = self._detect_columns_from_cache_and_imports() or ["name", "ip", "cluster", "role", "tags"]
+        detected = self._detect_columns_from_cache_and_imports() or [
+            "name",
+            "ip",
+            "cluster",
+            "role",
+            "tags",
+        ]
 
         try:
             columns_input = self.query_one("#cfg-ui-table_columns", Input)
@@ -2326,7 +2883,11 @@ class ConfigEditorScreen(ModalScreen[bool]):
         # Remove None values for cleaner YAML
         yaml_data = _clean_none(yaml_data)
 
-        config_path = get_default_config_path() if not self.config_path else Path(self.config_path)
+        config_path = (
+            get_default_config_path()
+            if not self.config_path
+            else Path(self.config_path)
+        )
         config_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -2337,7 +2898,9 @@ class ConfigEditorScreen(ModalScreen[bool]):
             return
 
         self.dismiss(True)
-        self.app.notify("Configuration saved and reloaded.", title="Config Saved", timeout=4)
+        self.app.notify(
+            "Configuration saved and reloaded.", title="Config Saved", timeout=4
+        )
 
     def action_cancel(self) -> None:
         """Cancel editing and close."""

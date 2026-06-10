@@ -4,6 +4,7 @@
 import sys
 from pathlib import Path
 
+
 def main():
     """Wrapper that calls the package main function directly for development."""
     # Add the sshplex package to the path
@@ -23,6 +24,7 @@ def main():
         print("Error: sshplex package directory not found.")
         print("Please ensure you're running from the correct directory.")
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())
