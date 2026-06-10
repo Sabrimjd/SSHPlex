@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-06-10
+
 ### Added
 - **Command Snippets**: Predefined command library that users can run on selected hosts. Press `S` in host selector to open snippet picker, then broadcast commands to all connected sessions.
 - **Host Health Check**: Visual indicators showing if hosts are reachable before connecting. Press `H` to check health of selected hosts. Results are cached with configurable TTL.
