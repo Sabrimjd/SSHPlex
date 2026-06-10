@@ -1261,10 +1261,9 @@ class HostSelector(App):
                 target, port=int(getattr(self.config.ssh, "port", 22)), timeout=timeout
             )
 
+        pending_checks = [check_one(host, key) for host, key in hosts_to_check]
         for checked, result in enumerate(
-            asyncio.as_completed(
-                check_one(host, key) for host, key in hosts_to_check
-            ),
+            asyncio.as_completed(pending_checks),
             start=1,
         ):
             key, status = await result
